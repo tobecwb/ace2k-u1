@@ -9,4 +9,4 @@ lint:
 format:
 	ruff format $(wildcard klippy tests)
 web-test:
-	node --test web/tests/
+	node --test web/tests/*.test.js
