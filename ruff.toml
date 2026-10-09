@@ -1,0 +1,14 @@
+# Python: Klipper host modules, the build tools, the tests.  ruff is both the linter and the formatter.
+line-length = 100
+target-version = "py39"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM"]
+
+[lint.per-file-ignores]
+# Klipper's extras entry points are fixed names (load_config, get_status …); N802/N803 do not apply,
+# and the cmd_X_help attributes beside each G-code handler are Klipper's convention (N815)
+"klippy/extras/*.py" = ["N802", "N803", "N815"]
+
+[format]
+quote-style = "double"

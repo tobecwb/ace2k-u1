@@ -1,0 +1,5832 @@
+[
+ {
+  "name": "first snapshot is silent",
+  "prev_status": null,
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "insert false to true",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 spool inserted"
+   }
+  ]
+ },
+ {
+  "name": "insert true to false",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane2",
+    "msg": "lane 2 spool removed"
+   }
+  ]
+ },
+ {
+  "name": "insert None to value is not a transition",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": null,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "insert value to None is not a transition",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": null,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "insert unchanged",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "new last_event after a previous one",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "stopped",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 3,
+      "filament_mm": 1618.8
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 4,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 loaded (loading, 299.4 mm)"
+   }
+  ]
+ },
+ {
+  "name": "same seq is no event",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 4,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 4,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "last_event appearing after the first snapshot",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "done",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 12.34
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 done (feeding, 12.3 mm)"
+   }
+  ]
+ },
+ {
+  "name": "last_event vanishing is no event",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "done",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "err kinds",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "stuck",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "tangled",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 2,
+      "filament_mm": 5.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane1",
+    "msg": "lane 1 tangled (feeding, 5.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level err: stuck",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "stuck",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 1.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane3",
+    "msg": "lane 3 stuck (feeding, 1.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level err: tangled",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "tangled",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 1.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane3",
+    "msg": "lane 3 tangled (feeding, 1.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level err: motor_stalled",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "motor_stalled",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 1.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane3",
+    "msg": "lane 3 motor_stalled (feeding, 1.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level err: timeout",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "timeout",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 1.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane3",
+    "msg": "lane 3 timeout (feeding, 1.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level err: assist_stall",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "assist_stall",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 1.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane3",
+    "msg": "lane 3 assist_stall (feeding, 1.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level err: assist_overrun",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "assist_overrun",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 1.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane3",
+    "msg": "lane 3 assist_overrun (feeding, 1.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level err: unload_incomplete",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "unload_incomplete",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 1.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane3",
+    "msg": "lane 3 unload_incomplete (feeding, 1.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level warn: stopped_link",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "stopped_link",
+      "mode": "following",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 2.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "warn",
+    "src": "lane3",
+    "msg": "lane 3 stopped_link (following, 2.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level warn: stopped_shutdown",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "stopped_shutdown",
+      "mode": "following",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 2.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "warn",
+    "src": "lane3",
+    "msg": "lane 3 stopped_shutdown (following, 2.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level warn: runout",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "runout",
+      "mode": "following",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 2.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "warn",
+    "src": "lane3",
+    "msg": "lane 3 runout (following, 2.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level warn: behind",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "behind",
+      "mode": "following",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 2.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "warn",
+    "src": "lane3",
+    "msg": "lane 3 behind (following, 2.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level warn: snag",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "snag",
+      "mode": "following",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 2.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "warn",
+    "src": "lane3",
+    "msg": "lane 3 snag (following, 2.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level warn: blocked",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "blocked",
+      "mode": "following",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 2.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "warn",
+    "src": "lane3",
+    "msg": "lane 3 blocked (following, 2.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level warn: tail",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "tail",
+      "mode": "following",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 2.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "warn",
+    "src": "lane3",
+    "msg": "lane 3 tail (following, 2.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level info: done",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "done",
+      "mode": "idle",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 3.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane4",
+    "msg": "lane 4 done (idle, 3.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level info: stopped",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "stopped",
+      "mode": "idle",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 3.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane4",
+    "msg": "lane 4 stopped (idle, 3.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level info: loaded",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "idle",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 3.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane4",
+    "msg": "lane 4 loaded (idle, 3.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level info: unloaded",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "unloaded",
+      "mode": "idle",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 3.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane4",
+    "msg": "lane 4 unloaded (idle, 3.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level info: tail_out",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "tail_out",
+      "mode": "idle",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 3.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane4",
+    "msg": "lane 4 tail_out (idle, 3.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "level info: brand_new_kind",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "brand_new_kind",
+      "mode": "idle",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 3.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane4",
+    "msg": "lane 4 brand_new_kind (idle, 3.0 mm)"
+   }
+  ]
+ },
+ {
+  "name": "unknown kind is info",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "mystery",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 9,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 mystery (loading, 299.4 mm)"
+   }
+  ]
+ },
+ {
+  "name": "missing filament_mm",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 1
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 loaded (loading)"
+   }
+  ]
+ },
+ {
+  "name": "non-number filament_mm",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": "x"
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 loaded (loading)"
+   }
+  ]
+ },
+ {
+  "name": "rounding to 0.1",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "done",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 0.25
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 done (feeding, 0.3 mm)"
+   }
+  ]
+ },
+ {
+  "name": "tag read with brand and material",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "uid": "x",
+      "record": {
+       "brand": "Snapmaker",
+       "material": "PLA",
+       "color_rgba": "ff0000ff"
+      }
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 tag read: Snapmaker PLA"
+   }
+  ]
+ },
+ {
+  "name": "tag read with brand only",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": {
+       "brand": "Bambu"
+      }
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 tag read: Bambu"
+   }
+  ]
+ },
+ {
+  "name": "tag read with material only",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": {
+       "material": "PETG"
+      }
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 tag read: PETG"
+   }
+  ]
+ },
+ {
+  "name": "tag read without a record",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 tag read"
+   }
+  ]
+ },
+ {
+  "name": "tag no_tag",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "searching"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "no_tag"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane2",
+    "msg": "lane 2 no tag"
+   }
+  ]
+ },
+ {
+  "name": "other tag changes are silent",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "pending"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "tag state read unchanged",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": {
+       "brand": "A"
+      }
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": {
+       "brand": "B"
+      }
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "tag None to read is not a transition",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": null
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": {
+       "brand": "A"
+      }
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "error enter keeps both events",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "error",
+     "error": "stuck",
+     "last_event": {
+      "kind": "stuck",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 7.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "lane1",
+    "msg": "lane 1 stuck (feeding, 7.0 mm)"
+   },
+   {
+    "lvl": "err",
+    "src": "lane1",
+    "msg": "lane 1 error: stuck"
+   }
+  ]
+ },
+ {
+  "name": "error leave",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "error",
+     "error": "stuck",
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 error cleared"
+   }
+  ]
+ },
+ {
+  "name": "several lanes in one tick, dryer first, then per lane in order",
+  "prev_status": {
+   "dryer": {
+    "state": "heating",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "fault",
+    "fault": "fans"
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 4,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "read",
+      "record": {
+       "brand": "Snapmaker",
+       "material": "PLA"
+      }
+     }
+    },
+    {
+     "insert": false,
+     "mode": "error",
+     "error": "tangled",
+     "last_event": {
+      "kind": "tangled",
+      "mode": "feeding",
+      "motor_mm": 1.0,
+      "seq": 2,
+      "filament_mm": 8.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "no_tag"
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "err",
+    "src": "dryer",
+    "msg": "dryer fault: fans"
+   },
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 spool inserted"
+   },
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 loaded (loading, 299.4 mm)"
+   },
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 tag read: Snapmaker PLA"
+   },
+   {
+    "lvl": "err",
+    "src": "lane2",
+    "msg": "lane 2 tangled (feeding, 8.0 mm)"
+   },
+   {
+    "lvl": "err",
+    "src": "lane2",
+    "msg": "lane 2 error: tangled"
+   },
+   {
+    "lvl": "info",
+    "src": "lane4",
+    "msg": "lane 4 no tag"
+   }
+  ]
+ },
+ {
+  "name": "a lane absent from the previous snapshot is skipped",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "motor_mm": 1.0,
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "a lane absent from the new snapshot is skipped",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "lane None for one tick: no event",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    null
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "lane None for one tick, then the same event: silent",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [],
+  "between": [
+   {
+    "dryer": {
+     "state": "idle",
+     "fault": null
+    },
+    "lanes": [
+     null
+    ]
+   }
+  ]
+ },
+ {
+  "name": "last_event vanishes for a tick, then the same seq: silent",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [],
+  "between": [
+   {
+    "dryer": {
+     "state": "idle",
+     "fault": null
+    },
+    "lanes": [
+     {
+      "insert": false,
+      "mode": "idle",
+      "error": null,
+      "last_event": null,
+      "tag": {
+       "state": "unknown",
+       "record": null
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "last_event vanishes for a tick, then a new seq: event",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "done",
+      "mode": "feeding",
+      "seq": 2,
+      "filament_mm": 4.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 done (feeding, 4.0 mm)"
+   }
+  ],
+  "between": [
+   {
+    "dryer": {
+     "state": "idle",
+     "fault": null
+    },
+    "lanes": [
+     {
+      "insert": false,
+      "mode": "idle",
+      "error": null,
+      "last_event": null,
+      "tag": {
+       "state": "unknown",
+       "record": null
+      }
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "lane None for one tick, then a new seq: event",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": 299.4
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "done",
+      "mode": "feeding",
+      "seq": 2,
+      "filament_mm": 4.0
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 done (feeding, 4.0 mm)"
+   }
+  ],
+  "between": [
+   {
+    "dryer": {
+     "state": "idle",
+     "fault": null
+    },
+    "lanes": [
+     null
+    ]
+   }
+  ]
+ },
+ {
+  "name": "missing kind and mode render as ?",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "seq": 1
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 ? (?)"
+   }
+  ]
+ },
+ {
+  "name": "brand and material must be non-empty strings",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading"
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": {
+       "brand": 5,
+       "material": [
+        "PLA"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 tag read"
+   }
+  ]
+ },
+ {
+  "name": "empty brand is missing",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading"
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": {
+       "brand": "",
+       "material": "PLA"
+      }
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 tag read: PLA"
+   }
+  ]
+ },
+ {
+  "name": "non-dict lane in the new status raises nothing",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": true,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    "x",
+    5
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "non-dict last_event is no event",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": "boom",
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": [
+      1
+     ],
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": []
+ },
+ {
+  "name": "non-dict tag and record",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading"
+     }
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "reading"
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": "read"
+    },
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "read",
+      "record": "x"
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane2",
+    "msg": "lane 2 tag read"
+   }
+  ]
+ },
+ {
+  "name": "bool filament_mm",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": {
+      "kind": "loaded",
+      "mode": "loading",
+      "seq": 1,
+      "filament_mm": true
+     },
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "events": [
+   {
+    "lvl": "info",
+    "src": "lane1",
+    "msg": "lane 1 loaded (loading)"
+   }
+  ]
+ },
+ {
+  "name": "non-list lanes is an empty list",
+  "prev_status": {
+   "dryer": {
+    "state": "idle",
+    "fault": null
+   },
+   "lanes": [
+    {
+     "insert": false,
+     "mode": "idle",
+     "error": null,
+     "last_event": null,
+     "tag": {
+      "state": "unknown",
+      "record": null
+     }
+    }
+   ]
+  },
+  "status": {
+   "dryer": {
+    "state": "idle"
+   },
+   "lanes": {
+    "a": 1
+   }
+  },
+  "events": []
+ }
+]

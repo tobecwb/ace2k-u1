@@ -1,0 +1,129 @@
+:root {
+  --bg: #16181d; --panel: #20232a; --body: #2a2d33; --body-border: #3a3e46; --sel: #353a44;
+  --text: #ddd; --text-2: #aaa; --text-3: #888; --line: #444; --rule: #2a2d33;
+  --chip-follow-bg: #1f4d2e; --chip-follow: #7ee2a0;
+  --chip-load-bg: #23324d; --chip-load: #8fb6ff;
+  --chip-empty-bg: #333; --chip-empty: #999;
+  --chip-err-bg: #5a1f1f; --chip-err: #ff9a9a;
+  --chip-heat-bg: #5a3a14; --chip-heat: #ffc27a;
+  --btn-pri-bg: #3a4560; --btn-pri: #6b82b8;
+  --btn-red-bg: #5a1f1f; --btn-red: #a44;
+  --line-ch: #e9963a; --line-hl: #ff6b6b; --line-hr: #c77dff; --line-rh: #4dabf7; --line-tgt: #888;
+  --ok: #7ee2a0; --warn: #ffc27a; --bad: #ff9a9a;
+  --on-accent: #fff; --sel-bg: #2b3448; --field: #111; --track: #333; --hatch: #33363d; --tick: #777; --ring: #111; --hover: #2a2e37;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --body: #e6e8ec; --body-border: #c9cdd4; --sel: #dde3ee;
+    --text: #1d2026; --text-2: #4a4f59; --text-3: #6b717c; --line: #c4c8cf; --rule: #e6e8ec;
+    --chip-follow-bg: #d8f3e1; --chip-follow: #1d6b3a;
+    --chip-load-bg: #dce7fb; --chip-load: #234f9e;
+    --chip-empty-bg: #e6e6e6; --chip-empty: #666;
+    --chip-err-bg: #fbe0e0; --chip-err: #a12a2a;
+    --chip-heat-bg: #fbecd6; --chip-heat: #8a4f0c;
+    --btn-pri-bg: #dce3f2; --btn-pri: #6b82b8; --btn-red-bg: #fbe0e0; --btn-red: #a44;
+    --ok: #1d8a4a; --warn: #a8640c; --bad: #c03030;
+    --on-accent: #1d2026; --sel-bg: #dce3f2; --field: #fff; --track: #d5d8de; --hatch: #d0d3d9; --tick: #6b717c; --ring: #2a2d33; --hover: #eceff4;
+    color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+.page { max-width: 1100px; margin: 0 auto; padding: 0 12px 24px; }
+.bar { display: flex; gap: 10px; align-items: center; background: var(--panel); border-radius: 6px; padding: 6px 8px; }
+.topbar { max-width: 1076px; width: calc(100% - 24px); margin: 12px auto 10px; }
+.topbar .spacer, .bar .spacer { flex: 1; }
+.chip { display: inline-block; padding: 1px 6px; border-radius: 9px; font-size: 12px; font-weight: 600; }
+.c-following { background: var(--chip-follow-bg); color: var(--chip-follow); }
+.c-loaded, .c-moving { background: var(--chip-load-bg); color: var(--chip-load); }
+.c-empty, .c-in_bay, .c-idle { background: var(--chip-empty-bg); color: var(--chip-empty); }
+.c-idle { color: var(--text-2); }
+.c-error, .c-fault { background: var(--chip-err-bg); color: var(--chip-err); }
+.c-heating, .c-starting, .c-cooldown { background: var(--chip-heat-bg); color: var(--chip-heat); }
+.btn { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; margin: 2px 2px 0 0;
+  font: inherit; font-size: 12px; color: var(--text); background: transparent; cursor: pointer; min-height: 22px; }
+.btn:disabled { opacity: .35; cursor: default; }
+.btn.pri { background: var(--btn-pri-bg); border-color: var(--btn-pri); color: var(--on-accent); }
+.btn.red { background: var(--btn-red-bg); border-color: var(--btn-red); color: var(--on-accent); }
+.btn.on { background: var(--btn-pri-bg); border-color: var(--btn-pri); color: var(--on-accent); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+/* the drawn unit — mock-up A */
+.ua-box { background: var(--body); border: 2px solid var(--body-border); border-radius: 12px; padding: 10px; display: flex; gap: 8px; margin-top: 10px; }
+.ua-bay { flex: 1; text-align: center; border-radius: 8px; padding: 4px 0; cursor: pointer; border: 0; background: none; color: inherit; font: inherit; }
+.ua-bay.sel { background: var(--sel); outline: 2px solid var(--btn-pri); }
+.ua-spool { display: block; box-sizing: content-box; width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 6px; border: 6px solid var(--ring); box-shadow: inset 0 0 0 10px rgba(0,0,0,.25); background: var(--chip-empty-bg); }
+.ua-empty { background: repeating-linear-gradient(45deg, var(--body), var(--body) 4px, var(--hatch) 4px, var(--hatch) 8px); }
+/* the lane card — mock-up B / detail 1 */
+.ub-card { background: var(--panel); border-radius: 8px; padding: 8px; border-left: 6px solid var(--chip-empty-bg); margin-top: 8px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; font-size: 12px; color: var(--text-2); margin: 4px 0; }
+.kv b { color: var(--text); font-weight: 500; }
+.ub-card details { margin-top: 6px; font-size: 12px; color: var(--text-2); }
+.edit { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; margin: 6px 0; }
+.edit .edit-btns, .edit .note { grid-column: 1 / -1; margin-top: 0; }
+.ub-card .edit input[type=text] { width: 100%; max-width: 16em; }
+.ub-card .edit input[type=color] { width: 56px; height: 32px; padding: 0; }
+.ub-card .edit select { background: var(--field); border: 1px solid var(--line); border-radius: 4px; color: var(--text); padding: 2px 6px; font: inherit; max-width: 16em; }
+.ub-card input { background: var(--field); border: 1px solid var(--line); border-radius: 4px; color: var(--text); padding: 2px 6px; font: inherit; width: 64px; }
+/* dryer — mock-up 3 */
+.dryer .bar { cursor: pointer; }
+.dryer .bar:hover { background: var(--hover); }
+.dryer .bar:active { background: var(--sel-bg); }
+.dryer .bar:focus-visible { outline: 2px solid var(--btn-pri); }
+.pill { border: 1px solid var(--btn-pri); background: var(--btn-pri-bg); color: var(--on-accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.dryer .bar.open { border-radius: 6px 6px 0 0; }
+.dryer .panel { background: var(--panel); border-radius: 0 0 6px 6px; padding: 8px; border-top: 1px solid var(--track); }
+.pre { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; margin: 2px; font-size: 12px; background: none; color: inherit; cursor: pointer; }
+.pre.sel { border-color: var(--btn-pri); background: var(--sel-bg); }
+.dryer .btn { padding: 3px 8px; font-size: 13px; }
+.dryer .kv { gap: 2px 10px; font-size: 13px; margin: 6px 0; }
+.sub { font-size: 13px; color: var(--text-2); }
+/* the value boxes: one bordered box per value, the inputs borderless inside it */
+.num { display: inline-flex; gap: 3px; align-items: center; margin-right: 6px; background: var(--field); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
+.num input { background: none; border: 0; color: var(--text); font: inherit; padding: 0; width: 2.6ch; text-align: right; -moz-appearance: textfield; }
+.num input::-webkit-inner-spin-button, .num input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.num:focus-within { border-color: var(--btn-pri); }
+@supports (field-sizing: content) { .num input { width: auto; min-width: 1ch; field-sizing: content; } }
+.big { font-size: 23px; font-weight: 600; }
+.prog { height: 6px; background: var(--track); border-radius: 3px; margin: 6px 0; }
+.prog i { display: block; height: 6px; background: var(--line-ch); border-radius: 3px; }
+.note { font-size: 12px; color: var(--text-3); margin-top: 6px; }
+.label { font-size: 12px; color: var(--text-3); }
+/* chart and events — mock-up 4 A */
+.lower { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.sec:empty { display: none; }
+.sec { background: var(--panel); border-radius: 6px; padding: 8px; margin-top: 8px; }
+.sec-head { display: flex; justify-content: space-between; align-items: center; }
+.rng button { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; margin-left: 3px; color: var(--text-2); background: none; cursor: pointer; }
+.rng button.on { border-color: var(--btn-pri); color: var(--on-accent); }
+.lg { font-size: 12px; color: var(--text-2); margin: 4px 0; }
+.lg button { font: inherit; background: none; border: 0; color: inherit; cursor: pointer; padding: 0 0 0 8px; }
+.lg button.off { opacity: .35; }
+.lg i { display: inline-block; width: 10px; height: 3px; margin: 0 3px 2px 0; vertical-align: middle; }
+.chart-svg .grid line { stroke: var(--rule); }
+.chart-svg { display: block; max-width: 100%; height: auto; }
+.chart-svg .ticks text { font-size: 11px; fill: var(--tick); }
+.chart-wrap { position: relative; touch-action: pan-y; }
+.tip { position: absolute; pointer-events: none; background: var(--field); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; font-size: 12px; width: max-content; max-width: 100%; box-sizing: border-box; }
+.fl button { font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 9px; padding: 1px 7px; margin: 0 3px 4px 0; color: var(--text-2); background: none; cursor: pointer; }
+.fl button.on { border-color: var(--btn-pri); color: var(--on-accent); background: var(--sel-bg); }
+.ev { display: grid; grid-template-columns: 38px 18px 44px 1fr; gap: 2px 6px; font-size: 13px; padding: 3px 0; border-bottom: 1px solid var(--rule); }
+.ev .t, .ev .w { color: var(--text-3); }
+.lvl-err { color: var(--bad); } .lvl-warn { color: var(--warn); } .lvl-info { color: var(--ok); }
+.evlist { position: relative; max-height: 22em; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.evlist::-webkit-scrollbar { width: 6px; }
+.evlist::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+.more { font: inherit; font-size: 12px; color: var(--text-3); background: none; border: 0; margin-top: 4px; cursor: pointer; padding: 0; }
+.banner { background: var(--chip-err-bg); color: var(--chip-err); text-align: center; padding: 6px; font-weight: 600; }
+.banner.demo { background: var(--chip-heat-bg); color: var(--chip-heat); }
+.toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--chip-err-bg); color: var(--chip-err); border-radius: 6px; padding: 8px 12px; max-width: 90vw; }
+/* the mock-up keeps the full ring at a 390 px phone; only narrower screens shrink it */
+@media (max-width: 370px) {
+  .ua-spool { width: 46px; height: 46px; border-width: 5px; box-shadow: inset 0 0 0 8px rgba(0,0,0,.25); }
+}
+@media (max-width: 600px) {
+  .btn, .dryer .btn, .pre, .fl button, .rng button { min-height: 40px; padding: 4px 10px; font-size: 14px; }
+  .num { min-height: 40px; }
+  .ub-card input { min-height: 40px; }
+}

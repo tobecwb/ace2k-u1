@@ -1,0 +1,35 @@
+name: Bug
+description: Something does not work as the docs say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A problem in the unit itself (heater, fans, motors, flash) belongs to the ace2k repository.
+        A safety or security problem is reported privately (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: ace2k-u1 and ace2k versions
+      description: Both release tags, or `git describe` for a build from source.
+    validations:
+      required: true
+  - type: input
+    id: klipper
+    attributes:
+      label: Printer firmware
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The steps, the commands sent, what the unit did and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Klipper log
+      description: The relevant part of klippy.log. Remove serial numbers and unit IDs.
+      render: text

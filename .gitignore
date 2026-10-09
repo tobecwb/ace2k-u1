@@ -1,0 +1,9 @@
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+# web
+web/node_modules/
+# editors
+.DS_Store

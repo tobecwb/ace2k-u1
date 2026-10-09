@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Safety or security problem
+    url: https://github.com/tobecwb/ace2k-u1/security/advisories/new
+    about: Report it privately. See SECURITY.md. If a unit is misbehaving now, unplug it first.
+  - name: A problem in the firmware itself (heater, fans, motors, flash)
+    url: https://github.com/tobecwb/ace2k/issues
+    about: The ACE 2 Pro firmware has its own repository.

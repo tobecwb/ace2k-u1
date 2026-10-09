@@ -1,0 +1,16 @@
+name: Feature
+description: Something new the firmware should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What you want the adapter to do, and why.
+    validations:
+      required: true
+  - type: textarea
+    id: known
+    attributes:
+      label: What is already known
+      description: Measurements, observed behaviour, links.

@@ -1,0 +1,6 @@
+[
+  { "material": "PLA", "temp": 50, "hours": 6 },
+  { "material": "PETG", "temp": 60, "hours": 6 },
+  { "material": "ABS", "temp": 65, "hours": 6 },
+  { "material": "TPU", "temp": 60, "hours": 6 }
+]

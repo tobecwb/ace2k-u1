@@ -1,0 +1,32 @@
+{
+  "ace2k": {
+    "version": "0.11.0", "link_proven": true, "health": {"ok": true, "failing": []},
+    "chamber": 27.0, "humidity": 52.0, "ptc_left": 29.1, "ptc_right": 28.7, "env_valid": true,
+    "lanes": [
+      {"mode": "following", "insert": true, "rest": true, "pushed": false, "error": null, "encoder_mm": 1234.5, "ff_on": true,
+       "last_event": {"kind": "loaded", "mode": "loading", "motor_mm": 410.0, "filament_mm": 408.2, "seq": 3},
+       "tag": {"state": "read", "record": {"brand": "Bambu Lab", "material": "PLA", "color_rgba": "DD3333FF"}}},
+      {"mode": "idle", "insert": true, "rest": true, "pushed": false, "error": null, "encoder_mm": 0.0, "ff_on": true,
+       "last_event": null, "tag": {"state": "no_tag", "record": null}},
+      {"mode": "idle", "insert": false, "rest": true, "pushed": false, "error": null, "encoder_mm": 0.0, "ff_on": true,
+       "last_event": null, "tag": {"state": "unknown", "record": null}},
+      {"mode": "error", "insert": true, "rest": false, "pushed": false, "error": "stuck", "encoder_mm": 312.4, "ff_on": true,
+       "last_event": {"kind": "stuck", "mode": "assisting", "motor_mm": 320.0, "filament_mm": 312.4, "seq": 9},
+       "tag": {"state": "read", "record": {"brand": "Bambu Lab", "material": "PLA", "color_rgba": "EEEEEEFF"}}}
+    ],
+    "dryer": {"state": "idle", "target": null, "remaining": null, "fans": {"left": false, "right": false},
+              "flaps": {"bottom": "closed", "rear": "closed"}, "fault": null, "notices": []}
+  },
+  "print_stats": {"state": "printing"},
+  "print_task_config": {
+    "filament_exist": [true, true, false, true],
+    "filament_vendor": ["Bambu", "Generic", "NONE", "Bambu"],
+    "filament_type": ["PLA", "PETG", "NONE", "PLA"],
+    "filament_sub_type": ["", "", "NONE", ""],
+    "filament_color_rgba": ["DD3333FF", "111111FF", "FFFFFFFF", "EEEEEEFF"]
+  },
+  "filament_motion_sensor e0_filament": {"filament_detected": true, "enabled": true},
+  "filament_motion_sensor e1_filament": {"filament_detected": true, "enabled": true},
+  "filament_motion_sensor e2_filament": {"filament_detected": false, "enabled": true},
+  "filament_motion_sensor e3_filament": {"filament_detected": true, "enabled": true}
+}
