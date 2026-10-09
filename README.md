@@ -16,6 +16,10 @@ yet.
 **The adapter supports exactly one ACE 2 Pro unit.** Lane n feeds head n (extruder n-1): one unit
 for the printer's four heads. Support for several units is planned for a later version.
 
+If you need more than one unit today (more than four colours), use
+[multiACE](https://github.com/decay71/multiACE) instead. It works well, and many users have tested
+it. multiACE drives the units' factory firmware, so those units do not run ace2k.
+
 **How this was built.** AI tools were used in developing this adapter. Every feature and every
 change was verified on real hardware, over many hours of bench testing, before it was accepted.
 Human review of the source code is still in progress.
