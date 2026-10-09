@@ -14,7 +14,8 @@ Each of the U1's four heads is fed directly by one lane of the unit.
 yet.
 
 **The adapter supports exactly one ACE 2 Pro unit.** Lane n feeds head n (extruder n-1): one unit
-for the printer's four heads. Support for several units is planned for a later version.
+for the printer's four heads. Support for several units is not decided yet (ace2k's
+[roadmap](https://github.com/tobecwb/ace2k/blob/main/docs/roadmap.md)).
 
 If you need more than one unit today (more than four colours), use
 [multiACE](https://github.com/decay71/multiACE) instead. It works well, and many users have tested
