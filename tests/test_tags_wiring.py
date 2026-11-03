@@ -2,17 +2,34 @@
 watch, each decision run as SET_PRINT_FILAMENT_CONFIG from a reactor timer, the refusals, the
 status lines and the apply_tags switch. Synthetic records only."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING, NoReturn
 
 import ace2k_u1
+import ace2k_u1_adapter
 import ace2k_u1_tags
 import fakes
+import pytest
 from test_check import Config, Gcode, Printer
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
+    from ace2k_u1_adapter import Adapter
+    from ace2k_u1_common import LaneKey
+    from ace2k_u1_printer_types import TagRecord
+    from ace2k_u1_tags import Action, LaneTick
+    from fakes import FakeAce2k, FakeGcode, FakePrintStats, FakePrintTaskConfig, FakeReactor, Params
 
 TABLE = (
     "generic_PLA_generic_print_temp",
     "Snapmaker_PLA_Matte_print_temp",
     "generic_PETG_generic_print_temp",
+    # listed here so these tests see the tag's own name written; the real U1 lists no Bambu
+    # entry, and a name it does not list is written as Generic (test below)
+    "BambuLab_PLA_Basic_print_temp",
 )
 BAMBU = dict(
     format="bambu",
@@ -33,21 +50,25 @@ CLEAR0 = (
 )
 
 
-def build(table=TABLE, ptc=True, enabled=True, state="standby"):
+def build(
+    table: Iterable[str] = TABLE, ptc: bool = True, enabled: bool = True, state: str = "standby"
+) -> tuple[Adapter, FakeReactor, FakeAce2k, FakePrintTaskConfig | None, FakeGcode, FakePrintStats]:
     reactor = fakes.FakeReactor()
     left = fakes.FakeFeed(reactor, filament_ch=(1, 0))
     right = fakes.FakeFeed(reactor, filament_ch=(2, 3))
     ace = fakes.FakeAce2k()
-    adapter = ace2k_u1.Adapter(
+    adapter = ace2k_u1_adapter.Adapter(
         reactor,
         fakes.fake_module(),
-        ace,
         [left, right],
-        (1, 2, 3, 4),
-        feed_speed=30.0,
-        head_budget_mm=2000.0,
-        poll_s=0.2,
-        extruders=ace2k_u1.extruder_names(fakes.extruder_list()),
+        fakes.one_unit_heads(ace, (1, 2, 3, 4)),
+        ace2k_u1_adapter.AdapterSetup(
+            feed_speed=30.0,
+            head_budget_mm=2000.0,
+            poll_s=0.2,
+            extruders=ace2k_u1.extruder_names(fakes.extruder_list()),
+            units=fakes.FakeUnits([ace]),
+        ),
     )
     task = fakes.FakePrintTaskConfig() if ptc else None
     gcode = fakes.FakeGcode(task)
@@ -55,37 +76,39 @@ def build(table=TABLE, ptc=True, enabled=True, state="standby"):
     assert adapter.hook_all() == []
     stats = fakes.FakePrintStats(state)
     toolhead = fakes.FakeToolhead("extruder3")  # head 3 active; lanes 1-3 feed heads 0-2
-    adapter.setup_tags(task, fakes.FakeFilamentParameters(table), stats, enabled, toolhead)
+    adapter.tag_writer.setup_tags(
+        task, fakes.FakeFilamentParameters(table), stats, enabled, toolhead
+    )
     adapter.toolhead_fake = toolhead
     return adapter, reactor, ace, task, gcode, stats
 
 
-def tag(ace, lane, record, state="read"):
+def tag(ace: FakeAce2k, lane: int, record: TagRecord, state: str = "read") -> None:
     ace.lanes[lane]["insert"] = True
     ace.lanes[lane]["tag"] = dict(state=state, uid=record.get("uid"), source="tag", record=record)
 
 
-def eject(ace, lane):
+def eject(ace: FakeAce2k, lane: int) -> None:
     ace.lanes[lane]["insert"] = False
     ace.lanes[lane]["tag"] = dict(fakes.NO_TAG)
 
 
-def tick(adapter, reactor):
+def tick(adapter: Adapter, reactor: FakeReactor) -> None:
     """One bay-watch tick, then whatever it scheduled."""
     adapter.watch(reactor.now)
     reactor.run_timers()
     reactor.now += 0.2
 
 
-def test_the_known_types_are_the_tables_types_read_at_hook_time():
+def test_the_known_types_are_the_tables_types_read_at_hook_time() -> None:
     adapter, *_ = build()
-    assert adapter.tags is not None and adapter.tags_off is None
-    assert adapter.tags.known_types == {"PLA", "PETG"}
+    assert adapter.tag_writer.tags is not None and adapter.tag_writer.tags_off is None
+    assert adapter.tag_writer.tags.known_types == {"PLA", "PETG"}
 
 
-def test_no_known_type_turns_the_tags_off_with_a_line_and_keeps_the_hooks():
+def test_no_known_type_turns_the_tags_off_with_a_line_and_keeps_the_hooks() -> None:
     adapter, reactor, ace, task, gcode, _ = build(table=())
-    assert adapter.tags is None
+    assert adapter.tag_writer.tags is None
     assert gcode.lines == ["ace2k_u1: tags not applied: no filament types in [filament_parameters]"]
     assert len(adapter.hooked) == 4
     tag(ace, 0, BAMBU)
@@ -93,27 +116,30 @@ def test_no_known_type_turns_the_tags_off_with_a_line_and_keeps_the_hooks():
     assert gcode.scripts == []
 
 
-def test_an_absent_print_task_config_turns_the_tags_off_with_a_line():
+def test_an_absent_print_task_config_turns_the_tags_off_with_a_line() -> None:
     adapter, reactor, ace, task, gcode, _ = build(ptc=False)
-    assert adapter.tags is None and len(adapter.hooked) == 4
+    assert adapter.tag_writer.tags is None and len(adapter.hooked) == 4
     assert gcode.lines == ["ace2k_u1: tags not applied: [print_task_config] absent"]
 
 
-def test_a_changed_u1_command_turns_the_tags_off_with_the_reason():
+def test_a_changed_u1_command_turns_the_tags_off_with_the_reason() -> None:
     class Changed(fakes.FakePrintTaskConfig):
-        def cmd_SET_PRINT_FILAMENT_CONFIG(self, gcmd):  # noqa: N802 — the U1's own name
+        def cmd_SET_PRINT_FILAMENT_CONFIG(self, gcmd: Params) -> None:  # noqa: N802 — the U1's own name
             gcmd.get_int("CONFIG_EXTRUDER")
             gcmd.get("FILAMENT_TYPE", None)
 
     adapter, reactor, ace, task, gcode, _ = build()
     gcode.lines.clear()
-    assert adapter.setup_tags(Changed(), fakes.FakeFilamentParameters(TABLE), None) is not None
-    assert adapter.tags is None
+    assert (
+        adapter.tag_writer.setup_tags(Changed(), fakes.FakeFilamentParameters(TABLE), None)
+        is not None
+    )
+    assert adapter.tag_writer.tags is None
     assert "does not read VENDOR" in gcode.lines[0]
     assert "does not read FILAMENT_COLOR_RGBA" in gcode.lines[0]
 
 
-def test_a_read_writes_the_head_once_from_a_timer():
+def test_a_read_writes_the_head_once_from_a_timer() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     adapter.watch(reactor.now)
@@ -125,16 +151,16 @@ def test_a_read_writes_the_head_once_from_a_timer():
     for _ in range(3):
         tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE]
-    assert adapter.applied[0] == "BambuLab PLA Basic FF0000FF"
+    assert adapter.tag_writer.applied[0] == "BambuLab PLA Basic FF0000FF"
 
 
-def test_a_forget_then_the_same_tag_read_again_writes_the_head_again():
+def test_a_forget_then_the_same_tag_read_again_writes_the_head_again() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
     tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE]
-    tag(ace, 0, {}, state="pending")  # ACE_RFID_FORGET: back to pending, the filament still in
+    tag(ace, 0, {}, state="pending")  # ACEK_RFID_FORGET: back to pending, the filament still in
     ace.lanes[0]["tag"]["record"] = None
     tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE]
@@ -143,14 +169,14 @@ def test_a_forget_then_the_same_tag_read_again_writes_the_head_again():
     assert gcode.scripts == [BAMBU_WRITE, BAMBU_WRITE]
 
 
-def test_the_write_goes_to_the_lanes_head():
+def test_the_write_goes_to_the_lanes_head() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 2, dict(BAMBU, uid="00000003"))
     tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE.replace("CONFIG_EXTRUDER=0", "CONFIG_EXTRUDER=2")]
 
 
-def test_an_empty_subtype_is_written_quoted_empty():
+def test_an_empty_subtype_is_written_quoted_empty() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, dict(BAMBU, name="PLA"))
     tick(adapter, reactor)
@@ -158,18 +184,24 @@ def test_an_empty_subtype_is_written_quoted_empty():
     assert task.status["filament_sub_type"][0] == ""
 
 
-def test_a_subtype_with_a_space_is_written_quoted():
+def _tag_gcode(head: int, setting: ace2k_u1_tags.Setting) -> str:
+    return ace2k_u1_tags.TagWriter.format_params(
+        ace2k_u1_tags.TagWriter.tag_params(head, setting), ace2k_u1_tags.TAG_QUOTED
+    )
+
+
+def test_a_subtype_with_a_space_is_written_quoted() -> None:
     setting = ace2k_u1_tags.Setting("Snapmaker", "PLA", "Full Spectrum", "FFFFFFFF")
-    assert ace2k_u1.tag_gcode(1, setting) == (
+    assert _tag_gcode(1, setting) == (
         f"{CMD} CONFIG_EXTRUDER=1 VENDOR=Snapmaker FILAMENT_TYPE=PLA"
         " FILAMENT_SUBTYPE='Full Spectrum' FILAMENT_COLOR_RGBA=FFFFFFFF FORCE=1"
     )
     task = fakes.FakePrintTaskConfig()
-    fakes.FakeGcode(task).run_script(ace2k_u1.tag_gcode(1, setting))
+    fakes.FakeGcode(task).run_script(_tag_gcode(1, setting))
     assert task.status["filament_sub_type"][1] == "Full Spectrum"
 
 
-def test_a_colour_only_write_sends_the_colour_alone_and_says_why():
+def test_a_colour_only_write_sends_the_colour_alone_and_says_why() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, dict(BAMBU, material="PEEK", name="PEEK", color_rgba="00FF00FF"))
     tick(adapter, reactor)
@@ -178,7 +210,7 @@ def test_a_colour_only_write_sends_the_colour_alone_and_says_why():
     assert task.status["filament_type"][0] == "NONE"
 
 
-def test_nothing_writable_is_a_line_and_no_gcode():
+def test_nothing_writable_is_a_line_and_no_gcode() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, dict(BAMBU, material="PEEK", name="PEEK", color_rgba=None))
     tick(adapter, reactor)
@@ -186,7 +218,7 @@ def test_nothing_writable_is_a_line_and_no_gcode():
     assert any("tag not applied" in line and "PEEK" in line for line in gcode.lines)
 
 
-def test_an_ejection_clears_the_head_once_idle():
+def test_an_ejection_clears_the_head_once_idle() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
@@ -195,10 +227,10 @@ def test_an_ejection_clears_the_head_once_idle():
     tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE, CLEAR0]
     assert task.status["filament_vendor"][0] == "NONE"
-    assert adapter.applied[0] == "none"
+    assert adapter.tag_writer.applied[0] == "none"
 
 
-def test_the_clear_waits_while_printing_or_paused():
+def test_the_clear_waits_while_printing_or_paused() -> None:
     adapter, reactor, ace, task, gcode, stats = build()
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
@@ -213,7 +245,7 @@ def test_the_clear_waits_while_printing_or_paused():
     assert gcode.scripts == [BAMBU_WRITE, CLEAR0]
 
 
-def test_a_setting_changed_by_hand_is_not_cleared():
+def test_a_setting_changed_by_hand_is_not_cleared() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
@@ -223,7 +255,7 @@ def test_a_setting_changed_by_hand_is_not_cleared():
     assert gcode.scripts == [BAMBU_WRITE]
 
 
-def test_the_head_setting_is_compared_trimmed_and_case_insensitively():
+def test_the_head_setting_is_compared_trimmed_and_case_insensitively() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
@@ -234,7 +266,7 @@ def test_the_head_setting_is_compared_trimmed_and_case_insensitively():
     assert gcode.scripts == [BAMBU_WRITE, CLEAR0]
 
 
-def test_an_unreadable_head_setting_skips_the_tick_and_keeps_the_clear():
+def test_an_unreadable_head_setting_skips_the_tick_and_keeps_the_clear() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
@@ -247,7 +279,9 @@ def test_an_unreadable_head_setting_skips_the_tick_and_keeps_the_clear():
     assert gcode.scripts == [BAMBU_WRITE, CLEAR0]
 
 
-def test_a_refused_gcode_is_logged_never_raised_and_leaves_nothing_to_clear(caplog):
+def test_a_refused_gcode_is_logged_never_raised_and_leaves_nothing_to_clear(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     gcode.fail = RuntimeError("official filament")
     tag(ace, 0, BAMBU)
@@ -255,7 +289,7 @@ def test_a_refused_gcode_is_logged_never_raised_and_leaves_nothing_to_clear(capl
     refused = [r.getMessage() for r in caplog.records if "refused" in r.getMessage()]
     assert len(refused) == 1 and "official filament" in refused[0]
     assert gcode.lines == []  # the U1 shows its own G-code error: not repeated on the console
-    assert adapter.applied[0].startswith("not applied")
+    assert adapter.tag_writer.applied[0].startswith("not applied")
     tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE]  # not retried
     gcode.fail = None
@@ -265,7 +299,7 @@ def test_a_refused_gcode_is_logged_never_raised_and_leaves_nothing_to_clear(capl
     assert gcode.scripts == [BAMBU_WRITE]  # nothing the tag wrote: nothing cleared
 
 
-def test_status_shows_the_tag_and_what_was_applied():
+def test_status_shows_the_tag_and_what_was_applied() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     lines = []
@@ -278,9 +312,9 @@ def test_status_shows_the_tag_and_what_was_applied():
     assert " tag=unknown applied=none" in lines[1]
 
 
-def test_apply_tags_false_sends_nothing():
+def test_apply_tags_false_sends_nothing() -> None:
     adapter, reactor, ace, task, gcode, _ = build(enabled=False)
-    assert adapter.tags is None and adapter.tags_off == "apply_tags: False"
+    assert adapter.tag_writer.tags is None and adapter.tag_writer.tags_off == "apply_tags: False"
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
     eject(ace, 0)
@@ -288,9 +322,9 @@ def test_apply_tags_false_sends_nothing():
     assert gcode.scripts == []
 
 
-def test_apply_tags_is_read_from_the_config():
+def test_apply_tags_is_read_from_the_config() -> None:
     class NoTags(Config):
-        def getboolean(self, name, default):
+        def getboolean(self, name: str, default: bool) -> bool:
             return False if name == "apply_tags" else default
 
     reactor = fakes.FakeReactor()
@@ -303,13 +337,16 @@ def test_apply_tags_is_read_from_the_config():
     }
     on = ace2k_u1.ACE2kU1(Config(Printer(reactor, objects, [fakes.FakeFeed(reactor)])))
     on._hook(reactor.now)
-    assert on.adapter.tags is not None
+    assert on.adapter.tag_writer.tags is not None
     off = ace2k_u1.ACE2kU1(NoTags(Printer(reactor, objects, [fakes.FakeFeed(reactor)])))
     off._hook(reactor.now)
-    assert off.adapter.tags is None and off.adapter.tags_off == "apply_tags: False"
+    assert (
+        off.adapter.tag_writer.tags is None
+        and off.adapter.tag_writer.tags_off == "apply_tags: False"
+    )
 
 
-def test_the_cfg_carries_apply_tags():
+def test_the_cfg_carries_apply_tags() -> None:
     cfg = Path(__file__).resolve().parents[1] / "config" / "ace2k-u1.cfg"
     lines = cfg.read_text(encoding="utf-8").splitlines()
     assert any(
@@ -319,7 +356,7 @@ def test_the_cfg_carries_apply_tags():
     )
 
 
-def test_a_lane_whose_gcode_waits_for_the_lock_gets_no_new_decision():
+def test_a_lane_whose_gcode_waits_for_the_lock_gets_no_new_decision() -> None:
     # run_script may wait for the G-code lock while the bay watch goes on: the lane stays
     # queued, so a refusal reaches the policy before that lane's next decision
     adapter, reactor, ace, task, gcode, _ = build()
@@ -327,7 +364,7 @@ def test_a_lane_whose_gcode_waits_for_the_lock_gets_no_new_decision():
     adapter.watch(reactor.now)
     seen = []
 
-    def run_script(script):
+    def run_script(script: str) -> NoReturn:
         seen.append(script)
         eject(ace, 0)
         adapter.watch(reactor.now)  # a watch tick while the G-code waits
@@ -336,33 +373,33 @@ def test_a_lane_whose_gcode_waits_for_the_lock_gets_no_new_decision():
     gcode.run_script = run_script
     reactor.run_timers()
     assert seen == [BAMBU_WRITE]
-    assert adapter.tag_pending == {}
+    assert adapter.tag_writer.tag_pending == {}
     tick(adapter, reactor)
     assert seen == [BAMBU_WRITE]  # nothing the tag wrote: nothing to clear
 
 
-def run(adapter, reactor, lane, action):
+def run(adapter: Adapter, reactor: FakeReactor, lane: LaneKey, action: Action) -> None:
     """Queue one action for the tag timer, as the watch does, and run it."""
-    adapter.tag_pending[lane] = action
-    reactor.update_timer(adapter.tag_timer, reactor.NOW)
+    adapter.tag_writer.tag_pending[lane] = action
+    reactor.update_timer(adapter.tag_writer.tag_timer, reactor.NOW)
     reactor.run_timers()
 
 
-def test_a_head_out_of_range_is_not_sent():
+def test_a_head_out_of_range_is_not_sent() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     run(adapter, reactor, 0, ("write", 4, ace2k_u1_tags.Setting("Generic", "PLA", "", None)))
     assert gcode.scripts == []
     assert len(gcode.lines) == 1 and "CONFIG_EXTRUDER '4' not within 0..3" in gcode.lines[0]
 
 
-def test_a_colour_not_eight_hex_digits_is_not_sent():
+def test_a_colour_not_eight_hex_digits_is_not_sent() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     run(adapter, reactor, 0, ("write", 0, ace2k_u1_tags.Setting("Generic", None, "", "FF00")))
     assert gcode.scripts == []
     assert len(gcode.lines) == 1 and "not 8 hex digits" in gcode.lines[0]
 
 
-def test_a_quote_in_any_value_is_not_sent():
+def test_a_quote_in_any_value_is_not_sent() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     run(adapter, reactor, 0, ("write", 0, ace2k_u1_tags.Setting("Generic", "PLA", "it's", None)))
     run(adapter, reactor, 1, ("write", 1, ace2k_u1_tags.Setting('A"B', "PLA", "", None)))
@@ -371,26 +408,28 @@ def test_a_quote_in_any_value_is_not_sent():
     assert "FILAMENT_SUBTYPE" in gcode.lines[0] and "VENDOR" in gcode.lines[1]
 
 
-def test_a_check_failure_is_recorded_like_a_failed_attempt():
+def test_a_check_failure_is_recorded_like_a_failed_attempt() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, dict(BAMBU, color_rgba="FF0000FF"))
     adapter.watch(reactor.now)
-    action = adapter.tag_pending[0]
-    adapter.tag_pending[0] = ("write", 7, action[2])  # a head the U1 would refuse
+    action = adapter.tag_writer.tag_pending[0]
+    adapter.tag_writer.tag_pending[0] = ("write", 7, action[2])  # a head the U1 would refuse
     reactor.run_timers()
     assert gcode.scripts == [] and "not sent" in gcode.lines[0]
-    assert adapter.applied[0].startswith("not applied")
+    assert adapter.tag_writer.applied[0].startswith("not applied")
     eject(ace, 0)
     tick(adapter, reactor)
     tick(adapter, reactor)
     assert gcode.scripts == []  # nothing the tag wrote: nothing to clear
 
 
-def test_the_checks_the_u1_makes():
-    check = ace2k_u1.check_params
-    ok = ace2k_u1.tag_params(0, ace2k_u1_tags.Setting("Snapmaker", "PLA", "Full Spectrum", None))
-    assert check(ok, ace2k_u1.TAG_QUOTED) == []
-    assert check(ace2k_u1.clear_params(3)) == []
+def test_the_checks_the_u1_makes() -> None:
+    check = ace2k_u1_tags.TagWriter.check_params
+    ok = ace2k_u1_tags.TagWriter.tag_params(
+        0, ace2k_u1_tags.Setting("Snapmaker", "PLA", "Full Spectrum", None)
+    )
+    assert check(ok, ace2k_u1_tags.TAG_QUOTED) == []
+    assert check(ace2k_u1_tags.TagWriter.clear_params(3)) == []
     colour_only = {"CONFIG_EXTRUDER": "0", "FILAMENT_COLOR_RGBA": "00FF00FF", "FORCE": "1"}
     assert check(colour_only) == []
     partial = dict(colour_only, VENDOR="Generic", FILAMENT_TYPE="PLA")
@@ -401,7 +440,7 @@ def test_the_checks_the_u1_makes():
     assert check(ok) and "FILAMENT_SUBTYPE" in check(ok)[0]
 
 
-def test_a_write_to_the_active_extruder_waits_while_printing_then_applies_on_the_pause():
+def test_a_write_to_the_active_extruder_waits_while_printing_then_applies_on_the_pause() -> None:
     adapter, reactor, ace, task, gcode, stats = build()
     adapter.toolhead_fake.name = "extruder"  # head 0 active
     stats.state = "printing"
@@ -416,7 +455,7 @@ def test_a_write_to_the_active_extruder_waits_while_printing_then_applies_on_the
     assert gcode.scripts == [BAMBU_WRITE]  # the same uid: nothing more
 
 
-def test_a_held_write_is_dropped_if_the_spool_left():
+def test_a_held_write_is_dropped_if_the_spool_left() -> None:
     adapter, reactor, ace, task, gcode, stats = build()
     adapter.toolhead_fake.name = "extruder"
     stats.state = "printing"
@@ -430,7 +469,7 @@ def test_a_held_write_is_dropped_if_the_spool_left():
     assert gcode.scripts == []
 
 
-def test_a_write_to_another_head_while_printing_is_at_once():
+def test_a_write_to_another_head_while_printing_is_at_once() -> None:
     adapter, reactor, ace, task, gcode, stats = build()  # head 3 active
     stats.state = "printing"
     tag(ace, 0, BAMBU)
@@ -438,7 +477,7 @@ def test_a_write_to_another_head_while_printing_is_at_once():
     assert gcode.scripts == [BAMBU_WRITE]
 
 
-def test_an_unknown_active_extruder_holds_every_head_while_printing():
+def test_an_unknown_active_extruder_holds_every_head_while_printing() -> None:
     adapter, reactor, ace, task, gcode, stats = build()
     adapter.toolhead_fake.name = "no_such_extruder"
     stats.state = "printing"
@@ -450,23 +489,23 @@ def test_an_unknown_active_extruder_holds_every_head_while_printing():
     assert gcode.scripts == [BAMBU_WRITE]
 
 
-def test_a_failing_lane_does_not_stall_the_others():
+def test_a_failing_lane_does_not_stall_the_others() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tag(ace, 1, dict(BAMBU, uid="00000002"))
-    on_tick = adapter.tags.on_tick
+    on_tick = adapter.tag_writer.tags.on_tick
 
-    def flaky(lane, *args):
+    def flaky(lane: LaneKey, *args: LaneTick) -> Action | None:
         if lane == 1:
             raise RuntimeError("lane 2 broke")
         return on_tick(lane, *args)
 
-    adapter.tags.on_tick = flaky
+    adapter.tag_writer.tags.on_tick = flaky
     tick(adapter, reactor)  # lane 2 (index 1) raises after lane 1 was queued
     assert gcode.scripts == [BAMBU_WRITE]
 
 
-def test_a_colour_only_write_is_cleared_on_its_colour_alone():
+def test_a_colour_only_write_is_cleared_on_its_colour_alone() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, dict(BAMBU, material="PCTG", name="PCTG", color_rgba="00FF00FF"))
     tick(adapter, reactor)
@@ -482,7 +521,7 @@ def test_a_colour_only_write_is_cleared_on_its_colour_alone():
     assert task.status["filament_color_rgba"][0] == "FFFFFFFF"
 
 
-def test_a_write_without_a_colour_is_cleared_without_one():
+def test_a_write_without_a_colour_is_cleared_without_one() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, dict(BAMBU, color_rgba=None))
     tick(adapter, reactor)
@@ -495,32 +534,32 @@ def test_a_write_without_a_colour_is_cleared_without_one():
     assert task.status["filament_color_rgba"][0] == "123456FF"
 
 
-def test_the_comment_and_checksum_characters_are_refused_quoted_too():
+def test_the_comment_and_checksum_characters_are_refused_quoted_too() -> None:
     for ch in ";#*":
-        params = ace2k_u1.tag_params(
+        params = ace2k_u1_tags.TagWriter.tag_params(
             0, ace2k_u1_tags.Setting("Generic", "PLA", f"Matte{ch}x", None)
         )
-        problems = ace2k_u1.check_params(params, ace2k_u1.TAG_QUOTED)
+        problems = ace2k_u1_tags.TagWriter.check_params(params, ace2k_u1_tags.TAG_QUOTED)
         assert len(problems) == 1 and "FILAMENT_SUBTYPE" in problems[0], ch
 
 
-def test_a_failing_first_lane_does_not_stall_the_next():
+def test_a_failing_first_lane_does_not_stall_the_next() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tag(ace, 1, dict(BAMBU, uid="00000002"))
-    on_tick = adapter.tags.on_tick
+    on_tick = adapter.tag_writer.tags.on_tick
 
-    def flaky(lane, *args):
+    def flaky(lane: LaneKey, *args: LaneTick) -> Action | None:
         if lane == 0:
             raise RuntimeError("lane 1 broke")
         return on_tick(lane, *args)
 
-    adapter.tags.on_tick = flaky
+    adapter.tag_writer.tags.on_tick = flaky
     tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE.replace("CONFIG_EXTRUDER=0", "CONFIG_EXTRUDER=1")]
 
 
-def test_a_spool_replaced_mid_print_is_cleared_of_both_after_it():
+def test_a_spool_replaced_mid_print_is_cleared_of_both_after_it() -> None:
     adapter, reactor, ace, task, gcode, stats = build()  # head 3 active: head 0 is not held
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
@@ -534,7 +573,7 @@ def test_a_spool_replaced_mid_print_is_cleared_of_both_after_it():
     eject(ace, 0)
     tick(adapter, reactor)
     assert gcode.scripts[-1] == CLEAR0
-    assert [task.status[k][0] for k in ace2k_u1.TAG_STATUS.values()] == [
+    assert [task.status[k][0] for k in ace2k_u1_tags.TAG_STATUS.values()] == [
         "NONE",
         "NONE",
         "NONE",
@@ -542,21 +581,26 @@ def test_a_spool_replaced_mid_print_is_cleared_of_both_after_it():
     ]
 
 
-def reentering(adapter, reactor, gcode, during=None):
+def reentering(
+    adapter: Adapter,
+    reactor: FakeReactor,
+    gcode: FakeGcode,
+    during: Callable[[], object] | None = None,
+) -> None:
     """run_script waiting for the G-code lock: the reactor runs the tag timer again meanwhile
     (as it runs any due timer while a caller waits), once per script, after during()."""
     sent = gcode.run_script
 
-    def run_script(script):
+    def run_script(script: str) -> None:
         sent(script)
         if during is not None:
             during()
-        adapter._run_tags(reactor.now)
+        adapter.tag_writer._run_tags(reactor.now)
 
     gcode.run_script = run_script
 
 
-def test_a_reentered_tag_timer_sends_the_clear_once():
+def test_a_reentered_tag_timer_sends_the_clear_once() -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)
@@ -565,10 +609,10 @@ def test_a_reentered_tag_timer_sends_the_clear_once():
     tick(adapter, reactor)  # does not raise
     tick(adapter, reactor)
     assert gcode.scripts == [BAMBU_WRITE, CLEAR0]
-    assert adapter.tag_pending == {} and adapter.tag_running == set()
+    assert adapter.tag_writer.tag_pending == {} and adapter.tag_writer.tag_running == set()
 
 
-def test_a_lane_queued_while_another_waits_for_the_lock_runs_once():
+def test_a_lane_queued_while_another_waits_for_the_lock_runs_once() -> None:
     # the batch unload: lane 1's clear waits for the lock; meanwhile the watch queues lane 2's
     # clear and the reactor runs the tag timer again, which takes lane 2 and leaves lane 1
     adapter, reactor, ace, task, gcode, _ = build()
@@ -578,10 +622,10 @@ def test_a_lane_queued_while_another_waits_for_the_lock_runs_once():
     assert len(gcode.scripts) == 2
     eject(ace, 0)
     adapter.watch(reactor.now)
-    assert list(adapter.tag_pending) == [0]
+    assert list(adapter.tag_writer.tag_pending) == [0]
     calls = []
 
-    def during():
+    def during() -> None:
         if not calls:
             calls.append(1)
             eject(ace, 1)
@@ -591,29 +635,90 @@ def test_a_lane_queued_while_another_waits_for_the_lock_runs_once():
     reactor.run_timers()
     clear1 = CLEAR0.replace("CONFIG_EXTRUDER=0", "CONFIG_EXTRUDER=1")
     assert gcode.scripts[2:] == [CLEAR0, clear1]
-    assert adapter.tag_pending == {} and adapter.tag_running == set()
+    assert adapter.tag_writer.tag_pending == {} and adapter.tag_writer.tag_running == set()
     tick(adapter, reactor)
     assert gcode.scripts[2:] == [CLEAR0, clear1]
 
 
-def test_the_tag_timer_never_raises_when_the_bookkeeping_does(caplog):
+def test_the_tag_timer_never_raises_when_the_bookkeeping_does(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     adapter, reactor, ace, task, gcode, _ = build()
     gcode.fail = RuntimeError("refused")
 
-    def broken(lane):
+    def broken(lane: LaneKey) -> NoReturn:
         raise RuntimeError("note_failed broke")
 
-    adapter.tags.note_failed = broken
+    adapter.tag_writer.tags.note_failed = broken
     tag(ace, 0, BAMBU)
     tick(adapter, reactor)  # does not raise
     assert gcode.scripts == [BAMBU_WRITE]
-    assert adapter.tag_pending == {} and adapter.tag_running == set()
+    assert adapter.tag_writer.tag_pending == {} and adapter.tag_writer.tag_running == set()
 
     class Broken(dict):
-        def pop(self, *args):
+        def pop(self, *args: object) -> NoReturn:
             raise KeyError("pop broke")
 
-    adapter.tag_pending = Broken({1: ("clear", 1, None)})
-    when = adapter._run_tags(reactor.now)  # does not raise
+    adapter.tag_writer.tag_pending = Broken({1: ("clear", 1, None)})
+    when = adapter.tag_writer._run_tags(reactor.now)  # does not raise
     assert when == reactor.NEVER
     assert any(r.getMessage() == "ace2k_u1: tags" and r.exc_info for r in caplog.records)
+
+
+def test_a_parked_lane_of_a_shared_head_never_writes_the_heads_setting() -> None:
+    reactor = fakes.FakeReactor()
+    left = fakes.FakeFeed(reactor, filament_ch=(1, 0))
+    right = fakes.FakeFeed(reactor, filament_ch=(2, 3))
+    ace = fakes.FakeAce2k()
+    adapter = ace2k_u1_adapter.Adapter(
+        reactor,
+        fakes.fake_module(),
+        [left, right],
+        [(0, ace, 0), (0, ace, 1), (1, ace, 2), (2, ace, 3)],
+        ace2k_u1_adapter.AdapterSetup(
+            feed_speed=30.0,
+            head_budget_mm=2000.0,
+            poll_s=0.2,
+            extruders=ace2k_u1.extruder_names(fakes.extruder_list()),
+            units=fakes.FakeUnits([ace]),
+        ),
+    )
+    task = fakes.FakePrintTaskConfig()
+    gcode = fakes.FakeGcode(task)
+    adapter.gcode = gcode
+    assert adapter.hook_all() == []
+    adapter.tag_writer.setup_tags(
+        task, fakes.FakeFilamentParameters(TABLE), fakes.FakePrintStats("standby"), True
+    )
+    slot = adapter.slot_of_head(0)
+    assert slot.current is None
+    other = dict(BAMBU, uid="00000002", color_rgba="00FF00FF")
+    tag(ace, 0, BAMBU)
+    tag(ace, 1, other)
+    for _ in range(3):
+        tick(adapter, reactor)
+    assert gcode.scripts == []  # no lane in head 1: neither tag speaks for it
+    adapter.set_current(slot, slot.lanes[0])
+    for _ in range(3):
+        tick(adapter, reactor)
+    assert gcode.scripts == [BAMBU_WRITE]  # the lane in the head, only
+    adapter.set_current(slot, slot.lanes[1])  # a swap: a:2 in, a:1 parked
+    eject(ace, 0)  # the parked lane's spool taken out: the head is not its to clear
+    for _ in range(3):
+        tick(adapter, reactor)
+    assert gcode.scripts[1:] == [BAMBU_WRITE.replace("FF0000FF", "00FF00FF")]
+    # a parked lane's insert or removal is never told to the shared head's inlet
+    assert not [c for c in left.calls if c[0] == "port_event" and c[2] == 1]
+
+
+def test_a_tag_name_the_u1_does_not_list_is_written_as_generic() -> None:
+    adapter, reactor, ace, task, gcode, _ = build()
+    assert ("Snapmaker", "PLA", "Matte") in adapter.tag_writer.tags.names
+    tag(ace, 0, dict(BAMBU, name="PLA Lite"))
+    tick(adapter, reactor)
+    assert gcode.scripts == [
+        (
+            f"{CMD} CONFIG_EXTRUDER=0 VENDOR=Generic FILAMENT_TYPE=PLA FILAMENT_SUBTYPE=''"
+            " FILAMENT_COLOR_RGBA=FF0000FF FORCE=1"
+        )
+    ]

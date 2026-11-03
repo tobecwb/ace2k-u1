@@ -1,0 +1,360 @@
+/* ---------- a phone (up to 700 px): the units as lists, the tabs in a bar at the bottom ---------- */
+.mlists {
+  display: none;
+}
+.stop-short {
+  display: none;
+}
+/* The notch and the home indicator, in any orientation (the viewport covers the whole screen): every edge of
+   the page keeps its own padding or the inset, whichever is larger. */
+.shell {
+  padding: max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.banner {
+  padding: max(6px, env(safe-area-inset-top, 0px)) max(6px, env(safe-area-inset-right, 0px)) 6px
+    max(6px, env(safe-area-inset-left, 0px));
+}
+.side {
+  padding: max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px))
+    max(14px, env(safe-area-inset-bottom, 0px)) 16px;
+}
+@media (max-width: 700px) {
+  .mlists {
+    display: block;
+  }
+  /* The Print tab's compact print bar stays above the tab bar; the page keeps room for both below what it shows. */
+  .pbar {
+    bottom: calc(var(--control-h-touch) + 20px + env(safe-area-inset-bottom, 0px));
+  }
+  html:has(.pbar) {
+    scroll-padding-bottom: calc(var(--control-h-touch) * 2 + 60px + env(safe-area-inset-bottom, 0px));
+  }
+  /* A toast rides above the tab bar and above a sheet, so an error is always seen. */
+  .toast {
+    bottom: calc(var(--control-h-touch) + 24px + env(safe-area-inset-bottom, 0px));
+    z-index: 20;
+  }
+  /* Stop all in one short word, so the top bar stays on one row. */
+  .stop-full {
+    display: none;
+  }
+  .stop-short {
+    display: inline;
+  }
+  .shell {
+    padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+      calc(var(--control-h-touch) + 28px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+  }
+  .side.sheet {
+    padding: 14px max(16px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px))
+      max(16px, env(safe-area-inset-left, 0px));
+  }
+  /* The tabs leave the top bar for a fixed bar at the bottom, under the bottom sheets. */
+  .top .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0;
+    padding: 6px env(safe-area-inset-right, 0px) calc(6px + env(safe-area-inset-bottom, 0px))
+      env(safe-area-inset-left, 0px);
+    background: var(--housing);
+    border-top: 1px solid var(--edge);
+  }
+  .top .tabs .tab {
+    flex: 1;
+    min-width: 0;
+    min-height: var(--control-h-touch);
+    border-radius: var(--r-md);
+    padding: 4px 2px;
+    font-size: var(--fs-sm);
+    transition:
+      color var(--dur) var(--ease),
+      background-color var(--dur) var(--ease);
+  }
+  .top .tabs .tab.on {
+    background: none;
+    color: var(--accent);
+  }
+  .side.sheet {
+    z-index: 10;
+  }
+  /* The bottom sheet rises from the bottom and goes back down. */
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  .side.sheet {
+    animation: sheet-in var(--dur) var(--ease);
+  }
+  .side.sheet.leaving {
+    transform: translateY(100%);
+  }
+  .brand {
+    margin-right: 0;
+  }
+  .top .grow {
+    display: none;
+  }
+  .top {
+    justify-content: space-between;
+  }
+
+  /* The switch between the two groupings. */
+  .mseg {
+    display: flex;
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-lg);
+    padding: 3px;
+    margin-bottom: 10px;
+  }
+  .mseg button {
+    flex: 1;
+    border: 0;
+    background: none;
+    color: var(--ink-3);
+    border-radius: var(--r-md);
+    min-height: var(--control-h-touch);
+    font: inherit;
+    cursor: pointer;
+  }
+  .mseg button.on {
+    background: var(--chip-on);
+    color: var(--on-chip-on);
+  }
+
+  /* A block: a head with its lanes, or an amber unit with its lanes. */
+  .mblock {
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-xl);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .mblock.unit {
+    background: var(--unit-bg);
+    border-color: var(--unit-edge);
+  }
+  .mheadrow,
+  .mrow,
+  .munitopen,
+  .mdry {
+    font: inherit;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .mheadrow,
+  .mrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: var(--control-h-touch);
+    border: 0;
+    background: none;
+    text-align: left;
+    padding: 9px 12px;
+  }
+  .mheadrow {
+    border-left: 5px solid var(--edge);
+  }
+  .mheadrow b {
+    font-size: var(--fs-xl);
+  }
+  .mrow {
+    padding-left: 22px;
+    border-top: 1px solid var(--edge);
+  }
+  /* The bay or head whose side panel (sheet) is open. */
+  .mrow.sel,
+  .mheadrow.sel {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+  }
+  .mrow.on {
+    background: var(--move-soft);
+  }
+  .mrow.on .mstate {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .mrow.em {
+    color: var(--ink-3);
+  }
+  .mrow.err {
+    box-shadow: inset 3px 0 0 var(--err);
+  }
+  .mline {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mline.warn {
+    color: var(--warn);
+  }
+  .mmut {
+    margin-left: auto;
+    color: var(--ink-3);
+    font-size: var(--fs-sm);
+    white-space: nowrap;
+  }
+  .mstate,
+  .merr {
+    margin-left: auto;
+    font-size: var(--fs-sm);
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .mhd + .mstate,
+  .mhd + .merr {
+    margin-left: 8px;
+  }
+  .merr {
+    color: var(--err);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .merr-mark {
+    display: inline-block;
+    min-width: 16px;
+    text-align: center;
+    border-radius: var(--r-pill);
+    background: var(--err);
+    color: var(--on-err);
+    font-size: var(--fs-xs);
+    font-weight: 800;
+  }
+  .mchev {
+    color: var(--ink-3);
+    font-size: var(--fs-2xl);
+  }
+  .mmut + .mchev {
+    margin-left: 6px;
+  }
+  .mstate + .mchev,
+  .merr + .mchev {
+    margin-left: 6px;
+  }
+  .mkey {
+    font-weight: 700;
+    min-width: 34px;
+  }
+  .mut {
+    background: var(--heat-soft);
+    color: var(--heat);
+    border-radius: var(--r-xs);
+    padding: 0 5px;
+    margin-right: 2px;
+    font-size: var(--fs-xs);
+  }
+  .mmat {
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mstate,
+  .merr,
+  .mhd {
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .merr-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mhd {
+    margin-left: auto;
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    background: var(--chip);
+    border-radius: var(--r-md);
+    padding: 1px 7px;
+  }
+  .mrow.on .mhd {
+    background: var(--chip-on);
+    color: var(--on-chip-on);
+  }
+
+  /* A colour dot: the spool's colour in its casing, dashed while empty. */
+  .msw {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--fil, var(--unknown));
+    border: 1px solid var(--casing);
+  }
+  .msw[data-dark-fil] {
+    border-color: var(--casing-deep);
+  }
+  .msw.none {
+    background: none;
+    border: 1.5px dashed var(--rail-empty);
+  }
+
+  /* An amber unit's head: its name and reading open its panel, "dry" is the shortcut. */
+  .munithead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 8px;
+  }
+  .munitopen {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--control-h-touch);
+    border: 0;
+    background: none;
+    text-align: left;
+    padding: 9px 12px;
+  }
+  .munitopen b {
+    font-size: var(--fs-xl);
+  }
+  .mdry {
+    min-height: var(--control-h-touch);
+    border: 1px solid var(--unit-edge);
+    background: var(--foot-bg);
+    border-radius: var(--r-md);
+    padding: 0 12px;
+    font-size: var(--fs-sm);
+  }
+
+  /* The other tabs never scroll the page sideways. */
+  .dryers,
+  .dcard,
+  .history,
+  .hbox,
+  .fgrid {
+    max-width: 100%;
+    min-width: 0;
+  }
+  .evscroll {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  /* The plan's comparison in one line under the file's name (the two boxes take the screen's width on a desktop). */
+  .cmp.line {
+    margin: 0;
+    font-size: var(--fs-md);
+    color: var(--ink-2);
+  }
+}

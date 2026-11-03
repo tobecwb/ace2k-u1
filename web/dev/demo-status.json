@@ -1,4 +1,8 @@
 {
+  "ace2k_u1": {"heads": [[{"unit": null, "lane": 1}], [{"unit": null, "lane": 2}], [{"unit": null, "lane": 3}], [{"unit": null, "lane": 4}]],
+               "current": [{"unit": null, "lane": 1}, {"unit": null, "lane": 2}, null, {"unit": null, "lane": 4}], "hooked": true, "plan": null,
+                "lanes": {"-:1": {"material_set": true}, "-:2": {"material_set": true}, "-:3": {"material_set": false},
+                          "-:4": {"material_set": true}}},
   "ace2k": {
     "version": "0.11.0", "link_proven": true, "health": {"ok": true, "failing": []},
     "chamber": 27.0, "humidity": 52.0, "ptc_left": 29.1, "ptc_right": 28.7, "env_valid": true,
@@ -28,5 +32,6 @@
   "filament_motion_sensor e0_filament": {"filament_detected": true, "enabled": true},
   "filament_motion_sensor e1_filament": {"filament_detected": true, "enabled": true},
   "filament_motion_sensor e2_filament": {"filament_detected": false, "enabled": true},
-  "filament_motion_sensor e3_filament": {"filament_detected": true, "enabled": true}
+  "filament_motion_sensor e3_filament": {"filament_detected": true, "enabled": true},
+  "gcode_macro AUTO_FEEDING_BATCH": {"doing": false}
 }

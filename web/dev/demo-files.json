@@ -1,0 +1,439 @@
+{
+  "files": [
+    {
+      "path": "big-9-colours.gcode",
+      "modified": 1761600000,
+      "size": 254594261
+    },
+    {
+      "path": "benchy-5col.gcode",
+      "modified": 1761500000,
+      "size": 900000
+    },
+    {
+      "path": "calibration-cube.gcode",
+      "modified": 1761400000,
+      "size": 900000
+    },
+    {
+      "path": "phone-stand.gcode",
+      "modified": 1761300000,
+      "size": 900000
+    },
+    {
+      "path": "unsliced-copy.gcode",
+      "modified": 1761200000,
+      "size": 900000
+    }
+  ],
+  "cards": {
+    "benchy-5col.gcode": {
+      "colours": [
+        {
+          "colour": "#FFFFFF",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#D32C34",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#FEC187",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#000000",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#5B3F27",
+          "material": "PLA",
+          "vendor": null
+        }
+      ],
+      "time": 5760,
+      "thumb": null,
+      "modified": 1761500000,
+      "gcodeStart": 1200,
+      "gcodeEnd": 900000
+    },
+    "calibration-cube.gcode": {
+      "colours": [
+        {
+          "colour": "#D32C34",
+          "material": "PLA",
+          "vendor": null
+        }
+      ],
+      "time": 1500,
+      "thumb": null,
+      "modified": 1761400000,
+      "gcodeStart": 1200,
+      "gcodeEnd": 900000
+    },
+    "phone-stand.gcode": {
+      "colours": [
+        {
+          "colour": "#000000",
+          "material": "PETG",
+          "vendor": null
+        },
+        {
+          "colour": "#FFFFFF",
+          "material": "PETG",
+          "vendor": null
+        }
+      ],
+      "time": 9120,
+      "thumb": null,
+      "modified": 1761300000,
+      "gcodeStart": 1200,
+      "gcodeEnd": 900000
+    },
+    "unsliced-copy.gcode": {
+      "colours": null,
+      "time": 2400,
+      "thumb": null,
+      "modified": 1761200000,
+      "gcodeStart": 1200,
+      "gcodeEnd": 900000
+    },
+    "objeto_5_cores_PLA_1h36m.gcode": {
+      "colours": null,
+      "time": 5760,
+      "thumb": null,
+      "modified": 1761600000,
+      "gcodeStart": 20000,
+      "gcodeEnd": 6100000
+    },
+    "big-9-colours.gcode": {
+      "colours": [
+        {
+          "colour": "#FFFFFF",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#D32C34",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#FEC187",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#000000",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#5B3F27",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#2E6FD8",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#3DA35D",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#F2C400",
+          "material": "PLA",
+          "vendor": null
+        },
+        {
+          "colour": "#7A4FB5",
+          "material": "PLA",
+          "vendor": null
+        }
+      ],
+      "time": 208260,
+      "thumb": null,
+      "modified": 1761600000,
+      "gcodeStart": 1200,
+      "gcodeEnd": 254500000
+    }
+  },
+  "plans": {
+    "benchy-5col.gcode": {
+      "file": "benchy-5col.gcode",
+      "mtime": 1761500000,
+      "tools": [
+        {
+          "colour": "#ffffff",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#d32c34",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": "1",
+          "why": "closest"
+        },
+        {
+          "colour": "#fec187",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#000000",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#5b3f27",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        }
+      ],
+      "order": [
+        3,
+        0,
+        1,
+        0,
+        2,
+        0,
+        4,
+        0,
+        1,
+        3,
+        4,
+        0
+      ],
+      "raw": [],
+      "heads": {},
+      "set": false,
+      "choice": null,
+      "lanes": []
+    },
+    "phone-stand.gcode": {
+      "file": "phone-stand.gcode",
+      "mtime": 1761300000,
+      "tools": [
+        {
+          "colour": "#000000",
+          "material": "PETG",
+          "temp": 240,
+          "first_temp": 240,
+          "lane": "2",
+          "why": "closest"
+        },
+        {
+          "colour": "#ffffff",
+          "material": "PETG",
+          "temp": 240,
+          "first_temp": 240,
+          "lane": null,
+          "why": "too_far"
+        }
+      ],
+      "order": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      "raw": [],
+      "heads": {},
+      "set": false,
+      "choice": null,
+      "lanes": []
+    },
+    "calibration-cube.gcode": {
+      "file": "calibration-cube.gcode",
+      "mtime": 1761400000,
+      "tools": [
+        {
+          "colour": "#d32c34",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": "a:1",
+          "why": "closest"
+        }
+      ],
+      "order": [
+        0
+      ],
+      "raw": [],
+      "heads": {},
+      "set": false,
+      "choice": null,
+      "lanes": []
+    },
+    "big-9-colours.gcode": {
+      "file": "big-9-colours.gcode",
+      "mtime": 1761600000,
+      "tools": [
+        {
+          "colour": "#ffffff",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#d32c34",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": "1",
+          "why": "closest"
+        },
+        {
+          "colour": "#fec187",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#000000",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#5b3f27",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#2e6fd8",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#3da35d",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#f2c400",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        },
+        {
+          "colour": "#7a4fb5",
+          "material": "PLA",
+          "temp": 220,
+          "first_temp": 220,
+          "lane": null,
+          "why": "too_far"
+        }
+      ],
+      "order": [
+        0,
+        4,
+        8,
+        4,
+        8,
+        3,
+        8,
+        3,
+        7,
+        3,
+        7,
+        2,
+        7,
+        2,
+        6,
+        2,
+        6,
+        1,
+        6,
+        1,
+        5,
+        1,
+        5,
+        0,
+        5,
+        0,
+        4,
+        0,
+        4,
+        8,
+        4,
+        8,
+        3,
+        8,
+        3,
+        7,
+        3,
+        7,
+        2,
+        7,
+        2,
+        6,
+        2,
+        6,
+        1,
+        6,
+        1,
+        5,
+        1,
+        5,
+        0,
+        5,
+        0,
+        4,
+        0,
+        4,
+        8,
+        4,
+        8,
+        3
+      ],
+      "raw": [],
+      "heads": {},
+      "set": false,
+      "choice": null,
+      "lanes": [],
+      "delayMs": 14000
+    }
+  }
+}

@@ -21,12 +21,16 @@ defaults carry an auto_mode entry, and the head sensors kept in runout_sensor ar
 lookups of `filament_motion_sensor e<n>_filament`, two of them, in __init__.
 """
 
+from __future__ import annotations
+
 import ast
 import types
 import warnings
 from pathlib import Path
 
-import ace2k_u1
+import ace2k_u1_hooks as hooks
+import ace2k_u1_pause
+import ace2k_u1_tags
 import pytest
 
 REAL = Path.home() / "ace2k-bench" / "klipper-u1" / "klippy" / "extras" / "filament_feed.py"
@@ -37,19 +41,19 @@ READY_ASSIGNED = ("exception_manager",)
 HEAD_SENSOR = "filament_motion_sensor e%d_filament"
 
 
-def tree():
+def tree() -> ast.Module:
     return ast.parse(REAL.read_text(encoding="utf-8"))
 
 
-def feed_class():
+def feed_class() -> ast.ClassDef:
     return next(n for n in tree().body if isinstance(n, ast.ClassDef) and n.name == "FilamentFeed")
 
 
-def method(name):
+def method(name: str) -> ast.FunctionDef:
     return next(n for n in feed_class().body if isinstance(n, ast.FunctionDef) and n.name == name)
 
 
-def self_assigned(node):
+def self_assigned(node: ast.AST) -> set[str]:
     """The attribute names assigned on self anywhere under node."""
     names = set()
     for n in ast.walk(node):
@@ -66,41 +70,41 @@ def self_assigned(node):
     return names
 
 
-def test_constants():
+def test_constants() -> None:
     values = {}
     for node in tree().body:
         if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     values[target.id] = node.value.value
-    for name, value in ace2k_u1.CONSTANTS.items():
+    for name, value in hooks.CONSTANTS.items():
         assert name in values, name
         assert values[name] == value, (name, values[name])
 
 
-def test_methods():
+def test_methods() -> None:
     defs = {n.name: n for n in feed_class().body if isinstance(n, ast.FunctionDef)}
-    for name, params in ace2k_u1.METHODS.items():
+    for name, params in hooks.METHODS.items():
         assert name in defs, name
         args = tuple(a.arg for a in defs[name].args.args[1:])
         assert args[: len(params)] == params, (name, args)
 
 
-def test_init_assigns_every_attribute():
+def test_init_assigns_every_attribute() -> None:
     assigned = self_assigned(method("__init__"))
-    for name in ace2k_u1.CHANNEL_LISTS + ace2k_u1.ATTRIBUTES:
+    for name in hooks.CHANNEL_LISTS + hooks.ATTRIBUTES:
         if name not in READY_ASSIGNED:
             assert name in assigned, name
 
 
-def test_ready_assigned_attributes_are_assigned_in_the_class():
-    assert set(READY_ASSIGNED) <= set(ace2k_u1.ATTRIBUTES)
+def test_ready_assigned_attributes_are_assigned_in_the_class() -> None:
+    assert set(READY_ASSIGNED) <= set(hooks.ATTRIBUTES)
     assigned = self_assigned(feed_class())
     for name in READY_ASSIGNED:
         assert name in assigned, name
 
 
-def test_default_config_has_auto_mode():
+def test_default_config_has_auto_mode() -> None:
     default = None
     for node in tree().body:
         named = isinstance(node, ast.Assign) and any(
@@ -113,7 +117,7 @@ def test_default_config_has_auto_mode():
     assert "auto_mode" in keys
 
 
-def test_runout_sensor_holds_the_head_sensors():
+def test_runout_sensor_holds_the_head_sensors() -> None:
     init = method("__init__")
     lookups = [
         n
@@ -142,7 +146,7 @@ def test_runout_sensor_holds_the_head_sensors():
     assert len(appends) == 2, "runout_sensor holds one entry per channel"
 
 
-def calls_named(node, attr):
+def calls_named(node: ast.AST, attr: str) -> list[ast.Call]:
     return [
         n
         for n in ast.walk(node)
@@ -150,22 +154,22 @@ def calls_named(node, attr):
     ]
 
 
-def first_arg(call):
+def first_arg(call: ast.Call) -> str | None:
     arg = call.args[0]
     return arg.id if isinstance(arg, ast.Name) else None
 
 
-def test_the_side_motor_pulse_takes_what_the_hook_takes():
+def test_the_side_motor_pulse_takes_what_the_hook_takes() -> None:
     motor = next(n for n in tree().body if isinstance(n, ast.ClassDef) and n.name == "FeedMotor")
     pulse = next(
         n for n in motor.body if isinstance(n, ast.FunctionDef) and n.name == "run_one_cycle"
     )
     args = tuple(a.arg for a in pulse.args.args[1:])
-    assert args == ace2k_u1.MOTOR_PULSE
+    assert args == hooks.MOTOR_PULSE
     assert "motor" in self_assigned(method("__init__"))
 
 
-def test_the_load_extruding_retry_pulses_forward():
+def test_the_load_extruding_retry_pulses_forward() -> None:
     do_feed = method("_do_feed")
     # motor_dir = FEED_MOTOR_DIR_A, then B when ch == FEED_CHANNEL_2
     assigned = [
@@ -205,7 +209,7 @@ def test_the_load_extruding_retry_pulses_forward():
     assert [first_arg(c) for c in pulses] == ["motor_dir"]
 
 
-def test_the_hang_neutral_pulse_runs_the_other_way():
+def test_the_hang_neutral_pulse_runs_the_other_way() -> None:
     hang = method("_hang_neutral")
     branch = next(
         n
@@ -220,7 +224,7 @@ def test_the_hang_neutral_pulse_runs_the_other_way():
 
 
 @pytest.mark.skipif(not EXTRUDER.exists(), reason=f"{EXTRUDER} absent (setup-u1.sh)")
-def test_the_extruders_are_listed_with_their_index_and_name():
+def test_the_extruders_are_listed_with_their_index_and_name() -> None:
     module = ast.parse(EXTRUDER.read_text(encoding="utf-8"))
     add = next(
         n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == "add_printer_objects"
@@ -263,7 +267,7 @@ TASK_CONFIG = REAL.parent / "print_task_config.py"
 FILAMENT_PARAMETERS = REAL.parent / "filament_parameters.py"
 
 
-def module_def(path, cls, name):
+def module_def(path: Path, cls: str, name: str) -> tuple[ast.Module, ast.ClassDef, ast.FunctionDef]:
     module = ast.parse(path.read_text(encoding="utf-8"))
     klass = next(n for n in module.body if isinstance(n, ast.ClassDef) and n.name == cls)
     return (
@@ -273,7 +277,7 @@ def module_def(path, cls, name):
     )
 
 
-def template(joined):
+def template(joined: ast.JoinedStr) -> str:
     """An f-string as a template: '{name}' for each formatted name, the constants as they are."""
     parts = []
     for v in joined.values:
@@ -285,8 +289,8 @@ def template(joined):
 
 
 @pytest.mark.skipif(not TASK_CONFIG.exists(), reason=f"{TASK_CONFIG} absent (setup-u1.sh)")
-def test_the_filament_config_command_reads_every_parameter_the_tags_write():
-    _, _, cmd = module_def(TASK_CONFIG, "PrintTaskConfig", "cmd_" + ace2k_u1.TAG_COMMAND)
+def test_the_filament_config_command_reads_every_parameter_the_tags_write() -> None:
+    _, _, cmd = module_def(TASK_CONFIG, "PrintTaskConfig", "cmd_" + ace2k_u1_tags.TAG_COMMAND)
     read = {
         c.args[0].value
         for c in ast.walk(cmd)
@@ -298,11 +302,11 @@ def test_the_filament_config_command_reads_every_parameter_the_tags_write():
         and c.args
         and isinstance(c.args[0], ast.Constant)
     }
-    assert set(ace2k_u1.TAG_PARAMS) <= read, set(ace2k_u1.TAG_PARAMS) - read
+    assert set(ace2k_u1_tags.TAG_PARAMS) <= read, set(ace2k_u1_tags.TAG_PARAMS) - read
 
 
 @pytest.mark.skipif(not TASK_CONFIG.exists(), reason=f"{TASK_CONFIG} absent (setup-u1.sh)")
-def test_the_unset_head_is_none_and_white_in_lists_per_head():
+def test_the_unset_head_is_none_and_white_in_lists_per_head() -> None:
     module = ast.parse(TASK_CONFIG.read_text(encoding="utf-8"))
     default = next(
         n.value
@@ -317,13 +321,13 @@ def test_the_unset_head_is_none_and_white_in_lists_per_head():
         "filament_sub_type": "NONE",
         "filament_color_rgba": "FFFFFFFF",
     }
-    assert set(expected) == set(ace2k_u1.TAG_STATUS.values())
+    assert set(expected) == set(ace2k_u1_tags.TAG_STATUS.values())
     for key, value in expected.items():
         node = entries[key]  # ['NONE'] * PHYSICAL_EXTRUDER_NUM: one entry per head
         assert isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult), key
         assert isinstance(node.left, ast.List) and len(node.left.elts) == 1, key
         assert node.left.elts[0].value == value, key
-    clear = dict(w.split("=", 1) for w in ace2k_u1.TAG_CLEAR.split())
+    clear = dict(w.split("=", 1) for w in ace2k_u1_tags.TAG_CLEAR.split())
     assert clear == {
         "VENDOR": "NONE",
         "FILAMENT_TYPE": "NONE",
@@ -335,7 +339,7 @@ def test_the_unset_head_is_none_and_white_in_lists_per_head():
 @pytest.mark.skipif(
     not FILAMENT_PARAMETERS.exists(), reason=f"{FILAMENT_PARAMETERS} absent (setup-u1.sh)"
 )
-def test_the_filament_table_is_keyed_vendor_type_subtype_key_with_a_generic_fallback():
+def test_the_filament_table_is_keyed_vendor_type_subtype_key_with_a_generic_fallback() -> None:
     _, klass, search = module_def(
         FILAMENT_PARAMETERS, "FilamentParameters", "_search_filament_param_value"
     )
@@ -379,7 +383,7 @@ PRINT_STATS = REAL.parent / "print_stats.py"
 EXCEPTIONS = REAL.parent.parent / "exception_manager.py"
 
 
-def literal(node):
+def literal(node: ast.AST) -> object:
     """A call argument as a value: a constant, a self.<...>.<NAME> attribute as 'NAME', a
     '%s ...' % (...) as its format string."""
     if isinstance(node, ast.Constant):
@@ -393,11 +397,11 @@ def literal(node):
     return None
 
 
-def class_method(path, cls, name):
+def class_method(path: Path, cls: str, name: str) -> ast.FunctionDef:
     return module_def(path, cls, name)[2]
 
 
-def exception_calls(fn):
+def exception_calls(fn: ast.AST) -> list[list[object]]:
     """The send_event("print_stats:update_exception_info", ...) calls under fn, their args."""
     return [
         [literal(a) for a in c.args[1:]]
@@ -406,7 +410,7 @@ def exception_calls(fn):
     ]
 
 
-def raised(fn):
+def raised(fn: ast.AST) -> list[dict[str | None, object]]:
     return [
         {k.arg: literal(k.value) for k in c.keywords}
         for c in calls_named(fn, "raise_exception_async")
@@ -414,9 +418,9 @@ def raised(fn):
 
 
 @pytest.mark.skipif(not ENTANGLE.exists(), reason=f"{ENTANGLE} absent (setup-u1.sh)")
-def test_the_tangle_pause_is_the_u1s_as_used():
+def test_the_tangle_pause_is_the_u1s_as_used() -> None:
     fn = class_method(ENTANGLE, "FilamentEntangleDetect", "_check_entangle_event")
-    a = ace2k_u1
+    a = ace2k_u1_pause
     info = [a.TANGLE_ID, "extruder_index", a.TANGLE_CODE, a.TANGLE_MESSAGE, a.TANGLE_LEVEL]
     assert exception_calls(fn) == [info]
     assert len(calls_named(fn, "send_pause_command")) == 1
@@ -456,7 +460,7 @@ def test_the_tangle_pause_is_the_u1s_as_used():
 
 
 @pytest.mark.skipif(not PAUSE_RESUME.exists(), reason=f"{PAUSE_RESUME} absent (setup-u1.sh)")
-def test_the_pause_command_takes_nothing_and_no_resume_event_is_sent():
+def test_the_pause_command_takes_nothing_and_no_resume_event_is_sent() -> None:
     module = ast.parse(PAUSE_RESUME.read_text(encoding="utf-8"))
     klass = next(n for n in module.body if isinstance(n, ast.ClassDef) and n.name == "PauseResume")
     defs = {n.name: n for n in klass.body if isinstance(n, ast.FunctionDef)}
@@ -468,11 +472,11 @@ def test_the_pause_command_takes_nothing_and_no_resume_event_is_sent():
 
 
 @pytest.mark.skipif(not PRINT_STATS.exists(), reason=f"{PRINT_STATS} absent (setup-u1.sh)")
-def test_print_stats_pauses_and_resumes_through_its_state():
+def test_print_stats_pauses_and_resumes_through_its_state() -> None:
     _, _, start = module_def(PRINT_STATS, "PrintStats", "note_start")
     _, _, pause = module_def(PRINT_STATS, "PrintStats", "note_pause")
 
-    def states(fn):
+    def states(fn: ast.AST) -> list[object]:
         return [
             n.value.value
             for n in ast.walk(fn)
@@ -487,9 +491,9 @@ def test_print_stats_pauses_and_resumes_through_its_state():
 
 
 @pytest.mark.skipif(not SWITCH_SENSOR.exists(), reason=f"{SWITCH_SENSOR} absent (setup-u1.sh)")
-def test_the_runout_pause_is_the_u1s_as_used():
+def test_the_runout_pause_is_the_u1s_as_used() -> None:
     fn = class_method(SWITCH_SENSOR, "RunoutHelper", "_runout_event_handler")
-    a = ace2k_u1
+    a = ace2k_u1_pause
     info = ["MODULE_ID_TOOLHEAD", "extruder_index", "CODE_TOOLHEAD_FILAMENT_RUNOUT", "%s runout"]
     assert exception_calls(fn) == [info + [a.RUNOUT_LEVEL]]
     assert len(calls_named(fn, "send_pause_command")) == 1
@@ -546,7 +550,7 @@ def test_the_runout_pause_is_the_u1s_as_used():
 
 
 @pytest.mark.skipif(not MOTION_SENSOR.exists(), reason=f"{MOTION_SENSOR} absent (setup-u1.sh)")
-def test_the_head_sensor_runs_out_through_the_runout_helper():
+def test_the_head_sensor_runs_out_through_the_runout_helper() -> None:
     module = ast.parse(MOTION_SENSOR.read_text(encoding="utf-8"))
     assigned = [
         ast.unparse(n.value)
@@ -557,11 +561,11 @@ def test_the_head_sensor_runs_out_through_the_runout_helper():
     ]
     assert assigned == ["filament_switch_sensor.RunoutHelper(config)"]
     # the head sensor's name, as the adapter builds it when the sensor does not say
-    assert (HEAD_SENSOR % 2).split()[-1] == ace2k_u1.RUNOUT_SENSOR % 2
+    assert (HEAD_SENSOR % 2).split()[-1] == ace2k_u1_pause.RUNOUT_SENSOR % 2
 
 
 @pytest.mark.skipif(not EXCEPTIONS.exists(), reason=f"{EXCEPTIONS} absent (setup-u1.sh)")
-def test_the_runout_exception_is_the_toolheads_runout():
+def test_the_runout_exception_is_the_toolheads_runout() -> None:
     module = ast.parse(EXCEPTIONS.read_text(encoding="utf-8"))
     klass = next(
         n for n in module.body if isinstance(n, ast.ClassDef) and n.name == "ExceptionList"
@@ -573,8 +577,8 @@ def test_the_runout_exception_is_the_toolheads_runout():
         for t in n.targets
         if isinstance(t, ast.Name)
     }
-    assert values["MODULE_ID_TOOLHEAD"] == ace2k_u1.RUNOUT_ID == ace2k_u1.TANGLE_ID
-    assert values["CODE_TOOLHEAD_FILAMENT_RUNOUT"] == ace2k_u1.RUNOUT_CODE
+    assert values["MODULE_ID_TOOLHEAD"] == ace2k_u1_pause.RUNOUT_ID == ace2k_u1_pause.TANGLE_ID
+    assert values["CODE_TOOLHEAD_FILAMENT_RUNOUT"] == ace2k_u1_pause.RUNOUT_CODE
     manager = next(
         n for n in module.body if isinstance(n, ast.ClassDef) and n.name == "ExceptionManager"
     )
@@ -588,7 +592,7 @@ def test_the_runout_exception_is_the_toolheads_runout():
 
 
 @pytest.mark.skipif(not SWITCH_SENSOR.exists(), reason=f"{SWITCH_SENSOR} absent (setup-u1.sh)")
-def test_the_runout_backs_up_the_filament_and_honours_the_sensors_switches():
+def test_the_runout_backs_up_the_filament_and_honours_the_sensors_switches() -> None:
     init = class_method(SWITCH_SENSOR, "RunoutHelper", "__init__")
     assigned = {
         n.targets[0].attr: n.value
@@ -617,7 +621,7 @@ def test_the_runout_backs_up_the_filament_and_honours_the_sensors_switches():
     assert [a.arg for a in backup.args.args] == ["self", "extruder_index"]
 
 
-def test_the_extruder_position_is_read_as_the_u1s_tangle_check_reads_it():
+def test_the_extruder_position_is_read_as_the_u1s_tangle_check_reads_it() -> None:
     # the wheel follows a head's extruder through PrinterExtruder.find_past_position(print_time)
     # at the MCU's estimated print time — the U1's filament_entangle_detect's own reading
     module = ast.parse(EXTRUDER.read_text(encoding="utf-8"))
@@ -633,8 +637,8 @@ def test_the_extruder_position_is_read_as_the_u1s_tangle_check_reads_it():
     assert "lookup_object('mcu').estimated_print_time" in entangle
 
 
-def test_register_command_with_none_hands_back_the_old_handler():
-    # the ACE_CLEAR escape replaces ace2k's handler the Klipper way: register_command(name,
+def test_register_command_with_none_hands_back_the_old_handler() -> None:
+    # the ACEK_CLEAR escape replaces ace2k's handler the Klipper way: register_command(name,
     # None) removes it and returns it; the help text and the not-ready table read as named
     source = (REAL.parent.parent / "gcode.py").read_text(encoding="utf-8")
     with warnings.catch_warnings():  # the U1's file carries an invalid escape of its own
@@ -651,3 +655,156 @@ def test_register_command_with_none_hands_back_the_old_handler():
     assert "return old_cmd" in text
     init = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "__init__")
     assert {"gcode_help", "base_gcode_handlers", "ready_gcode_handlers"} <= self_assigned(init)
+
+
+# --- the U1's own state the U1Printer reads and writes (hooks: PRINT_TASK_KEYS and the lists
+# after it) --------------------------------------------------------------------------------------
+
+LAVA = REAL.parent.parent.parent / "lava"
+KINEMATICS = REAL.parent.parent / "kinematics"
+
+
+def class_node(path: Path, cls: str) -> ast.ClassDef:
+    module = ast.parse(path.read_text(encoding="utf-8"))
+    return next(n for n in module.body if isinstance(n, ast.ClassDef) and n.name == cls)
+
+
+def dict_keys(node: ast.Dict) -> set[object]:
+    return {k.value for k in node.keys if isinstance(k, ast.Constant)}
+
+
+def module_dict(path: Path, name: str) -> ast.Dict:
+    """The dict literal assigned to the module-level NAME."""
+    module = ast.parse(path.read_text(encoding="utf-8"))
+    for node in module.body:
+        named = isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == name for t in node.targets
+        )
+        if named and isinstance(node.value, ast.Dict):
+            return node.value
+    raise AssertionError(name)
+
+
+def macro_section(name: str) -> str:
+    """The text of the [gcode_macro NAME] section of the U1's fluidd.cfg."""
+    text = (LAVA / "fluidd.cfg").read_text(encoding="utf-8")
+    head = f"[gcode_macro {name}]"
+    assert head in text, head
+    return text.split(head, 1)[1].split("\n[", 1)[0]
+
+
+def test_the_extruder_carries_the_position_and_the_nozzle_the_adapter_reads() -> None:
+    """printing_e_pos, nozzle_diameter and nozzle_volume_type are assigned on PrinterExtruder."""
+    assigned = self_assigned(class_node(EXTRUDER, "PrinterExtruder"))
+    for name in hooks.EXTRUDER_ATTRIBUTES.values():
+        assert name in assigned, name
+
+
+def test_printing_e_pos_is_the_attribute_the_u1s_resume_reads_and_the_gcode_move_moves() -> None:
+    """printing_e_pos is in the extruder's status; gcode_move adds E moves to it."""
+    name = hooks.EXTRUDER_ATTRIBUTES["e_pos"]
+    assert f"sts['{name}'] = self.{name}" in EXTRUDER.read_text(encoding="utf-8")
+    move = (REAL.parent / "gcode_move.py").read_text(encoding="utf-8")
+    assert f"extruder.{name} += delta_e" in move
+    assert f"printer[printer.toolhead.extruder].{name}" in (LAVA / "fluidd.cfg").read_text(
+        encoding="utf-8"
+    )
+
+
+@pytest.mark.skipif(not PAUSE_RESUME.exists(), reason=f"{PAUSE_RESUME} absent (setup-u1.sh)")
+def test_pause_resume_keeps_its_two_flags_on_the_object() -> None:
+    """is_paused and pause_command_sent are assigned in PauseResume.__init__."""
+    _, _, init = module_def(PAUSE_RESUME, "PauseResume", "__init__")
+    assigned = self_assigned(init)
+    for name in hooks.PAUSE_FLAGS.values():
+        assert name in assigned, name
+
+
+@pytest.mark.skipif(not PAUSE_RESUME.exists(), reason=f"{PAUSE_RESUME} absent (setup-u1.sh)")
+def test_the_pause_command_sets_its_flag_before_the_pause_takes() -> None:
+    """send_pause_command sets pause_command_sent, and the resume clears it (pausing in flight)."""
+    sent = hooks.PAUSE_FLAGS["sent"]
+    _, _, send = module_def(PAUSE_RESUME, "PauseResume", "send_pause_command")
+    assert sent in self_assigned(send)
+    paused = hooks.PAUSE_FLAGS["paused"]
+    text = PAUSE_RESUME.read_text(encoding="utf-8")
+    assert f"self.{paused} = True" in text and f"self.{sent} = False" in text
+
+
+@pytest.mark.skipif(not PRINT_STATS.exists(), reason=f"{PRINT_STATS} absent (setup-u1.sh)")
+def test_print_stats_keeps_a_pre_extrusion_flag_per_tool_in_its_config() -> None:
+    """_config["print_job"]["preextrude_filament"] is a per-tool list, set True by the U1."""
+    top, leaf = ("print_job", "preextrude_filament")
+    default = module_dict(PRINT_STATS, "PRINT_STATS_DEFAULT_CONFIG")
+    job = default.values[[k.value for k in default.keys].index(top)]
+    assert leaf in dict_keys(job)
+    text = PRINT_STATS.read_text(encoding="utf-8")
+    assert f"self._config['{top}']['{leaf}'][index] = True" in text
+    assert f"self._config['{top}']['{leaf}'][index] == True" in text  # read: done once per tool
+    _, _, init = module_def(PRINT_STATS, "PrintStats", "__init__")
+    assert "_config" in self_assigned(init)
+
+
+@pytest.mark.skipif(not PRINT_STATS.exists(), reason=f"{PRINT_STATS} absent (setup-u1.sh)")
+def test_print_stats_status_carries_the_current_layer() -> None:
+    """get_status()["info"]["current_layer"] is info_current_layer, set by SET_PRINT_STATS_INFO."""
+    outer, inner = hooks.PRINT_STATS_LAYER
+    _, _, status = module_def(PRINT_STATS, "PrintStats", "get_status")
+    ret = next(n for n in ast.walk(status) if isinstance(n, ast.Return))
+    info = ret.value.values[[k.value for k in ret.value.keys].index(outer)]
+    assert dict_keys(info) == {"total_layer", inner}
+    assert "info_current_layer" in PRINT_STATS.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(not TASK_CONFIG.exists(), reason=f"{TASK_CONFIG} absent (setup-u1.sh)")
+def test_print_task_config_status_carries_the_tables_the_adapter_reads() -> None:
+    """get_status() returns the task config, whose keys include every PRINT_TASK_KEYS entry."""
+    keys = dict_keys(module_dict(TASK_CONFIG, "DEFAULT_PRINT_TASK_CONFIG"))
+    for name in hooks.PRINT_TASK_KEYS.values():
+        assert name in keys, name
+    _, _, status = module_def(TASK_CONFIG, "PrintTaskConfig", "get_status")
+    assert "dict(self.print_task_config)" in ast.unparse(status)
+
+
+@pytest.mark.skipif(
+    not FILAMENT_PARAMETERS.exists(), reason=f"{FILAMENT_PARAMETERS} absent (setup-u1.sh)"
+)
+def test_filament_parameters_answers_the_three_questions_with_the_nozzle() -> None:
+    """The three filament_parameters getters take (vendor, type, subtype, nozzle, volume)."""
+    for name in hooks.FILAMENT_PARAMETERS.values():
+        _, _, fn = module_def(FILAMENT_PARAMETERS, "FilamentParameters", name)
+        assert [a.arg for a in fn.args.args] == [
+            "self",
+            "filament_vendor",
+            "filament_main_type",
+            "filament_sub_type",
+            "nozzle_diameter",
+            "nozzle_volume_type",
+        ], name
+
+
+def test_the_kinematics_status_carries_the_homed_axes() -> None:
+    """The toolhead's status carries homed_axes, as the kinematics' get_status gives it."""
+    text = (KINEMATICS / "corexy.py").read_text(encoding="utf-8")
+    assert f"'{hooks.TOOLHEAD_HOMED}'" in text
+    assert "self.kin.get_status(eventtime)" in (KINEMATICS.parent / "toolhead.py").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_inner_resume_is_a_macro_with_the_variables_the_swap_sets() -> None:
+    """[gcode_macro INNER_RESUME] declares the last_extruder_* and extruder<n>_temp variables."""
+    section = macro_section(hooks.INNER_RESUME)
+    for name in hooks.INNER_RESUME_VARIABLES:
+        for variable in [name % n for n in range(4)] if "%d" in name else [name]:
+            assert f"variable_{variable}:" in section, variable
+
+
+def test_the_idle_exit_is_registered_per_extruder_by_name() -> None:
+    """MOVE_TO_XY_IDLE_POSITION_<NAME> is registered per extruder; the first is named extruder."""
+    text = EXTRUDER.read_text(encoding="utf-8")
+    prefix, _, suffix = hooks.IDLE_EXIT.rpartition("_")
+    assert f'"{prefix}_{{}}".format(self.name).upper()' in text
+    assert suffix == "extruder".upper()
+    printer_cfg = (LAVA / "printer.cfg").read_text(encoding="utf-8")
+    assert "\n[extruder]\n" in printer_cfg  # the first head's extruder is called "extruder"

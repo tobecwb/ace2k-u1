@@ -1,0 +1,9 @@
+# Development tools for the host code: tests, lint and the quality gate (make quality).
+# Install into a virtual environment: python3 -m pip install -r requirements-dev.txt
+pytest==9.1.1
+pytest-cov==7.1.0
+coverage==7.16.2
+radon==6.0.1
+xenon==0.9.3
+vulture==2.16
+mypy==2.4.0

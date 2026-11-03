@@ -1,0 +1,365 @@
+/* ---------- the Print tab during a print, and the timeline of a plan ----------
+   Every colour is a token. A file colour comes in as --fil on the element's style. */
+
+/* The printing view: the header, Now and the next swap, the units, the timeline. */
+.printing {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pr-head {
+  display: grid;
+  grid-template-columns: 84px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+  padding: 10px 12px;
+}
+.pr-main {
+  min-width: 0;
+}
+.pr-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pr-name {
+  font-size: var(--fs-xl);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-pct {
+  font-size: var(--fs-3xl);
+  font-weight: 800;
+  color: var(--ok);
+}
+.prog {
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--inset);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.prog i {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.pr-ctl {
+  display: flex;
+  gap: 8px;
+}
+.pr-ctl .btn {
+  font-weight: 700;
+}
+
+/* Now and the next swap, side by side. */
+.now2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.nowc {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+  padding: 12px 14px;
+}
+.nowc.swap {
+  background: var(--heat-soft);
+  border-color: var(--heat);
+}
+.nowc.next {
+  background: var(--inset);
+  border-color: var(--warn);
+}
+.nowc .k {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+/* The swatches and the sentence share one line: the swatches keep their size, the sentence wraps beside them. */
+.nowc .v {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  margin-top: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.nowc .sws {
+  flex: none;
+  display: inline-flex;
+  gap: 4px;
+  /* An empty swatch sits on the baseline; this centres it on the first line's capitals. */
+  position: relative;
+  top: 3px;
+}
+.nowc .txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.nowc .sub {
+  margin-top: 4px;
+}
+.nowc .v.good {
+  color: var(--ok);
+}
+.printing .sw {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--fil, var(--unknown));
+  border: 0;
+  outline: 0;
+  box-shadow: 0 0 0 1px var(--edge-strong);
+  cursor: default;
+}
+
+/* The marks on the units: the bay that prints now in green, the bays loaded in other heads in blue. */
+.dg .mk {
+  fill: none;
+  stroke-width: 3;
+}
+.dg .mk.printing,
+.dg .mk-lab.printing {
+  stroke: var(--ok);
+}
+.dg .mk.in_head,
+.dg .mk-lab.in_head {
+  stroke: var(--accent);
+}
+.dg .mk.in_head {
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+}
+.dg .mk-lab.printing {
+  fill: var(--ok);
+}
+.dg .mk-lab.in_head {
+  fill: var(--chip-on);
+}
+.dg .mk-text {
+  font-size: var(--fs-xs);
+  font-weight: 800;
+}
+.dg .mk-text.printing {
+  fill: var(--on-heat);
+}
+.dg .mk-text.in_head {
+  fill: var(--on-chip-on);
+}
+.mrow.mk-printing {
+  box-shadow: inset 4px 0 0 var(--ok);
+}
+.mrow.mk-printing .mstate {
+  color: var(--ok);
+  font-weight: 700;
+}
+.mrow.mk-in_head .mstate {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The timeline: a row per head on one axis, the file from start to end. */
+.tl {
+  margin: 0 0 16px;
+}
+.tl .cap {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 4px 0 6px;
+}
+.tlr {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+.tlr .lb b {
+  display: block;
+}
+.tlr .lb span {
+  font-size: var(--fs-xs);
+  color: var(--warn);
+}
+.band {
+  position: relative;
+  height: 16px;
+  margin-top: 8px;
+}
+.band span,
+.band u {
+  position: absolute;
+  display: block;
+}
+.band .act {
+  top: 0;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--fil, var(--unknown));
+  box-shadow: inset 0 0 0 0.5px var(--edge-strong);
+}
+.band .idle {
+  top: 7px;
+  height: 2px;
+  opacity: 0.55;
+  background: var(--fil, var(--unknown));
+}
+/* A spool swap: a yellow ▼ above the band. */
+.band .sw-mark {
+  top: -10px;
+  width: 0;
+  height: 0;
+  margin-left: -5px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid var(--warn);
+}
+.band .past {
+  top: -4px;
+  height: 24px;
+  background: var(--bg);
+  opacity: 0.72;
+  z-index: 1;
+}
+.band .cur {
+  top: -6px;
+  height: 28px;
+  width: 2px;
+  background: var(--accent);
+  z-index: 2;
+}
+/* The zoom strip: the whole print in miniature and the window on the stretch the bars show. */
+.tl .zrow {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+.tl .zstrip {
+  position: relative;
+  height: 26px;
+  background: var(--inset);
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none; /* a finger drags the window, not the page; the bars above keep the page's scroll */
+}
+.tl .zstrip > i {
+  position: absolute;
+  background: var(--fil);
+}
+.tl .zwin {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 2px solid var(--accent);
+  background: var(--move-soft);
+  min-width: 18px; /* the narrowest stretch is still wide enough to grab */
+  border-radius: var(--r-xs);
+  cursor: grab;
+}
+.tl .zwin .zl,
+.tl .zwin .zr {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: min(12px, 30%); /* inside the window: its middle stays grabbable, and the ends of the file stay reachable */
+  background: none;
+  cursor: ew-resize;
+}
+.tl .zwin .zl {
+  left: 0;
+}
+.tl .zwin .zr {
+  right: 0;
+}
+.tl .zbtns {
+  display: flex;
+  gap: 6px;
+}
+.axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  border-top: 1px solid var(--edge);
+  padding-top: 3px;
+}
+.axis .mid {
+  text-align: center;
+}
+.leg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  margin: 6px 0 0 68px;
+}
+.leg .lg {
+  display: inline-block;
+  width: 22px;
+  vertical-align: middle;
+  margin-right: 6px;
+  background: var(--ink-3);
+}
+.leg .lg.act {
+  height: 12px;
+  border-radius: 2px;
+}
+.leg .lg.idle {
+  height: 2px;
+}
+.leg .lg-mark {
+  color: var(--warn);
+}
+
+@media (max-width: 700px) {
+  .pr-head {
+    grid-template-columns: 64px 1fr;
+  }
+  .pr-thumb {
+    width: 64px;
+    height: 48px;
+  }
+  .pr-ctl {
+    grid-column: 1 / -1;
+  }
+  .pr-ctl .btn {
+    flex: 1;
+    min-height: var(--control-h-touch);
+  }
+  .now2 {
+    grid-template-columns: 1fr;
+  }
+  .tlr {
+    grid-template-columns: 44px 1fr;
+  }
+  .tl .zrow {
+    grid-template-columns: 1fr auto;
+  }
+  .tl .zrow .note {
+    display: none;
+  }
+  .tl .zbtns .btn {
+    min-height: var(--control-h-touch);
+  }
+  .leg {
+    margin-left: 0;
+  }
+}

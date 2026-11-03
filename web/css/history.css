@@ -1,0 +1,291 @@
+/* ---------- the History tab: the chart on top, the event table below, both across the whole width ---------- */
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.history-error {
+  margin: 0;
+  background: var(--bad-soft);
+  color: var(--err);
+  border: 1px solid var(--err);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  font-size: var(--fs-md);
+}
+.hbox {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+  padding: 14px;
+  min-width: 0;
+}
+.hbox .head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+.hbox h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.history .seg {
+  display: inline-flex;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.history .seg button {
+  background: none;
+  border: 0;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+}
+.history .seg button[aria-pressed="true"] {
+  background: var(--inset);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The legend: one button per series, and the note for the event dots. */
+.hlegend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin-bottom: 6px;
+}
+.hlegend button {
+  background: none;
+  border: 0;
+  padding: 2px 6px;
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.hlegend button:hover {
+  background: var(--inset);
+}
+.hlegend button[aria-pressed="false"] {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+.hlegend button i {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.hlegend button i.dashed {
+  background: none;
+  height: 0;
+  border-radius: 0;
+  border-top: 1px dashed currentColor;
+}
+.hlegend-ev {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+}
+
+/* The plot. The tooltip sits inside the wrapper, over the drawing. */
+.chart-wrap {
+  position: relative;
+  touch-action: pan-y;
+}
+.chart-svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.chart-svg .grid line {
+  stroke: var(--edge);
+}
+.chart-svg .ticks text {
+  font-size: var(--fs-xs);
+  fill: var(--ink-3);
+}
+.chart-svg .evline {
+  stroke: var(--edge-strong);
+  stroke-dasharray: 3 3;
+}
+.chart-svg .ev-err,
+.hdot.ev-err {
+  fill: var(--bad);
+  background: var(--bad);
+}
+.chart-svg .ev-dryer,
+.hdot.ev-dryer {
+  fill: var(--heat);
+  background: var(--heat);
+}
+.chart-svg .ev-info,
+.hdot.ev-info {
+  fill: var(--accent);
+  background: var(--accent);
+}
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--housing);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  font-size: var(--fs-sm);
+  width: max-content;
+  max-width: 100%;
+  box-shadow: var(--shadow);
+}
+
+/* The filters. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.filters button {
+  border: 1px solid var(--edge-strong);
+  background: none;
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.filters button[aria-pressed="true"] {
+  border-color: var(--ink-3);
+  color: var(--ink);
+  background: var(--inset);
+}
+.filters .lanes {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.filters .lanes > span {
+  font-size: var(--fs-md);
+  color: var(--ink-3);
+  padding: 0 6px 0 10px;
+}
+.filters .lanes button {
+  border: 0;
+  border-left: 1px solid var(--edge-strong);
+  border-radius: 0;
+  padding: 3px 9px;
+  min-width: 30px;
+}
+
+/* The event table: time, source, text. */
+.evtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+.evtable th {
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  padding: 4px 10px 4px 0;
+  border-bottom: 1px solid var(--edge-strong);
+}
+.evtable td {
+  padding: 7px 10px 7px 0;
+  border-top: 1px solid var(--edge);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.evtable tbody tr:first-child td {
+  border-top: 0;
+}
+.evtable .tm {
+  color: var(--ink-3);
+  white-space: nowrap;
+  width: 1%;
+}
+.evtable .src {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.evtable tr.lvl-err .tx {
+  color: var(--bad);
+}
+.evtable tr.lvl-warn .tx {
+  color: var(--heat);
+}
+.hdot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.hdot.src-0 {
+  background: var(--accent);
+}
+.hdot.src-1 {
+  background: var(--heat);
+}
+.hdot.src-2 {
+  background: var(--ok);
+}
+.hdot.src-3 {
+  background: var(--line-hr);
+}
+.hdot.src-u1 {
+  background: var(--ink-3);
+}
+.history .more {
+  margin-top: 8px;
+  background: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+/* A wide screen: the time column gets room for the day's clock, and the source for a unit's name. */
+@media (min-width: 1000px) {
+  .evtable .tm {
+    min-width: 64px;
+  }
+  .evtable td:nth-child(2) {
+    min-width: 120px;
+  }
+}
+
+/* A phone: touch-size controls, the table's source column stays narrow. */
+@media (max-width: 700px) {
+  .hbox {
+    padding: 10px;
+  }
+  .history .seg button,
+  .hlegend button,
+  .filters button,
+  .history .more {
+    min-height: var(--control-h);
+  }
+  .evtable td {
+    padding-right: 6px;
+  }
+}

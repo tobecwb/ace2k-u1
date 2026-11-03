@@ -1,0 +1,290 @@
+/* The unit's page: one screen on a wide display, and one column on a phone.
+   The colours follow the housing's graphite. Amber belongs to the dryer, and blue to humidity and lane moves. */
+:root {
+  --bg: #1b1d21;
+  --housing: #24272c;
+  --panel: #2e3238;
+  --inset: #202327;
+  --edge: #3b4047;
+  --edge-strong: #7a8089; /* The outline of a control with no fill of its own. It reaches 3:1 on the panel. */
+  --ink: #e8e6e1;
+  --ink-2: #b2b7be;
+  --ink-3: #9a9fa7;
+  --heat: #f2a33a;
+  --heat-soft: rgba(242, 163, 58, 0.14);
+  --on-heat: #1b1d21;
+  --water: #5aa9e6;
+  --ok: #6cc58a;
+  --ok-soft: rgba(108, 197, 138, 0.14);
+  --bad: #fb8a84;
+  --bad-soft: rgba(240, 96, 90, 0.16);
+  --move: #9dbcff;
+  --move-soft: rgba(143, 178, 255, 0.16);
+  --focus: #8fb2ff;
+  --hatch: #33373d;
+  --unknown: #6b7078;
+  --line-ch: var(--heat);
+  --line-hl: #e8706a;
+  --line-hr: #c08cf0;
+  --line-rh: var(--water);
+  /* The floating tooltip's and the toast's shadows, then the spool's rings, shine and strand edge */
+  --shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  --shadow-raised: 0 6px 20px rgba(0, 0, 0, 0.3);
+  --spool-ring: rgba(0, 0, 0, 0.14);
+  --spool-shine: rgba(255, 255, 255, 0.18);
+  --spool-edge: rgba(0, 0, 0, 0.28);
+  /* The redesigned page: the hover outline, the units' amber housing, the rails to the heads,
+     and the status colours of the pill, the warnings, the errors and the links. */
+  --hover: #58a6ff;
+  --unit-bg: #17140f;
+  --unit-edge: #4a3f2e;
+  --rail: #3d444d;
+  --warn: #e3b341;
+  --err: #fb8a84;
+  --accent: #58a6ff;
+  /* The Units diagram: the bays and the unit footer (lifted under the pointer) on the amber card, the text on
+     an error badge, the head chips, the casing drawn round
+     a filament colour (light round a black one), the grey outline of a pale one (light theme only) and of a
+     black one (dark theme only),
+     the nozzles, the rail of an empty lane, and a spool's hub. */
+  --bay-bg: #0f0d0a;
+  --bay-edge: #2e281f;
+  --foot-bg: #1f1a12;
+  --foot-edge: #3a3125;
+  --foot-hover: #2a2318;
+  --on-err: #1b1d21;
+  --chip: #30353c;
+  --chip-on: #1f6feb;
+  --on-chip-on: #ffffff;
+  --casing: #1b1d21;
+  --casing-deep: #cfd3d8;
+  --pale-edge: transparent;
+  --deep-edge: #8b929b;
+  --nozzle: #2a313b;
+  --nozzle-edge: #566070;
+  --rail-empty: #6b7380;
+  --hole: #1b1d21;
+  /* The Print tab: the text on the green Print button, and the shade behind eject all's confirmation. */
+  --on-ok: #0d1a12;
+  --scrim: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+/* The light theme. It applies when the system asks for light and the page does not force dark,
+   or when the theme button forces light. The dark tokens above are the default and the forced dark.
+   The two light blocks must carry the same colours, because scripts/check_contrast.mjs reads the second. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #e9eaec;
+    --housing: #f6f6f7;
+    --panel: #ffffff;
+    --inset: #eef0f2;
+    --edge: #d3d6db;
+    --edge-strong: #878d96;
+    --ink: #1e2126;
+    --ink-2: #4c525b;
+    --ink-3: #5c636d;
+    --heat: #8f4d07;
+    --heat-soft: rgba(143, 77, 7, 0.12);
+    --on-heat: #ffffff;
+    --water: #1f6fb0;
+    --ok: #17703f;
+    --ok-soft: rgba(23, 112, 63, 0.12);
+    --bad: #a52a25;
+    --bad-soft: rgba(165, 42, 37, 0.1);
+    --move: #2f5fbf;
+    --move-soft: rgba(47, 95, 191, 0.12);
+    --focus: #2f5fbf;
+    --hatch: #dde0e4;
+    --unknown: #a3a8b0;
+    --line-hl: #d4453e;
+    --line-hr: #8a4fc7;
+    --shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    --shadow-raised: 0 6px 20px rgba(0, 0, 0, 0.3);
+    --spool-ring: rgba(0, 0, 0, 0.14);
+    --spool-shine: rgba(255, 255, 255, 0.18);
+    --spool-edge: rgba(0, 0, 0, 0.28);
+    --hover: #0757b8;
+    --unit-bg: #fbf5ea;
+    --unit-edge: #d8c39e;
+    --rail: #c4ccd5;
+    --warn: #7d5300;
+    --err: #a52a25;
+    --accent: #0757b8;
+    --bay-bg: #ffffff;
+    --bay-edge: #eadfca;
+    --foot-bg: #f3eadb;
+    --foot-edge: #e2d3b8;
+    --foot-hover: #efe2cc;
+    --on-err: #ffffff;
+    --chip: #eaeef2;
+    --chip-on: #0969da;
+    --on-chip-on: #ffffff;
+    --casing: #24292f;
+    --casing-deep: #ffffff;
+    --pale-edge: #8c959f;
+    --deep-edge: transparent;
+    --nozzle: #d1d9e0;
+    --nozzle-edge: #8c959f;
+    --rail-empty: #6b7380;
+    --hole: #57606a;
+    --on-ok: #ffffff;
+    --scrim: rgba(0, 0, 0, 0.4);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #e9eaec;
+  --housing: #f6f6f7;
+  --panel: #ffffff;
+  --inset: #eef0f2;
+  --edge: #d3d6db;
+  --edge-strong: #878d96;
+  --ink: #1e2126;
+  --ink-2: #4c525b;
+  --ink-3: #5c636d;
+  --heat: #8f4d07;
+  --heat-soft: rgba(143, 77, 7, 0.12);
+  --on-heat: #ffffff;
+  --water: #1f6fb0;
+  --ok: #17703f;
+  --ok-soft: rgba(23, 112, 63, 0.12);
+  --bad: #a52a25;
+  --bad-soft: rgba(165, 42, 37, 0.1);
+  --move: #2f5fbf;
+  --move-soft: rgba(47, 95, 191, 0.12);
+  --focus: #2f5fbf;
+  --hatch: #dde0e4;
+  --unknown: #a3a8b0;
+  --line-hl: #d4453e;
+  --line-hr: #8a4fc7;
+  --shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  --shadow-raised: 0 6px 20px rgba(0, 0, 0, 0.3);
+  --spool-ring: rgba(0, 0, 0, 0.14);
+  --spool-shine: rgba(255, 255, 255, 0.18);
+  --spool-edge: rgba(0, 0, 0, 0.28);
+  --hover: #0757b8;
+  --unit-bg: #fbf5ea;
+  --unit-edge: #d8c39e;
+  --rail: #c4ccd5;
+  --warn: #7d5300;
+  --err: #a52a25;
+  --accent: #0757b8;
+  --bay-bg: #ffffff;
+  --bay-edge: #eadfca;
+  --foot-bg: #f3eadb;
+  --foot-edge: #e2d3b8;
+  --foot-hover: #efe2cc;
+  --on-err: #ffffff;
+  --chip: #eaeef2;
+  --chip-on: #0969da;
+  --on-chip-on: #ffffff;
+  --casing: #24292f;
+  --casing-deep: #ffffff;
+  --pale-edge: #8c959f;
+  --deep-edge: transparent;
+  --nozzle: #d1d9e0;
+  --nozzle-edge: #8c959f;
+  --rail-empty: #6b7380;
+  --hole: #57606a;
+  --on-ok: #ffffff;
+  --scrim: rgba(0, 0, 0, 0.4);
+  color-scheme: light;
+}
+/* The sizes, the same in both themes: the radii, the type scale and the height of a control.
+   From 700 px down, a control takes the touch size of a phone. */
+:root {
+  --r-xs: 4px;
+  --r-sm: 7px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 12px;
+  --r-pill: 999px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-base: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 16px;
+  --fs-2xl: 18px;
+  --fs-3xl: 20px;
+  --fs-4xl: 26px;
+  --fs-5xl: 30px;
+  --fs-6xl: 40px;
+  --control-h: 36px;
+  --control-h-touch: 44px;
+  /* The side panel's width on a desktop. Layout A's breakpoint with the panel open (print.css) is 1100 px plus this. */
+  --side-w: 430px;
+  /* Motion: every animation answers a click and lasts --dur (js/motion.js MOTION_MS, kept equal by a test). */
+  --dur: 150ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* "Reduce motion": everything changes at once. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0ms;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    var(--fs-base) / 1.45 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+/* The input skin for the text fields and the menus. */
+.len input,
+.edit input,
+.edit select {
+  background: var(--inset);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+  min-height: var(--control-h);
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.grow,
+.push {
+  flex: 1;
+}
+.note {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  margin: 0;
+}
+/* A button that reads as a link: the colour picker's, the guided step's and the bay card's shortcut to its head. */
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink-2);
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+.hint {
+  font-size: var(--fs-md);
+  color: var(--ink-3);
+  margin: 0;
+}

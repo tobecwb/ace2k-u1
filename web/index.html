@@ -2,24 +2,32 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ace2k</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="style.css">
+<script src="theme-boot.js"></script>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/frame.css">
+<link rel="stylesheet" href="css/units.css">
+<link rel="stylesheet" href="css/print.css">
+<link rel="stylesheet" href="css/printing.css">
+<link rel="stylesheet" href="css/dryer.css">
+<link rel="stylesheet" href="css/panel.css">
+<link rel="stylesheet" href="css/history.css">
+<link rel="stylesheet" href="css/mobile.css">
 </head>
 <body>
 <div id="banner" class="banner" hidden></div>
-<header id="topbar" class="bar topbar"></header>
-<main class="page">
-  <section id="dryer" class="dryer"></section>
-  <section id="unit"></section>
-  <section id="lane"></section>
-  <div class="lower">
-    <section id="chart" class="sec"></section>
-    <section id="events" class="sec"></section>
-  </div>
-</main>
+<div id="app"></div>
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="app.js"></script>
+<script type="importmap">
+{ "imports": {
+  "preact": "./vendor/preact.module.js",
+  "preact/hooks": "./vendor/hooks.module.js",
+  "htm": "./vendor/htm.module.js",
+  "htm/preact": "./vendor/htm-preact.module.js"
+} }
+</script>
+<script type="module" src="main.js"></script>
 </body>
 </html>

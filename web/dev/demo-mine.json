@@ -1,0 +1,463 @@
+{
+ "ace2k_u1": {
+  "heads": [
+   null,
+   [
+    {
+     "unit": "a",
+     "lane": 1
+    },
+    {
+     "unit": "a",
+     "lane": 2
+    },
+    {
+     "unit": "a",
+     "lane": 3
+    },
+    {
+     "unit": "a",
+     "lane": 4
+    }
+   ],
+   [
+    {
+     "unit": "b",
+     "lane": 1
+    },
+    {
+     "unit": "b",
+     "lane": 2
+    },
+    {
+     "unit": "b",
+     "lane": 3
+    },
+    {
+     "unit": "b",
+     "lane": 4
+    }
+   ],
+   [
+    {
+     "unit": "c",
+     "lane": 1
+    },
+    {
+     "unit": "c",
+     "lane": 2
+    },
+    {
+     "unit": "c",
+     "lane": 3
+    },
+    {
+     "unit": "c",
+     "lane": 4
+    }
+   ]
+  ],
+  "current": [
+   null,
+   {
+    "unit": "a",
+    "lane": 1
+   },
+   {
+    "unit": "b",
+    "lane": 1
+   },
+   {
+    "unit": "c",
+    "lane": 1
+   }
+  ],
+  "hooked": true,
+  "plan": null,
+  "lanes": {
+   "a:1": { "material_set": true },
+   "a:2": { "material_set": true },
+   "a:3": { "material_set": true },
+   "a:4": { "material_set": true },
+   "b:1": { "material_set": true },
+   "b:2": { "material_set": true },
+   "b:3": { "material_set": true },
+   "b:4": { "material_set": true },
+   "c:1": { "material_set": true },
+   "c:2": { "material_set": true },
+   "c:3": { "material_set": true },
+   "c:4": { "material_set": true }
+  },
+  "spools": {
+   "b:3": {
+    "type": "PETG",
+    "vendor": "Generic",
+    "color": "#111111"
+   }
+  }
+ },
+ "ace2k_units": {
+  "units": [
+   "ace2k a",
+   "ace2k b",
+   "ace2k c"
+  ]
+ },
+ "ace2k a": {
+  "version": "0.11.0",
+  "link_proven": true,
+  "health": {
+   "ok": true,
+   "failing": []
+  },
+  "chamber": 53.5,
+  "humidity": 19.7,
+  "ptc_left": 60.5,
+  "ptc_right": 61.3,
+  "env_valid": true,
+  "lanes": [
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "DD3333FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "111111FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "EEEEEEFF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "21FF06FF"
+     }
+    }
+   }
+  ],
+  "dryer": {
+   "state": "heating",
+   "target": 55,
+   "remaining": 130,
+   "fans": {
+    "left": true,
+    "right": true
+   },
+   "flaps": {
+    "bottom": "closed",
+    "rear": "closed"
+   },
+   "fault": null,
+   "notices": [],
+   "drive": 62.0
+  }
+ },
+ "ace2k b": {
+  "version": "0.11.0",
+  "link_proven": true,
+  "health": {
+   "ok": true,
+   "failing": []
+  },
+  "chamber": 27.0,
+  "humidity": 52.0,
+  "ptc_left": 29.0,
+  "ptc_right": 28.7,
+  "env_valid": true,
+  "lanes": [
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "DD3333FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "111111FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "no_tag",
+     "record": null
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "21FF06FF"
+     }
+    }
+   }
+  ],
+  "dryer": {
+   "state": "idle",
+   "target": null,
+   "remaining": null,
+   "fans": {
+    "left": false,
+    "right": false
+   },
+   "flaps": {
+    "bottom": "closed",
+    "rear": "closed"
+   },
+   "fault": null,
+   "notices": []
+  }
+ },
+ "ace2k c": {
+  "version": "0.11.0",
+  "link_proven": true,
+  "health": {
+   "ok": true,
+   "failing": []
+  },
+  "chamber": 27.0,
+  "humidity": 52.0,
+  "ptc_left": 29.0,
+  "ptc_right": 28.7,
+  "env_valid": true,
+  "lanes": [
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "DD3333FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "111111FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "EEEEEEFF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "21FF06FF"
+     }
+    }
+   }
+  ],
+  "dryer": {
+   "state": "idle",
+   "target": null,
+   "remaining": null,
+   "fans": {
+    "left": false,
+    "right": false
+   },
+   "flaps": {
+    "bottom": "closed",
+    "rear": "closed"
+   },
+   "fault": null,
+   "notices": []
+  }
+ },
+ "print_stats": {
+  "state": "standby"
+ },
+ "print_task_config": {
+  "filament_exist": [
+   true,
+   true,
+   true,
+   true
+  ],
+  "filament_vendor": [
+   "Bambu",
+   "Bambu",
+   "Bambu",
+   "Bambu"
+  ],
+  "filament_type": [
+   "PLA",
+   "PLA",
+   "PETG",
+   "PLA"
+  ],
+  "filament_sub_type": [
+   "",
+   "",
+   "",
+   ""
+  ],
+  "filament_color_rgba": [
+   "EEEEEEFF",
+   "DD3333FF",
+   "111111FF",
+   "21FF06FF"
+  ]
+ },
+ "filament_motion_sensor e0_filament": {
+  "filament_detected": true,
+  "enabled": true
+ },
+ "filament_motion_sensor e1_filament": {
+  "filament_detected": true,
+  "enabled": true
+ },
+ "filament_motion_sensor e2_filament": {
+  "filament_detected": true,
+  "enabled": true
+ },
+ "filament_motion_sensor e3_filament": {
+  "filament_detected": true,
+  "enabled": true
+ },
+ "gcode_macro AUTO_FEEDING_BATCH": {
+  "doing": false
+ }
+}

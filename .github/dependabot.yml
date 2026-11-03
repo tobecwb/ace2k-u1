@@ -5,3 +5,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+  # The page's lint and type tools (web/package.json); nothing from there ships.
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: monthly

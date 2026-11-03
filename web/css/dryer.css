@@ -1,0 +1,291 @@
+/* ---------- the Dryer tab: one card per unit ---------- */
+.dryers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.dcard {
+  background: var(--unit-bg);
+  border: 1px solid var(--unit-edge);
+  border-radius: var(--r-xl);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+}
+.dcard.bad {
+  border-color: var(--err);
+}
+.dcard .uh {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dcard .uh b {
+  font-size: var(--fs-xl);
+}
+.dcard .mu {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.dcard .spl {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.dcard .sp {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: inset 0 0 0 4px var(--spool-ring);
+}
+.dcard .sp.e {
+  border: 1px dashed var(--unknown);
+  box-shadow: none;
+}
+
+/* The ring: the track always, the arc only while the dryer runs. */
+.ring {
+  width: 140px;
+  height: 140px;
+  align-self: center;
+}
+.ring circle {
+  fill: none;
+  stroke-width: 12;
+}
+.ring .track {
+  stroke: var(--hatch);
+}
+.ring .arc {
+  stroke: var(--heat);
+  stroke-linecap: round;
+}
+.ring text {
+  fill: var(--ink-3);
+  font-size: var(--fs-md);
+}
+.ring text.big {
+  fill: var(--ink);
+  font-size: var(--fs-4xl);
+  font-weight: 800;
+}
+.ring text.sm {
+  fill: var(--heat);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.ring.r-fault text.sm {
+  fill: var(--err);
+}
+.ring.r-idle text.sm {
+  fill: var(--ok);
+}
+
+/* The strip under the ring. */
+.stt {
+  font-weight: 700;
+  font-size: var(--fs-base);
+  text-align: center;
+  padding: 6px;
+  border-radius: var(--r-md);
+}
+.stt.heat {
+  background: var(--heat-soft);
+  color: var(--heat);
+}
+.stt.idle {
+  background: var(--inset);
+  color: var(--ink-2);
+}
+.stt.fault {
+  background: var(--bad-soft);
+  color: var(--err);
+}
+
+/* The mode buttons and the presets. */
+.dcard .seg {
+  display: flex;
+  background: var(--inset);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  padding: 3px;
+  gap: 2px;
+}
+.dcard .seg button {
+  flex: 1;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  border-radius: var(--r-md);
+  padding: 6px 4px;
+  font-size: var(--fs-sm);
+  min-height: var(--control-h);
+  cursor: pointer;
+}
+.dcard .seg button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-heat);
+}
+.dcard .seg button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.dcard .pre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dcard .chip {
+  border: 1px solid var(--edge-strong);
+  background: none;
+  color: var(--ink);
+  border-radius: var(--r-pill);
+  padding: 4px 10px;
+  font-size: var(--fs-sm);
+  min-height: var(--control-h);
+  cursor: pointer;
+}
+.dcard .chip[aria-pressed="true"] {
+  border-color: var(--heat);
+  color: var(--heat);
+}
+.dcard .chip small {
+  margin-left: 6px;
+  color: var(--ok);
+}
+.dcard .set {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.dcard .field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.dcard .field input {
+  width: 84px;
+  min-height: var(--control-h);
+  background: var(--inset);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+  font-size: var(--fs-lg);
+}
+.dcard .field input[aria-invalid="true"] {
+  border-color: var(--err);
+}
+.dcard .btn.go {
+  background: var(--heat);
+  border-color: var(--heat);
+  color: var(--on-heat);
+  font-weight: 700;
+}
+.dcard .bts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.dcard .mode-line,
+.dcard .hum {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+.dcard .note.bad {
+  color: var(--err);
+}
+.dcard .hum b {
+  color: var(--ink);
+  font-size: var(--fs-3xl);
+}
+
+/* The fault card and the humidity warning. */
+.dcard .fault {
+  border: 1px solid var(--err);
+  background: var(--bad-soft);
+  border-radius: var(--r-lg);
+  padding: 10px;
+}
+.dcard .fault p {
+  margin: 4px 0 8px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.dcard .mode-warn {
+  border: 1px solid var(--warn);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  font-size: var(--fs-sm);
+}
+.dcard .mode-warn ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+/* The dryer log, under the card's controls. */
+.dcard .dlog {
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  font-size: var(--fs-sm);
+}
+.dcard .dlog ul {
+  margin: 6px 0 8px;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* Advanced, folded. */
+.dcard .adv {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.dcard .adv summary {
+  cursor: pointer;
+  min-height: var(--control-h);
+  display: flex;
+  align-items: center;
+}
+.dcard .adv .status {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 6px 0;
+}
+.dcard .adv dt,
+.dcard .adv dd {
+  margin: 0;
+}
+.dcard .adv .pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+.dcard .adv .pair > span {
+  min-width: 90px;
+}
+
+@media (max-width: 700px) {
+  .dryers {
+    grid-template-columns: 1fr;
+  }
+  .dcard .btn,
+  .dcard .seg button,
+  .dcard .chip,
+  .dcard .field input {
+    min-height: var(--control-h-touch);
+  }
+}

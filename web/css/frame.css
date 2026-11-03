@@ -1,0 +1,221 @@
+/* ---------- the shell: the top bar over the active tab ---------- */
+#app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  min-width: 0;
+}
+.tab-body {
+  flex: 1;
+  min-width: 0;
+}
+/* A tab's content slides in from the side of the tab clicked (App sets data-enter). */
+@keyframes enter-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes enter-left {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+.tab-body[data-enter="right"] {
+  animation: enter-right var(--dur) var(--ease);
+}
+.tab-body[data-enter="left"] {
+  animation: enter-left var(--dur) var(--ease);
+}
+/* A tab whose view is not drawn yet. */
+.placeholder {
+  color: var(--ink-3);
+  margin: 0;
+}
+/* A part of the page that failed. The rest keeps working. */
+.broken {
+  background: var(--bad-soft);
+  color: var(--err);
+  border: 1px solid var(--err);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  font-size: var(--fs-md);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- the top bar ---------- */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 8px 10px;
+  flex-wrap: wrap;
+}
+.brand {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  margin-right: 10px;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.tab {
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  border-radius: var(--r-md);
+  padding: 5px 12px;
+  min-height: var(--control-h);
+  cursor: pointer;
+  /* The mark of the tab chosen fades from the old tab to the new one. */
+  transition:
+    color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tab.on {
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 600;
+}
+/* The status pill: idle, printing with its progress, paused with its reason, or offline. A click opens Print. */
+.pill {
+  background: none;
+  cursor: pointer;
+  border: 1px solid var(--edge);
+  border-radius: var(--r-pill);
+  padding: 4px 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+}
+.pill.printing {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.pill.paused {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.pill.off {
+  border-color: var(--err);
+  color: var(--err);
+}
+.pill:hover,
+.health-dot:hover {
+  border-color: var(--hover);
+}
+/* The health dot: green, amber when a self-test fails, red when a link is down. A click opens the status panel. */
+.health-dot {
+  width: var(--control-h);
+  height: var(--control-h);
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.health-dot::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.health-dot.warn::before {
+  background: var(--warn);
+}
+.health-dot.err::before {
+  background: var(--err);
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  border: 1px solid var(--edge);
+  background: var(--inset);
+  border-radius: var(--r-sm);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: 550;
+  min-height: var(--control-h);
+}
+.btn:hover:not(:disabled, [aria-disabled="true"]) {
+  border-color: var(--hover);
+}
+/* A sending button is aria-disabled, so it keeps the focus. It looks like a disabled button. */
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Stop all: compact, red, always at the right end of the top bar. */
+.btn.stop {
+  background: var(--bad-soft);
+  border-color: var(--err);
+  color: var(--err);
+}
+.btn.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-h);
+  padding: 6px;
+}
+
+/* ---------- the banner and the toast ---------- */
+.banner {
+  background: var(--bad-soft);
+  color: var(--bad);
+  text-align: center;
+  padding: 6px;
+  font-weight: 600;
+  font-size: var(--fs-md);
+}
+.banner.demo {
+  background: var(--heat-soft);
+  color: var(--heat);
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  background: var(--housing);
+  color: var(--ink);
+  border: 1px solid var(--bad);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  max-width: 90vw;
+  box-shadow: var(--shadow-raised);
+}
+
+/* ---------- a phone ---------- */
+@media (max-width: 700px) {
+  .shell {
+    padding: 10px 12px 16px;
+    gap: 10px;
+  }
+  .tab {
+    min-height: var(--control-h-touch);
+  }
+  .btn {
+    min-height: var(--control-h-touch);
+  }
+}

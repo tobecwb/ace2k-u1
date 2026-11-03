@@ -1,0 +1,8 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["main.js", "theme-boot.js", "tests/*.test.js", "js/ui/html.js"],
+  "project": ["js/**/*.js", "tests/ui-helpers.js"],
+  // Biome is run by the Makefile (`biome check`), not from a package script. oxc-parser is used by
+  // scripts/check_web_jsdoc.mjs, which sits outside this folder, so knip does not see the import.
+  "ignoreDependencies": ["@biomejs/biome", "oxc-parser"]
+}
