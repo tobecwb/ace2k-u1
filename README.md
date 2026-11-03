@@ -45,6 +45,9 @@ documentation may read a little oddly. Corrections are welcome.
 > - The lane swap in a shared head is experimental. Stay near the printer during such a print.
 >
 > One unit with one lane per head is the setup tested the longest.
+>
+> If you want something more tested, with fewer chances of errors, use
+> https://github.com/decay71/multiACE.
 
 > [!CAUTION]
 > **The dryer's humidity mode turns a mains heater on by itself, with nobody there.**
