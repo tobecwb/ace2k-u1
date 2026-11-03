@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!node_modules",
+      "!dev",
+      "!tests/fixtures",
+      "!vendor",
+      "!coverage",
+      "!package.json",
+      "!package-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  // Import order is left as written; web-lint checks lint and format only.
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // An import lost in a move is a ReferenceError at load, which no test of the pure modules sees.
+      "correctness": { "noUndeclaredVariables": "error" },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": { "level": "error", "options": { "maxAllowedComplexity": 15 } }
+      },
+      "style": {
+        // The page's CSS has independent components; a later, less specific rule is intended.
+        "noDescendingSpecificity": "off"
+      }
+    }
+  },
+  "json": { "parser": { "allowComments": true } },
+  "css": { "linter": { "enabled": true } },
+  "overrides": [
+    {
+      // A false positive of Biome 2.6.2 (it rejects grid-template-areas that are valid).
+      "includes": ["**/*.css"],
+      // noDuplicateProperties: `overflow: hidden; overflow: clip;` is a deliberate fallback for browsers
+      // without `clip` (css/frame.css, .unit); the rule cannot tell a fallback from a mistake.
+      "linter": {
+        "rules": { "correctness": { "noInvalidGridAreas": "off" }, "suspicious": { "noDuplicateProperties": "off" } }
+      }
+    },
+    {
+      // A test callback that ignores its arguments is fine.
+      "includes": ["tests/**"],
+      "linter": { "rules": { "correctness": { "noUnusedFunctionParameters": "off" } } }
+    }
+  ]
+}

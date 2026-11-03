@@ -1,0 +1,443 @@
+/* The side panel: fixed on the right while the page shrinks beside it, a bottom sheet on a phone.
+   It holds the bay, unit, head and status cards. Every colour is a token; a spool's own colour comes in --fil. */
+.side {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(var(--side-w), 100vw);
+  background: var(--panel);
+  border-left: 1px solid var(--edge);
+  box-shadow: var(--shadow-raised);
+  padding: 14px 16px;
+  overflow-y: auto;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* The panel slides in from the right when it opens, and back out when it closes (App keeps it for --dur). */
+@keyframes side-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+.side {
+  animation: side-in var(--dur) var(--ease);
+}
+.side.leaving {
+  transform: translateX(100%);
+  transition: transform var(--dur) var(--ease);
+}
+.side:focus {
+  outline: none;
+}
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.side h2 {
+  font-size: var(--fs-lg);
+  margin: 0;
+}
+.side h3 {
+  font-size: var(--fs-base);
+  margin: 12px 0 4px;
+}
+/* The status card's lights: a dot for the link and one for the self-test. */
+.light {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  color: var(--ink-2);
+}
+.light::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+.light.warn::before {
+  background: var(--warn);
+}
+.light.err::before {
+  background: var(--err);
+}
+.shell.has-panel main {
+  margin-right: var(--side-w);
+}
+.side .card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.side .t1 {
+  font-weight: 700;
+  font-size: var(--fs-lg);
+}
+
+/* ---------- the spool: a ring in the filament's colour, its material and origin ---------- */
+.bay-spool {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.sp {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--fil, var(--unknown));
+  box-shadow: inset 0 0 0 15px var(--spool-ring);
+  border: 2px solid var(--panel);
+  outline: 1px solid var(--edge-strong);
+}
+.sp.unknown {
+  background: var(--unknown);
+}
+.sp.empty {
+  background: none;
+  border: 2px dashed var(--rail-empty);
+  outline: none;
+  box-shadow: none;
+}
+.origin {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.origin.tag {
+  background: var(--move-soft);
+  color: var(--move);
+}
+.origin.hand {
+  background: var(--heat-soft);
+  color: var(--heat);
+}
+
+/* ---------- the route to the head, with the lane's state ---------- */
+.route {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--inset);
+  border-radius: var(--r-lg);
+  padding: 8px 10px;
+}
+.fdot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--edge-strong);
+  background: var(--fil, var(--unknown));
+}
+.route .state {
+  margin-left: auto;
+  font-size: var(--fs-sm);
+  color: var(--state, var(--ink-2));
+}
+/* The bay card also shows a lane error in red; the diagram's state word does not. */
+.route .s-error {
+  --state: var(--err);
+}
+.shared {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.merge {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* ---------- the buffer gauge, the speed and the feed-forward switch ---------- */
+.sens {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+.gauge {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+.gauge .z {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-xs);
+  padding: 4px 2px;
+  border-radius: var(--r-xs);
+  background: var(--inset);
+  color: var(--ink-3);
+}
+.gauge .z.on {
+  background: var(--chip-on);
+  color: var(--on-chip-on);
+  font-weight: 700;
+}
+.big2 {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+}
+.tog {
+  width: 44px;
+  height: 24px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--edge-strong);
+  background: var(--inset);
+  position: relative;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.tog i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.tog.on {
+  background: var(--chip-on);
+  border-color: var(--chip-on);
+}
+.tog.on i {
+  left: 22px;
+  background: var(--on-chip-on);
+}
+.tog:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------- the buttons and the Advanced fold ---------- */
+.acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+.acts > .btn {
+  flex: 1;
+}
+.acts.sm .btn {
+  font-size: var(--fs-md);
+}
+.btn.pri {
+  background: var(--chip-on);
+  border-color: var(--chip-on);
+  color: var(--on-chip-on);
+}
+.bay-card .adv {
+  flex-basis: 100%;
+}
+.bay-card .adv summary {
+  display: inline-flex;
+  align-items: center;
+  list-style: none;
+}
+.bay-card .adv[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bay-card .fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+.bay-card .len input {
+  width: 6em;
+  margin-left: 6px;
+}
+
+/* ---------- the spool editor ---------- */
+.spool-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--edge);
+  padding-top: 12px;
+}
+.spool-editor fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.spool-editor legend {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.mat {
+  border: 1px solid var(--edge);
+  background: var(--inset);
+  border-radius: var(--r-sm);
+  padding: 5px 9px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.mat.on {
+  background: var(--chip-on);
+  border-color: var(--chip-on);
+  color: var(--on-chip-on);
+  font-weight: 700;
+}
+.sw {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--panel);
+  outline: 1px solid var(--edge-strong);
+  background: var(--fil);
+  cursor: pointer;
+}
+.sw.on {
+  outline: 2px solid var(--hover);
+}
+.spool-editor input[type="color"] {
+  width: 40px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  background: none;
+}
+.vendor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+/* ---------- the unit card: its spools small, the dryer ring ---------- */
+.minis {
+  display: flex;
+  gap: 8px;
+}
+.mini {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--fil, var(--unknown));
+  box-shadow: inset 0 0 0 7px var(--spool-ring);
+  outline: 1px solid var(--edge-strong);
+}
+.mini.empty {
+  background: none;
+  box-shadow: none;
+  outline: 1px dashed var(--rail-empty);
+}
+.dry {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.uring {
+  flex: none;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 6px solid var(--heat-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.uring b {
+  font-size: var(--fs-3xl);
+}
+.uring small {
+  color: var(--water);
+}
+.dry .btn {
+  margin-top: 6px;
+}
+
+/* ---------- the head card: its lanes ---------- */
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+}
+.row .btn,
+.row .note {
+  margin-left: auto;
+}
+.row.on {
+  outline: 1px solid var(--chip-on);
+}
+
+/* The shade behind a phone's bottom sheet (App renders it on a phone only): it fades in with the sheet and out with
+   it, under the sheet and over the tab bar; a tap on it closes the sheet. */
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  background: var(--scrim);
+  animation: scrim-in var(--dur) var(--ease);
+}
+.scrim.leaving {
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+/* ---------- a phone: a bottom sheet over the page ---------- */
+@media (max-width: 700px) {
+  .shell.has-panel main {
+    margin-right: 0;
+  }
+  .side.sheet {
+    top: auto;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 78vh;
+    border-left: 0;
+    border-top: 1px solid var(--edge);
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+  }
+  .acts .btn,
+  .mat {
+    min-height: var(--control-h-touch);
+  }
+}
+
+/* The start options in their sheet (the phone's "Options ▾"): one switch a line. */
+.side .opts {
+  display: grid;
+  gap: 4px;
+}

@@ -3,12 +3,22 @@ line-length = 100
 target-version = "py39"
 
 [lint]
-select = ["E", "F", "W", "I", "B", "UP", "N", "SIM"]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "ANN", "C90", "PL", "RET", "ARG", "PERF"]
+
+[lint.mccabe]
+max-complexity = 15
 
 [lint.per-file-ignores]
 # Klipper's extras entry points are fixed names (load_config, get_status …); N802/N803 do not apply,
 # and the cmd_X_help attributes beside each G-code handler are Klipper's convention (N815)
 "klippy/extras/*.py" = ["N802", "N803", "N815"]
+# the names vulture is told about are bare expressions, not defined here
+"vulture-whitelist.py" = ["F821", "B018"]
+
+# Tests: a number in an assertion is the point of the test (PLR2004). A fake keeps the real
+# signature, so it may not use every argument (ARG001, ARG002, ARG005). A test helper may take
+# many parameters (PLR0913, PLR0917). Every other rule applies to tests.
+"tests/*.py" = ["ARG001", "ARG002", "ARG005", "PLR0913", "PLR0917", "PLR2004"]
 
 [format]
 quote-style = "double"

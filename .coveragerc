@@ -1,0 +1,15 @@
+# The quality gate's coverage measure. ace2k_u1_printer_types.py only declares the shape of the
+# U1's objects for the type checker (Protocol bodies are `...`); nothing in it runs.
+[run]
+omit =
+    */klippy/extras/ace2k_u1_printer_types.py
+
+# The relative imports of the `try: from . import …` / `except ImportError:` idiom: the host tests
+# import the modules by bare name, so the try branch never runs past its first line there, and the
+# except branch never runs on the printer. Only the relative-import statements directly before an
+# `except ImportError:` (their continuation lines included) are left out.
+[report]
+# two decimals: the gate compares the measure with COVERAGE_MIN, which has one
+precision = 2
+exclude_also =
+    ^[ \t]+from \.[^\n]*(?:\n[ \t]+(?:from \.[^\n]*|\w+(?: as \w+)?,[^\n]*|\)))*(?=\nexcept ImportError)

@@ -1,0 +1,957 @@
+/* ---------- the file grid ---------- */
+.fgrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fgrid .ftools {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fgrid .fsearch {
+  background: var(--inset);
+  color: var(--ink);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  font: inherit;
+  width: min(280px, 100%);
+}
+.fgrid .fsorts {
+  display: flex;
+  gap: 6px;
+}
+.fgrid .chip {
+  background: var(--inset);
+  color: var(--ink-2);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.fgrid .chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.fgrid .fcount {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: var(--fs-md);
+}
+.fgrid .fcards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.fgrid .fcard {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.fgrid .fcard:hover {
+  border-color: var(--hover);
+}
+.fgrid .fthumb {
+  display: block;
+  height: 150px;
+  background: var(--inset);
+}
+.fgrid .fthumb img,
+.plan-thumb img,
+.pr-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.fgrid .fbody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+.fgrid .fname {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fgrid .fmeta {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.fgrid .fdots {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.fgrid .fdots i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--edge-strong);
+  display: inline-block;
+}
+.fgrid .ffit {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.fgrid .ffit.ok {
+  color: var(--ok);
+}
+.fgrid .ffit.no {
+  color: var(--warn);
+}
+@media (max-width: 700px) {
+  .fgrid .fcards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------- the plan of a file: header, bays with no material, colour rows, similar colours ---------- */
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* --wide: layout A (operator, 2026-11-02). The colours and the step on the left, the diagram on the right, the timeline
+   and the print bar under both, so a 1440 x 900 screen reads without scrolling. Its numbers, each once:
+   - the left column, 470 px, and the column gap, 16 px;
+   - 560 px, the narrowest diagram whose text stays legible, so the two columns need a plan 1046 px wide
+     (470 + 16 + 560), which is the plan's width at a 1100 px window, the width the operator chose layout A from;
+   - the side panel (--side-w in tokens.css, 430 px) takes its share of the window, so with it open the two columns
+     need 1100 + 430 = 1530 px. These two media queries are the page's only two-column breakpoint; media queries
+     cannot read a custom property, so 1530 is written out (a test checks it against --side-w).
+   With less room, one column in the same order, the diagram as wide as the plan, under the step. The areas below are
+   inert in that one column (a flex column ignores them); only the grid itself switches. */
+.plan {
+  grid-template-columns: 470px minmax(0, 1fr);
+  grid-template-areas:
+    "head head"
+    "left dia"
+    "tl tl"
+    "bar bar";
+  /* The diagram scales to the height the top bar, the header, the timeline and the bar leave (560 px: their height
+     and the gaps, measured on a 1440 x 900 screen with four units), never under 340 px, where its text stays legible;
+     below that the page scrolls as a whole. */
+  --dia-max-h: max(340px, calc(100vh - 560px));
+  --wide-gap: 12px 16px;
+}
+.plan > .plan-head {
+  grid-area: head;
+}
+.plan > .plan-left {
+  grid-area: left;
+}
+.plan > .plan-dia {
+  grid-area: dia;
+}
+.plan > .tl {
+  grid-area: tl;
+}
+.plan > .pbar {
+  grid-area: bar;
+}
+/* The grid, the diagram fitted to its column (the Units tab's minimum width for a wide set-up gives way here), and
+   the print bar in one row: the summary, the start options in two columns, Print. */
+@media (min-width: 1100px) {
+  .shell:not(.has-panel) .plan {
+    display: grid;
+    gap: var(--wide-gap);
+    align-items: start;
+  }
+  .shell:not(.has-panel) .plan-dia .dg {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    max-height: var(--dia-max-h);
+  }
+  .shell:not(.has-panel) .pbar {
+    grid-template-columns: 1fr auto auto;
+  }
+  .shell:not(.has-panel) .pbar .psum {
+    grid-column: auto;
+  }
+  .shell:not(.has-panel) .pbar .opts {
+    display: grid;
+    grid-template-columns: auto auto;
+  }
+}
+/* The same five rules as the block above, for a page with the side panel open. The panel takes --side-w off the main
+   column, so the breakpoint is the one above plus the panel's width. Change the two blocks together. */
+@media (min-width: 1530px) {
+  .shell.has-panel .plan {
+    display: grid;
+    gap: var(--wide-gap);
+    align-items: start;
+  }
+  .shell.has-panel .plan-dia .dg {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    max-height: var(--dia-max-h);
+  }
+  .shell.has-panel .pbar {
+    grid-template-columns: 1fr auto auto;
+  }
+  .shell.has-panel .pbar .psum {
+    grid-column: auto;
+  }
+  .shell.has-panel .pbar .opts {
+    display: grid;
+    grid-template-columns: auto auto;
+  }
+}
+.plan-head {
+  display: grid;
+  grid-template-columns: auto 84px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+  padding: 10px 12px;
+}
+/* The file's thumbnail, in the plan's header and in the printing view's. */
+.plan-thumb,
+.pr-thumb {
+  width: 84px;
+  height: 64px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+  overflow: hidden;
+}
+.plan-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.plan-name b {
+  font-size: var(--fs-xl);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmp {
+  display: flex;
+  gap: 8px;
+}
+.cmp-side {
+  display: flex;
+  flex-direction: column;
+  background: var(--inset);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+  padding: 6px 14px;
+  min-width: 130px;
+}
+.cmp-side small {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+}
+.cmp-side b {
+  font-size: var(--fs-3xl);
+}
+.cmp-side.good {
+  border-color: var(--ok);
+}
+.cmp-side.good b {
+  color: var(--ok);
+}
+/* An amber line: a bay whose spool has no material, or two file colours that look the same. */
+.plan-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--heat-soft);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-xl);
+  padding: 8px 12px;
+}
+.plan-hint b {
+  color: var(--warn);
+}
+.plan-hint .q2 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px dashed var(--warn);
+  color: var(--warn);
+  font-weight: 800;
+}
+.btn.warn,
+.btn.y {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: var(--on-heat);
+  font-weight: 700;
+}
+.plan .cap,
+.picker .cap {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 4px 0 0;
+}
+.plan .cap .note {
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* The file's colours, one row each: "colour n", its swatch, its material, the arrow and the spool it comes from. */
+.crows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.crow {
+  display: grid;
+  grid-template-columns: 76px 18px 44px 16px 1fr;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--r-xl);
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.crow:hover,
+.crow.open {
+  border-color: var(--hover);
+}
+.crow.open {
+  outline: 2px solid var(--hover);
+}
+.crow .ar {
+  color: var(--ink-3);
+}
+.crow .cto {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+/* A colour's swatch: the file's or a spool's own colour, in --fil. A spool still to put is dashed. */
+.plan .dot,
+.picker .dot,
+.mbox .dot {
+  flex: none;
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--fil, var(--unknown));
+  outline: 1px solid var(--edge-strong);
+}
+.plan .dot.new,
+.picker .dot.new {
+  background: none;
+  outline: none;
+  border: 2px dashed var(--fil, var(--edge-strong));
+}
+/* A pale spool still to put: its white dashed ring gets the grey outline of a pale colour (light theme only). */
+.plan .dot.new.pale,
+.picker .dot.new.pale {
+  box-shadow: 0 0 0 1px var(--pale-edge);
+}
+.lk {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.lk.alt {
+  color: var(--warn);
+}
+.pin {
+  font-size: var(--fs-xs);
+}
+.mrg {
+  font-size: var(--fs-xs);
+  background: var(--inset);
+  border-radius: var(--r-md);
+  padding: 2px 7px;
+}
+
+/* ---------- the colour picker, in the side panel ---------- */
+.picker .t1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.picker .pu {
+  background: var(--unit-bg);
+  border: 1px solid var(--unit-edge);
+  border-radius: var(--r-xl);
+  padding: 8px;
+}
+.picker .pn {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.picker .pb {
+  display: flex;
+  gap: 6px;
+}
+.picker .opt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: var(--bay-bg);
+  color: var(--ink);
+  border: 1px solid var(--bay-edge);
+  border-radius: var(--r-lg);
+  padding: 6px 2px;
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.picker .opt .dot,
+.picker .sp2 {
+  width: 28px;
+  height: 28px;
+}
+.picker .sp2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+.picker .sp2.empty {
+  border: 2px dashed var(--rail-empty);
+}
+.picker .sp2.unk {
+  border: 2px dashed var(--warn);
+  background: var(--heat-soft);
+  color: var(--warn);
+  font-weight: 800;
+}
+.picker .opt:hover:not(:disabled),
+.picker .row:hover:not(:disabled) {
+  border-color: var(--hover);
+}
+.picker .opt.sel,
+.picker .row.sel {
+  border-color: var(--hover);
+  outline: 2px solid var(--hover);
+}
+.picker .opt:disabled,
+.picker .row:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.picker .c {
+  color: var(--ink-3);
+}
+.picker .c.good {
+  color: var(--ok);
+}
+.picker .c.bad {
+  color: var(--warn);
+}
+.picker .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: var(--inset);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-lg);
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.picker .row .r {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+}
+.picker .link {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .plan-head {
+    grid-template-columns: auto 1fr;
+  }
+  .plan-thumb {
+    display: none;
+  }
+  .cmp {
+    grid-column: 1 / -1;
+  }
+  .cmp-side {
+    flex: 1;
+    min-width: 0;
+  }
+  .crow,
+  .picker .opt,
+  .picker .row {
+    min-height: var(--control-h-touch);
+  }
+}
+
+/* ---------- the guided steps: one step at a time, eject all, and the green card once nothing is left ---------- */
+.guide {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--heat-soft);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-xl);
+  padding: 12px 16px;
+}
+.guide.done {
+  display: block;
+  /* The soft green over the panel, so "✓ The spools are in place" reads in the light theme too. */
+  background: linear-gradient(var(--ok-soft), var(--ok-soft)), var(--panel);
+  border-color: var(--ok);
+}
+.guide.done .gt {
+  color: var(--ok);
+}
+.gmain {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.guide p {
+  margin: 0;
+}
+.gcap {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+/* The colour's dot in a step's words, with room on both sides. */
+.wdot {
+  margin-inline: 6px;
+}
+.gt {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  margin: 4px 0;
+}
+.pd {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+}
+.pd i {
+  width: 26px;
+  height: 6px;
+  border-radius: var(--r-xs);
+  background: var(--edge);
+  transition: background-color var(--dur) var(--ease);
+}
+/* Only the step's words are clipped while they slide, so no button's focus ring is. */
+.gwords {
+  overflow: hidden;
+}
+/* The next step's words slide in from the side of travel; the old ones are already gone (never two at once). */
+@keyframes gtext-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes gtext-left {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+.guide .gtext[data-enter="right"] {
+  animation: gtext-right var(--dur) var(--ease);
+}
+.guide .gtext[data-enter="left"] {
+  animation: gtext-left var(--dur) var(--ease);
+}
+.pd i.on {
+  background: var(--warn);
+}
+.pd i.ok {
+  background: var(--ok);
+}
+.gb {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.gb .btn {
+  font-weight: 700;
+  padding: 8px 16px;
+}
+.btn.ej {
+  background: var(--heat-soft);
+  border-color: var(--heat);
+  color: var(--heat);
+}
+.allsteps {
+  margin: 0;
+  padding: 8px 12px 8px 32px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+}
+.allsteps li {
+  padding: 3px 0;
+}
+.allsteps li.cur {
+  color: var(--warn);
+  font-weight: 700;
+}
+.eline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--heat);
+}
+.eline.bad {
+  color: var(--err);
+}
+
+/* The step's two bays on a phone: take out dashed, an arrow, put in solid. */
+.srows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--control-h-touch);
+  background: var(--panel);
+  color: var(--ink);
+  border: 2px solid var(--warn);
+  border-radius: var(--r-lg);
+  padding: 6px 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.srow.from {
+  border-style: dashed;
+}
+.srow .smark {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+  background: var(--warn);
+  color: var(--on-heat);
+}
+.srow .msw.ghost {
+  background: none;
+  border: 2px dashed var(--fil, var(--edge-strong));
+}
+.sdown {
+  text-align: center;
+  color: var(--warn);
+  font-size: var(--fs-3xl);
+  line-height: 1;
+}
+
+/* Eject all's confirmation, over the page. */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--scrim);
+}
+.mbox {
+  width: min(520px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-xl);
+  padding: 16px;
+  box-shadow: var(--shadow-raised);
+}
+.mbox h3 {
+  margin: 0 0 10px;
+  font-size: var(--fs-xl);
+}
+.erows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.er {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--edge);
+}
+.er.skip {
+  color: var(--ink-2);
+}
+.ewarn {
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+}
+/* One warning per line, its icon first: the heat in the warning colour, the note in plain ink. */
+.ew {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+.ew.heat {
+  color: var(--warn);
+}
+.ew.note {
+  color: var(--ink-2);
+}
+.bt {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ---------- the guided step on the diagram: the two bays lit, the others dimmed, the file colours ---------- */
+.dg .bay {
+  transition: opacity var(--dur) var(--ease);
+}
+.dg .bay.dim {
+  opacity: 0.28;
+}
+.dg .role-ring {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 3;
+}
+.dg .r-from .role-ring {
+  stroke-dasharray: 6 4;
+}
+.dg .role-lab {
+  fill: var(--warn);
+}
+.dg .role-word {
+  fill: var(--on-heat);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+}
+.dg .r-ej .role-ring {
+  stroke: var(--heat);
+}
+.dg .r-ej .role-lab {
+  fill: var(--heat);
+}
+.dg .spool.ghost {
+  fill: none;
+  stroke: var(--fil, var(--edge-strong));
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+.dg .ghost-m {
+  fill: var(--warn);
+}
+.dg .chip.colour {
+  fill: var(--chip);
+  stroke: var(--edge-strong);
+}
+
+/* ---------- the print bar, at the bottom of the plan ---------- */
+.plan {
+  padding-bottom: 8px;
+}
+/* In the plan's one column on a desktop (a window under 1100 px, or the side panel open), the bar stacks in two rows
+   so it stays short: the summary and its note across the whole width, then the start options (wrapping as needed)
+   and Print. Beside layout A's two columns it is one row (the --wide media queries above). */
+.pbar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 22px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-xl);
+  padding: 12px 16px;
+  box-shadow: var(--shadow-raised);
+}
+.pbar p {
+  margin: 0;
+}
+.big3 {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+}
+.note.warn {
+  color: var(--warn);
+}
+.pbar .psum {
+  grid-column: 1 / -1;
+}
+.pbar .opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: var(--fs-lg);
+}
+/* A start option as a large switch: the box stays for the keyboard and the reader, the track shows its state. */
+.tgl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-h);
+  cursor: pointer;
+}
+.tgl input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.tgl .tk {
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  background: var(--inset);
+  border: 1px solid var(--edge-strong);
+}
+.tgl .tk::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.tgl input:checked + .tk {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.tgl input:checked + .tk::after {
+  left: 20px;
+  background: var(--on-chip-on);
+}
+.tgl input:focus-visible + .tk {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.btn.go {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--on-ok);
+  font-size: var(--fs-xl);
+  font-weight: 800;
+  padding: 12px 26px;
+}
+/* The phone's compact bar: the summary, "Options ▾" and Print (it stays above the tab bar, mobile.css). */
+.pbar.compact {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.pbar.compact .big3 {
+  font-size: var(--fs-lg);
+}
+.pbar.compact .btn.go {
+  font-size: var(--fs-lg);
+  padding: 10px 18px;
+}
+/* "Options ▾" and Print keep their words on one line; the summary takes what is left. */
+.pbar.compact .btn {
+  flex: none;
+  white-space: nowrap;
+}
+/* Desktop: the sticky bar never hides what the keyboard or a scroll brings to view, such as a step's lit bays. */
+html:has(.pbar) {
+  scroll-padding-bottom: 180px;
+}
+@media (max-width: 700px) {
+  .tgl {
+    min-height: var(--control-h-touch);
+  }
+  .btn.go {
+    min-height: var(--control-h-touch);
+  }
+}
+
+/* The reading bar while the host reads the file (an estimate from its size). */
+.rbar {
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-md);
+  color: var(--ink-2);
+}
+.rbar .track {
+  display: block;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--inset);
+  overflow: hidden;
+}
+.rbar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transition: width var(--dur) linear;
+}
+.plan-hint.err {
+  border-color: var(--err);
+  color: var(--err);
+}
+.crow.wait {
+  cursor: default;
+}

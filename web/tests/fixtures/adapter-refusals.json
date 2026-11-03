@@ -1,0 +1,5 @@
+[
+  {"case": "changed", "file": "eight.gcode", "line": "ace2k_u1: eight.gcode changed since its plan: plan it again", "replan": true},
+  {"case": "no_lane", "file": "eight.gcode", "line": "ace2k_u1: T1 has no lane", "replan": false},
+  {"case": "no_plan", "file": "other.gcode", "line": "ace2k_u1: no plan of other.gcode: run ACEK_PLAN FILE=other.gcode first", "replan": false}
+]

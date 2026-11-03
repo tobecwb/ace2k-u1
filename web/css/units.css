@@ -1,0 +1,318 @@
+/* ---------- the Units tab: the heads on top, the rails, the units with their bays below ----------
+   Every colour is a token. A filament's own colour comes in as --fil on the element's style,
+   so a rule here can paint with it, and an element with no known colour falls back to a token. */
+.units-view {
+  overflow-x: auto;
+}
+/* --dg-min is set on a diagram wider than the standard (Diagram.js wide); unset, min-width stays auto. */
+.dg {
+  display: block;
+  width: 100%;
+  min-width: var(--dg-min);
+  height: auto;
+}
+.dg text {
+  font:
+    var(--fs-md) system-ui,
+    sans-serif;
+  fill: var(--ink);
+}
+.dg .muted {
+  fill: var(--ink-3);
+}
+.dg .small {
+  font-size: var(--fs-xs);
+}
+.dg .tiny {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.dg .tiny.on {
+  fill: var(--on-chip-on);
+}
+.dg .b {
+  font-weight: 700;
+}
+.dg .big {
+  font-size: var(--fs-4xl);
+  font-weight: 800;
+}
+.dg .cap {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  fill: var(--ink-3);
+}
+.dg .chev {
+  font-size: var(--fs-3xl);
+  fill: var(--ink-3);
+}
+
+/* Whatever carries a filament colour is edged in the casing, so it stands off its card. A black filament
+   gets a light casing instead. */
+.dg .cased {
+  stroke: var(--casing);
+  stroke-width: 1.5;
+}
+.dg .cased[data-dark-fil] {
+  stroke: var(--casing-deep);
+}
+.dg .hole {
+  fill: var(--hole);
+}
+
+/* The head cards. The bar keeps the filament's colour; a pale one gets a thin grey outline (light theme). */
+.dg .head-card {
+  fill: var(--panel);
+  stroke: var(--edge);
+}
+.dg .bar {
+  fill: var(--fil, var(--rail));
+  stroke: none;
+}
+.dg .bar[data-light-fil] {
+  stroke: var(--pale-edge);
+  stroke-width: 1;
+}
+.dg .bar[data-dark-fil] {
+  stroke: var(--deep-edge);
+  stroke-width: 1;
+}
+.dg .swatch {
+  fill: var(--fil);
+}
+.dg .swatch.none {
+  fill: none;
+  stroke: var(--rail-empty);
+  stroke-dasharray: 3 3;
+}
+.dg .nblock {
+  fill: var(--nozzle);
+  stroke: var(--nozzle-edge);
+}
+.dg .nozzle {
+  fill: var(--fil, var(--nozzle));
+  stroke-width: 1.2;
+}
+
+/* The rails: each head's bus and riser, a lane's stub in its colour, and the lane in the head glowing. */
+.dg .rail {
+  fill: none;
+  stroke: var(--rail);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.dg .rail.dashed {
+  stroke: var(--rail-empty);
+  stroke-width: 2;
+  stroke-dasharray: 2 5;
+}
+.dg .stub-case,
+.dg .stub,
+.dg .live-case,
+.dg .glow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dg .stub-case {
+  stroke-width: 5.2;
+}
+.dg .stub {
+  stroke: var(--fil, var(--unknown));
+  stroke-width: 2.2;
+}
+.dg .joint {
+  fill: var(--fil, var(--unknown));
+}
+/* A path whose filament's colour is not known at all glows in the unknown grey, never a bright default. */
+.dg .glow {
+  stroke: var(--fil, var(--unknown));
+  stroke-width: 14;
+  opacity: 0.35;
+}
+.dg .live-case {
+  stroke-width: 9;
+}
+.dg .rail.live {
+  stroke: var(--fil, var(--unknown));
+  stroke-width: 6;
+  stroke-linejoin: round;
+}
+
+/* The bay or head whose side panel is open: a ring of its own in the accent colour, inside the tile's edge, so it never meets a
+   neighbour, the head-lane border or the role rings. */
+.dg .bay.sel .sel-ring,
+.dg .head.sel .sel-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+/* The units: amber cards, the bays as tiles, the footer strip. */
+.dg .unit {
+  fill: var(--unit-bg);
+  stroke: var(--unit-edge);
+}
+.dg .bay-tile {
+  fill: var(--bay-bg);
+  stroke: var(--bay-edge);
+}
+.dg .bay-tile.on {
+  stroke: var(--fil, var(--accent));
+  stroke-width: 2.2;
+}
+.dg .bay-tile.err {
+  stroke: var(--err);
+  stroke-width: 2.2;
+}
+.dg .err-badge {
+  fill: var(--err);
+}
+.dg .err-mark {
+  fill: var(--on-err);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+}
+.dg .err-word {
+  fill: var(--err);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.dg .warn {
+  fill: var(--warn);
+}
+.dg .pale-ring,
+.dg .deep-ring {
+  fill: none;
+  stroke: var(--pale-edge);
+  stroke-width: 1;
+}
+.dg .deep-ring {
+  stroke: var(--deep-edge);
+}
+.dg .spool {
+  fill: var(--fil, var(--unknown));
+}
+.dg .spool.empty {
+  fill: none;
+  stroke: var(--rail-empty);
+  stroke-dasharray: 3 3;
+}
+.dg .spool.unknown {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.dg .q {
+  fill: var(--warn);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+.dg .mark {
+  font-size: var(--fs-xs);
+}
+.dg .chip {
+  fill: var(--chip);
+}
+.dg .chip.on {
+  fill: var(--chip-on);
+}
+.dg .foot {
+  fill: var(--foot-bg);
+  stroke: var(--foot-edge);
+}
+.dg .dot-ok {
+  fill: var(--ok);
+}
+.dg .dot-warn {
+  fill: var(--warn);
+}
+.dg .dot-err {
+  fill: var(--err);
+}
+
+/* What opens the side panel lights up under the pointer and the keyboard: a blue outline. */
+.dg [role="button"] {
+  cursor: pointer;
+  outline: none;
+}
+.dg .head:hover .head-card,
+.dg .head:focus-visible .head-card,
+.dg .bay:hover .bay-tile,
+.dg .bay:focus-visible .bay-tile,
+.dg .foot-btn:hover .foot,
+.dg .foot-btn:focus-visible .foot {
+  stroke: var(--hover);
+  stroke-width: 1.5;
+}
+.dg .foot-btn:hover .foot,
+.dg .foot-btn:focus-visible .foot {
+  fill: var(--foot-hover);
+}
+.dg .dry-btn:hover text,
+.dg .dry-btn:focus-visible text {
+  fill: var(--hover);
+}
+
+/* The legend under the diagram. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  padding: 4px 2px 10px;
+}
+.legend i {
+  display: inline-block;
+  width: 26px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.legend .lg-live {
+  border-top: 5px solid var(--heat);
+  box-shadow: 0 0 8px var(--heat);
+}
+.legend .lg-wait {
+  border-top: 2px solid var(--ok);
+}
+.legend .lg-empty {
+  border-top: 2px dashed var(--rail-empty);
+}
+.legend .lg-err {
+  background: var(--err);
+  color: var(--on-err);
+  border-radius: var(--r-pill);
+  padding: 0 6px;
+  margin-right: 6px;
+}
+.legend .lg-chip {
+  background: var(--chip);
+  color: var(--ink);
+  border-radius: var(--r-lg);
+  padding: 0 6px;
+  margin-right: 6px;
+}
+/* The colour of a lane's state chip, one map for the bay card's state (.route .state) and the diagram's state word.
+   A chip that is not listed keeps the plain colour. */
+.s-following,
+.s-loaded {
+  --state: var(--ok);
+}
+.s-moving {
+  --state: var(--move);
+}
+.s-blocked {
+  --state: var(--err);
+}
+.s-unknown,
+.s-parked {
+  --state: var(--warn);
+}
+/* A bay's state word. */
+.dg .state-word {
+  fill: var(--state, var(--ink-2));
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}

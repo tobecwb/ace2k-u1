@@ -1,0 +1,449 @@
+{
+ "ace2k_u1": {
+  "heads": [
+   [
+    {
+     "unit": "a",
+     "lane": 1
+    },
+    {
+     "unit": "a",
+     "lane": 2
+    }
+   ],
+   [
+    {
+     "unit": "a",
+     "lane": 3
+    },
+    {
+     "unit": "a",
+     "lane": 4
+    }
+   ],
+   [
+    {
+     "unit": "b",
+     "lane": 1
+    }
+   ],
+   null
+  ],
+  "current": [
+   {
+    "unit": "a",
+    "lane": 2
+   },
+   {
+    "unit": "a",
+    "lane": 3
+   },
+   {
+    "unit": "b",
+    "lane": 1
+   },
+   null
+  ],
+  "hooked": true,
+  "plan": {
+   "file": "objeto_5_cores_PLA_1h36m.gcode",
+   "mtime": 1761800000.0,
+   "tools": [
+    {
+     "colour": "#ffffff",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:1",
+     "why": "closest"
+    },
+    {
+     "colour": "#d32c34",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:2",
+     "why": "closest"
+    },
+    {
+     "colour": "#063fa9",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:2",
+     "why": "closest"
+    },
+    {
+     "colour": "#5b3f27",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:4",
+     "why": "closest"
+    },
+    {
+     "colour": "#fec187",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:3",
+     "why": "closest"
+    },
+    {
+     "colour": "#fcbc09",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:3",
+     "why": "closest"
+    },
+    {
+     "colour": "#000000",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "b:1",
+     "why": "closest"
+    },
+    {
+     "colour": "#ffffff",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:1",
+     "why": "closest"
+    }
+   ],
+   "order": [3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 0, 4, 0, 4, 0, 4, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 4, 0, 1, 0, 4, 0, 1, 0, 3, 4, 0, 1, 3, 0, 1, 4, 0, 1, 3, 0, 1, 4, 0, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 6, 3, 4, 0, 3, 6, 3, 4, 3, 6, 3, 4, 3, 6, 3, 4, 3, 6, 3, 4, 3, 6, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3],
+   "raw": [],
+   "order_at": [53045, 195110, 212885, 236742, 261161, 283618, 308385, 330611, 352624, 376406, 395689, 421551, 433804, 463472, 486917, 508164, 534240, 553010, 596159, 614854, 637919, 663445, 681401, 709881, 724753, 951465, 965238, 984574, 997658, 1016765, 1029946, 1048656, 1061952, 1080321, 1095943, 1115666, 1130243, 1148717, 1162960, 1198957, 1222909, 1249464, 1274264, 1298387, 1324544, 1351302, 1377375, 1403481, 1429246, 1458118, 1486604, 1515619, 1540293, 1574123, 1589235, 1599144, 1619472, 1637228, 1657784, 1671470, 1693634, 1711693, 1736298, 1751143, 1775591, 1794403, 1820094, 1841256, 1867278, 1885541, 1910712, 1928366, 1951464, 1971411, 1991971, 2012967, 2036272, 2056740, 2075984, 2102962, 2125098, 2144016, 2166035, 2184646, 2206838, 2227348, 2249108, 2266277, 2287326, 2307339, 2327944, 2344468, 2363419, 2385012, 2402470, 2416946, 2436691, 2458116, 2477661, 2490767, 2510904, 2533287, 2570557, 2598120, 2641268, 2670609, 2712893, 2741674, 2781329, 2809905, 2847609, 2874836, 2909869, 2938284, 2971580, 3000687, 3033052, 3059891, 3093208, 3118518, 3150259, 3175300, 3205794, 3230239, 3261280, 3285189, 3315346, 3338859, 3368330, 3391431, 3419297, 3442861, 3468568, 3491821, 3517008, 3539770, 3564220, 3587826, 3610529, 3633048, 3655917, 3680707, 3704763, 3729344, 3753601, 3776637, 3792433, 3803189, 3819502, 3833178, 3847662, 3856817, 3871491, 3884237, 3898163, 3901018, 3915786, 3930004, 3933857, 3964808, 3976952, 3981198, 3992982, 4004980, 4008584, 4060160, 4071580, 4074347, 4088133, 4098903, 4145412, 4166309, 4226999, 4251632, 4311599, 4332734, 4385196, 4404422, 4450519, 4469169, 4513541, 4531483, 4574629, 4595787, 4640943, 4657094, 4697412, 4712931, 4748308, 4768019, 4802715, 4823288, 4853457, 4872177, 4906563, 4932828, 4967036, 4994039, 5024548, 5050700, 5081957, 5104552, 5111740, 5132784, 5148475, 5158990, 5170360, 5183164, 5201940, 5215546, 5234639, 5244313, 5262678, 5274440, 5293020, 5300243, 5319301, 5330362, 5347640, 5354094, 5370725, 5381118, 5397624, 5402430, 5418896, 5427951, 5451359, 5467220, 5493210, 5514031, 5541612, 5561389, 5590325, 5607229, 5633442, 5650279, 5675894, 5690993, 5715602, 5728835, 5753171, 5764832, 5792635, 5803662, 5832288, 5842933, 5871446, 5883426, 5912935, 5924293],
+   "size": 6117340,
+   "heads": {
+    "1": 92,
+    "0": 110,
+    "2": 0
+   },
+   "set": true,
+   "choice": {
+    "0": "a:1",
+    "1": "a:2",
+    "2": "a:2",
+    "3": "a:4",
+    "4": "a:3",
+    "5": "a:3",
+    "6": "b:1",
+    "7": "a:1"
+   },
+   "lanes": [
+    {
+     "key": "a:1",
+     "head": 0,
+     "colour": "#ffffff",
+     "colour_name": "white",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "a:2",
+     "head": 0,
+     "colour": "#d32c34",
+     "colour_name": "red",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "a:3",
+     "head": 1,
+     "colour": "#fec187",
+     "colour_name": "tan",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "a:4",
+     "head": 1,
+     "colour": "#5b3f27",
+     "colour_name": "brown",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "b:1",
+     "head": 2,
+     "colour": "#000000",
+     "colour_name": "black",
+     "material": "PLA",
+     "empty": false
+    }
+   ]
+  },
+  "lanes": {
+   "a:1": { "material_set": true },
+   "a:2": { "material_set": true },
+   "a:3": { "material_set": true },
+   "a:4": { "material_set": true },
+   "b:1": { "material_set": true },
+   "b:2": { "material_set": false },
+   "b:3": { "material_set": false },
+   "b:4": { "material_set": false }
+  }
+ },
+ "ace2k_units": {
+  "units": [
+   "ace2k a",
+   "ace2k b"
+  ]
+ },
+ "ace2k a": {
+  "version": "0.11.0",
+  "link_proven": true,
+  "health": {
+   "ok": true,
+   "failing": []
+  },
+  "chamber": 27.0,
+  "humidity": 52.0,
+  "ptc_left": 29.0,
+  "ptc_right": 28.7,
+  "env_valid": true,
+  "lanes": [
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "FFFFFFFF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "D32C34FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "FEC187FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "5B3F27FF"
+     }
+    }
+   }
+  ],
+  "dryer": {
+   "state": "idle",
+   "target": null,
+   "remaining": null,
+   "fans": {
+    "left": false,
+    "right": false
+   },
+   "flaps": {
+    "bottom": "closed",
+    "rear": "closed"
+   },
+   "fault": null,
+   "notices": []
+  }
+ },
+ "ace2k b": {
+  "version": "0.11.0",
+  "link_proven": true,
+  "health": {
+   "ok": true,
+   "failing": []
+  },
+  "chamber": 27.0,
+  "humidity": 52.0,
+  "ptc_left": 29.0,
+  "ptc_right": 28.7,
+  "env_valid": true,
+  "lanes": [
+   {
+    "mode": "idle",
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "read",
+     "record": {
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "color_rgba": "000000FF"
+     }
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": false,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "unknown",
+     "record": null
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": false,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "unknown",
+     "record": null
+    }
+   },
+   {
+    "mode": "idle",
+    "insert": false,
+    "rest": true,
+    "pushed": false,
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "unknown",
+     "record": null
+    }
+   }
+  ],
+  "dryer": {
+   "state": "idle",
+   "target": null,
+   "remaining": null,
+   "fans": {
+    "left": false,
+    "right": false
+   },
+   "flaps": {
+    "bottom": "closed",
+    "rear": "closed"
+   },
+   "fault": null,
+   "notices": []
+  }
+ },
+ "print_stats": {
+  "state": "printing",
+  "filename": "objeto_5_cores_PLA_1h36m.gcode",
+  "print_duration": 2304.0
+ },
+ "print_task_config": {
+  "filament_exist": [
+   true,
+   true,
+   true,
+   false
+  ],
+  "filament_vendor": [
+   "Bambu",
+   "Bambu",
+   "Bambu",
+   "NONE"
+  ],
+  "filament_type": [
+   "PLA",
+   "PLA",
+   "PLA",
+   "NONE"
+  ],
+  "filament_sub_type": [
+   "",
+   "",
+   "",
+   "NONE"
+  ],
+  "filament_color_rgba": [
+   "D32C34FF",
+   "FEC187FF",
+   "000000FF",
+   "FFFFFFFF"
+  ]
+ },
+ "filament_motion_sensor e0_filament": {
+  "filament_detected": true,
+  "enabled": true
+ },
+ "filament_motion_sensor e1_filament": {
+  "filament_detected": true,
+  "enabled": true
+ },
+ "filament_motion_sensor e2_filament": {
+  "filament_detected": true,
+  "enabled": true
+ },
+ "filament_motion_sensor e3_filament": {
+  "filament_detected": false,
+  "enabled": true
+ },
+ "gcode_macro AUTO_FEEDING_BATCH": {
+  "doing": false
+ },
+ "virtual_sdcard": {
+  "file_position": 2446936,
+  "progress": 0.4
+ }
+}
