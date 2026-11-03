@@ -111,7 +111,7 @@ EOF
 }
 
 need_arg() {
-    [ "$2" -ge 2 ] && [ -n "$3" ] || die "$1 needs a value (see --help)"
+    if [ "$2" -lt 2 ] || [ -z "$3" ]; then die "$1 needs a value (see --help)"; fi
 }
 
 parse_args() {
