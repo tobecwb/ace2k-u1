@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
         ACE2K_FACTORY_SHA256: str
         ACE2K_FACTORY_SIZE: str
+        PYTHONPATH: str
 
 
 UNVERIFIED = {"exit": 2, "print": "Klipper's config has no [ace2k] on this port."}
@@ -67,9 +68,13 @@ def installed(u1: FakeU1, tmp_path: Path) -> FakeU1:
 def stock(tmp_path: Path) -> tuple[Path, FactoryEnv]:
     f = tmp_path / "ACE2_V1.1.31.bin"
     f.write_bytes(b"the original image")
+    pylib = tmp_path / "pylib"
+    pylib.mkdir()
+    (pylib / "serial.py").write_text("")  # the preflight's pyserial, which Klipper brings on a U1
     return f, {
         "ACE2K_FACTORY_SHA256": hashlib.sha256(f.read_bytes()).hexdigest(),
         "ACE2K_FACTORY_SIZE": str(f.stat().st_size),
+        "PYTHONPATH": str(pylib),
     }
 
 

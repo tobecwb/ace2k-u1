@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -263,7 +264,16 @@ def test_a_file_with_mixed_line_endings_parses(tmp_path: Path) -> None:
     assert run("units", str(f)) == f"a\t{SER_A}\t\n"
 
 
-TEMPLATE = Path(__file__).resolve().parents[3] / "ace2k" / "config" / "ace2k.cfg"
+# ace2k's example config, found as tests/conftest.py finds ace2k (ACE2K_EXTRAS, else the checkout
+# beside this tree): klippy/extras is two levels below ace2k's root.
+TEMPLATE = (
+    Path(
+        os.environ.get("ACE2K_EXTRAS")
+        or Path(__file__).resolve().parents[3] / "ace2k" / "klippy" / "extras"
+    ).parents[1]
+    / "config"
+    / "ace2k.cfg"
+)
 
 
 def test_drop_keeps_the_comment_blocks_between_sections(tmp_path: Path) -> None:
