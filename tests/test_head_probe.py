@@ -155,7 +155,7 @@ def test_an_empty_sensor_pushes_the_lane_named_as_a_swap_does(tmp_path: Path) ->
     gcmd = run(rig, "ACEK_HEAD_PROBE", {"HEAD": "1", "UNIT": "a", "LANE": "2"})
     assert ("stop", 0) in a.feed.log  # the head's other lane stopped before the push
     _lane, mode, _length, speed, _m = a.feed.started[0]
-    assert (_lane, mode, speed) == (1, "feed", 70.0)  # swap_speed
+    assert (_lane, mode, speed) == (1, "feed", 80.0)  # swap_speed
     assert slot.current is slot.lanes[1]
     assert armed == [slot.lanes[1]]
     assert gcmd.lines == ["ace2k_u1: head 1: a:2 pushed to its sensor, following"]

@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.5.0 — 2026-11-08 — beta
+
+For ace2k `v0.14.0`.
+
+**This release is a beta.** A print with a shared head (several lanes on one head, through a
+splitter) needs a prime tower. The lane swap in a shared head is experimental: stay near the
+printer during such a print.
+
+### Changed
+
+- **A swap retracts what the slicer will push back.** The slicer retracts a tool before each
+  tool change (10 mm in the files seen) and pushes that much back when the tool returns. When a
+  tool returns to a shared head during a print, the swap now retracts that much at its end.
+  Before, the push landed on a full nozzle and left a blob on the prime tower
+  ([`commands.md`](docs/commands.md), "`T0`–`T31`").
+- **The Print tab's color picker: the bay you choose is the color's.** Click a color and choose a
+  bay for it, an empty one too. The color prints from that bay, its row shows the bay, and the
+  steps never move its spool. The bay stays the color's until you change it. If the bay has no
+  spool, or its spool is not ready, Print says what is missing, for example
+  `No spool for color 2: put one in a:2 or pick a bay.` A spool of the same material in another
+  color prints, with one message for each new spool
+  ([`commands.md`](docs/commands.md), "Print tab").
+- **New-spool steps are clearer.** A step reads `put a new … spool — the planner picks the bay`,
+  and the color's row reads `new spool → a:2`.
+- **A failed `ACEK_EJECT` forgets the spool once the bay is empty.** If the unload ended with an
+  error and you pull the filament out by hand, the bay's Edit spool record and its tag are now
+  dropped, as after an eject that ends well. Before, the next spool without a tag in that bay
+  took the old material and color with no warning
+  ([`commands.md`](docs/commands.md), "`ACEK_EJECT`").
+- **`swap_speed` defaults to 80 mm/s** (it was 70), or to the unit's top speed when that is
+  lower. With ace2k `v0.14.0` a swap's moves run at 80 mm/s, as fast as the factory firmware.
+  With an older ace2k image they run at 70, and the console says so once. A value you set
+  outside the unit's speeds is warned about once in the console. The bench G-codes take `SPEED`
+  up to 80. `feed_speed` and `tag_push_speed` stay at 70.
+- **Tested on the paxx extended firmware `2.0.0-paxx12-24`.** The installer no longer asks you to
+  confirm this version. Another paxx version is still warned about, and the installer asks before
+  it goes on.
+
 ## v0.4.0 — 2026-11-03 — beta
 
 For ace2k `v0.13.0`. The changes since `v0.3.0-rc.1`. There was no final `v0.3.0`: this release

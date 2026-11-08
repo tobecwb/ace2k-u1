@@ -442,6 +442,9 @@ class ACE2kU1:
             "eject_probe_mm", EJECT_PROBE_MM, minval=5.0, maxval=150.0
         )
         self.warnings: list[str] = []
+        # The lines about each unit's swap speed (_swap_speed_notes), said once per connect.
+        self.speed_notes: list[str] = []
+        self.speed_noted: set[str] = set()
         if self.eject_probe_mm < EJECT_PROBE_MIN_MM:
             warning = (
                 f"ace2k_u1: eject_probe_mm {self.eject_probe_mm:g} is below its minimum "
@@ -778,29 +781,56 @@ class ACE2kU1:
 
         The check is config_module.bound_problems. It always covers the probe speed of
         ACEK_EJECT, and the ease of a load's push again (a lone head's too). With a head that
-        several lanes feed, it also covers the speeds and lengths of the swap and of the probe.
+        several lanes feed, it also covers the probe's speed and length, and a swap_speed that is
+        set. The lines about the swap speed of each unit are _swap_speed_notes.
         """
+        cfg = self.swap_cfg
         speeds = {"eject_probe_speed": self.eject_probe_speed}
         lengths: dict[str, float] = {}
-        if len(resolved) > len({head for head, _unit, _lane in resolved}):  # a + group
-            cfg = self.swap_cfg
-            speeds.update(swap_speed=cfg.swap_speed, probe_speed=cfg.probe_speed)
+        grouped = len(resolved) > len({head for head, _unit, _lane in resolved})  # a + group
+        if grouped:
+            speeds["probe_speed"] = cfg.probe_speed
             lengths["probe_mm"] = cfg.probe_mm
+            if cfg.swap_speed_set:
+                speeds["swap_speed"] = cfg.swap_speed
         # The slowest armed move: the eject's probe, the probe and the ease, or the unit's least
         # speed, which a slower free check is raised to. Its held window must keep its margin.
         armed = [self.eject_probe_speed, ace2k_u1_probe.EASE_SPEED]
         if lengths:
             armed.append(self.swap_cfg.probe_speed)
         problems: list[str] = []
+        self.speed_notes = []
         for unit in Adapter.units_in_use(resolved):
             where = unit_prefix(units, unit)
             problems += config_module.bound_problems(unit.feed, where, speeds, lengths)
+            if not (grouped and cfg.swap_speed_set):  # set with a + group: checked above
+                self.speed_notes += self._swap_speed_notes(unit.feed, where)
             least = getattr(unit.feed, "speed_min", None)
             slowest = min([*armed, least] if isinstance(least, (int, float)) else armed)
             held = held_floor_problem(unit.feed, slowest)
             if held is not None:
                 problems.append(where + held)
         return problems
+
+    def _swap_speed_notes(self, feed: object, where: str) -> list[str]:
+        """The line about the swap speed of a unit's moves, when it is not swap_speed.
+
+        A swap_speed that is set and outside the unit's speeds (with no head that several lanes
+        feed, which would refuse it) is a warning: its moves run within the unit's speeds. A
+        swap_speed left out says where the unit lowers it: to its top speed, or to the fallback
+        of an image that gives no top speed.
+        """
+        cfg = self.swap_cfg
+        speed = cfg.swap_speed_for(feed)
+        if speed == cfg.swap_speed:
+            return []
+        if cfg.swap_speed_set:
+            out = config_module.bound_problems(feed, "", {"swap_speed": cfg.swap_speed}, {})
+            why = out[0] if out else f"swap_speed {cfg.swap_speed:g} is outside the unit's speeds"
+            return [f"ace2k_u1: {where}{why}: its moves run at {speed:g} mm/s"]
+        if isinstance(getattr(feed, "speed_max", None), (int, float)):
+            return [f"ace2k_u1: {where}swap_speed defaults to the unit's top speed, {speed:g} mm/s"]
+        return [f"ace2k_u1: {where}the unit reports no top speed: swap_speed is {speed:g} mm/s"]
 
     def _build_adapter(
         self,
@@ -870,6 +900,10 @@ class ACE2kU1:
             )
         for warning in self.warnings:
             gcode.respond_info(warning, log=False)  # logged once, when the config was read
+        for note in self.speed_notes:  # each once per connect: a re-hook does not say it again
+            if note not in self.speed_noted:
+                self.speed_noted.add(note)
+                gcode.respond_info(note)
         if self.runout_source == "head" and self._built().groups():
             gcode.respond_info(SHARED_RUNOUT_LINE)
         if self._refills():

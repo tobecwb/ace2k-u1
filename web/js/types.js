@@ -222,6 +222,8 @@
  * dismissed lists the files whose similar-colour hint the user kept apart. pinned maps a picked tool to the pin of
  * the spool it was picked on, so the pick follows that spool to another bay (rekeyPicks). auto lists the colours
  * (merge roots) whose pick the page settled itself on a matching spool (steps.js settleMatches), not the user.
+ * overrides lists the colours whose bay the user set in the colour picker: that bay is what the colour prints from,
+ * whatever the suggestion says (a pick a guided step's Done made is not one: it carries out the suggestion).
  * reading: the file whose plan the host is reading, since at (ms), or its refusal.
  * files hold each file's path, modified time and size in bytes (for the reading bar's estimate). scrolled is the file
  * the page scrolled to its colours when it opened (PlanView.js scrollPlan), so it is not scrolled to again.
@@ -232,7 +234,7 @@
  *   thumb?: { file: string, url: string } | null, merges?: Record<number, number>,
  *   held?: PlanSpool[], step?: number, trail?: string[], shown?: { id: string, kind: string } | null,
  *   eject?: EjectRun | null, allSteps?: boolean,
- *   dismissed?: string[], pinned?: Record<number, Pin>, auto?: number[], q?: string, sort?: 'new' | 'name',
+ *   dismissed?: string[], pinned?: Record<number, Pin>, auto?: number[], overrides?: number[], q?: string, sort?: 'new' | 'name',
  *   cards?: Record<string, CardEntry>, scrolled?: string | null }} PrintState
  */
 /**

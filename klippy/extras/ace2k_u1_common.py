@@ -120,6 +120,26 @@ def heater_off(gcode: GCode | None, head: int) -> None:
         logging.exception("ace2k_u1: head %d heater off", head + 1)
 
 
+# The top speed of a unit whose image gives no speed limits (mm/s): the ceiling ace2k had then.
+UNIT_TOP_FALLBACK_MM_S = 70.0
+
+
+def unit_speed(api: object, speed: float) -> float:
+    """Return speed (mm/s) within the speeds of the unit whose feed is api.
+
+    It is raised to the unit's least speed and lowered to its top speed, when ace2k gives them,
+    and lowered to UNIT_TOP_FALLBACK_MM_S when the unit gives no top speed. This is the one place
+    where a unit's limits turn into the speed of a move.
+    """
+    low = getattr(api, "speed_min", None)
+    high = getattr(api, "speed_max", None)
+    if not isinstance(high, (int, float)):
+        high = UNIT_TOP_FALLBACK_MM_S
+    if isinstance(low, (int, float)) and speed < low:
+        speed = low
+    return float(min(speed, high))
+
+
 def finite(value: object) -> TypeGuard[float]:
     """True when value is a real number: not a bool, not NaN and not infinite."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -619,8 +639,9 @@ class Hooked:
     out_at: float | None = field(init=False, default=None)
     # eject_by_user: an eject that the user asked for (ACEK_EJECT) runs on the lane, so the user
     # takes the spool out.
-    # eject_drop: such an eject ended well (unloaded, or its tail left at the bay). The spool
-    # record goes once the bay reads empty, unless a filament goes in or the lane moves first.
+    # eject_drop: the unit's unload of such an eject ended (see Ejector._arm_spool_drop). The
+    # spool record goes once the bay reads empty, unless a filament goes in or the lane really
+    # moves first (end_eject_drop).
     eject_by_user: bool = field(init=False, default=False)
     eject_drop: bool = field(init=False, default=False)
     # The final event of the motion is still to come.
@@ -716,6 +737,11 @@ class Hooked:
     def seat_due(self) -> bool:
         """The filament waited and is still at the bay, so a push starts with the seat."""
         return self.waited and not self.seated
+
+    def end_eject_drop(self) -> None:
+        """End the drop of the spool record that an eject armed (eject_drop): the lane moved, a
+        filament went into its empty bay, a new record came, or the drop was done."""
+        self.eject_drop = False
 
     def clear_wait(self) -> None:
         """Forget the lane's wait and its seat: the filament left the bay, or the head was reset."""

@@ -24,7 +24,7 @@ try:
     from . import ace2k_u1_probe
     from .ace2k_u1_adapter import PRINT_ON
     from .ace2k_u1_common import MOVE_MODES, PAUSE_WAIT_S
-    from .ace2k_u1_config import LANES, SWAP_LENGTH_MAX_MM, SWAP_SPEED_MAX_MM_S
+    from .ace2k_u1_config import BENCH_SPEED_MAX_MM_S, LANES, SWAP_LENGTH_MAX_MM
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
     import ace2k_u1_probe  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_adapter import PRINT_ON  # type: ignore[import-not-found, no-redef]
@@ -33,9 +33,9 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
         PAUSE_WAIT_S,
     )
     from ace2k_u1_config import (  # type: ignore[import-not-found, no-redef]
+        BENCH_SPEED_MAX_MM_S,
         LANES,
         SWAP_LENGTH_MAX_MM,
-        SWAP_SPEED_MAX_MM_S,
     )
 
 
@@ -112,7 +112,7 @@ class Bench:
         cfg = self._probe().cfg
         length_mm = gcmd.get_float("LENGTH", cfg.probe_mm, minval=10.0, maxval=SWAP_LENGTH_MAX_MM)
         speed_mm_s = adapter.within_speed(
-            h, gcmd.get_float("SPEED", cfg.probe_speed, minval=5.0, maxval=SWAP_SPEED_MAX_MM_S)
+            h, gcmd.get_float("SPEED", cfg.probe_speed, minval=5.0, maxval=BENCH_SPEED_MAX_MM_S)
         )
         back_speed_mm_s = adapter.within_speed(h, cfg.probe_speed)
         what = (
@@ -211,7 +211,7 @@ class Bench:
                 if x is not h:
                     adapter.stop(x, "the head probe's push")
             adapter.head_watch.hand_head(slot, h)
-            error = self._probe().push_in(slot, h, speed=self.host.swap_cfg.swap_speed)
+            error = self._probe().push_in(slot, h, speed=self.host.swap_cfg.swap_speed_for(h.api))
         if error is not None:
             self._give_head_back(slot, h, before, was_armed)
             raise gcmd.error(

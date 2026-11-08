@@ -155,7 +155,7 @@ class PageCommands:
         if adapter is None or h is None:
             return
         h.drop_due = False  # a record set on an empty bay waits until the bay fills and empties
-        h.eject_drop = False  # and a new record is not the one an earlier eject took out
+        h.end_eject_drop()  # and a new record is not the one an earlier eject took out
         # A newer word than the head's setting: the record speaks for the lane of a head that it
         # feeds alone until the head is written for it (the page's Edit spool writes the same).
         own_spool_came(h)

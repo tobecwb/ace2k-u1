@@ -10,9 +10,9 @@ U1's own filament flows:
 
 Each of the U1's four heads is fed directly by one lane of the unit.
 
-**Status: beta `v0.4.0`.** Read the beta notice in "Read this first" below. The long-run print
-test (burn-in) ran on the release candidate: two prints, about 9 hours, with all four lanes of one
-unit in use.
+**Status: beta `v0.5.0`.** Read the beta notice in "Read this first" below. The long-run print
+tests have run many prints since the release candidate, the longest over 40 hours, with all four
+lanes of one unit in use.
 
 **One ACE 2 Pro unit feeds the four heads by default.** Lane n feeds head n (extruder n-1). With
 several units, `lanes: <unit>:<lane>` in `[ace2k_u1]` says which lane of which unit feeds each head
@@ -26,7 +26,9 @@ lane in that head. Start such a print from the web page's **Print…** panel. Se
 [Printing more colors than heads](docs/install.md#printing-more-colors-than-heads). Commands:
 [The U1's commands with a shared head](docs/commands.md#the-u1s-commands-with-a-shared-head).
 
-To keep the units on their factory firmware, or for a more mature project with more features, see https://github.com/decay71/multiACE.
+This project is only for the Anycubic ACE 2 Pro, on the ace2k firmware. For the original Anycubic
+ACE Pro, a mix of ACE Pro and ACE 2 Pro units, or units kept on their factory firmware, see
+https://github.com/decay71/multiACE.
 
 **How this was built.** AI tools were used in developing this adapter. Every feature and every
 change was verified on real hardware, over many hours of bench testing, before it was accepted.
@@ -81,7 +83,7 @@ printer, your filament or anything else that results from installing or running 
 may void your warranty. This project is not affiliated with or endorsed by Anycubic or Snapmaker.
 
 **Tested on.** One Anycubic ACE 2 Pro unit on a Snapmaker U1 running the paxx extended firmware
-`1.6.0-paxx12-22`, at 127 V / 60 Hz. Nothing else has been tested.
+`2.0.0-paxx12-24`, at 127 V / 60 Hz. Nothing else has been tested.
 
 > [!WARNING]
 > **Do not leave a drying cycle unattended.** The dryer switches mains power to a heater. Only the
@@ -211,7 +213,11 @@ does not scroll again when the plan arrives.
 
 The page reads the file's colors and suggests a lane for each color, with the fewest spool swaps.
 It then lists the steps: take a spool out, put a spool in, or move one. A step ticks by itself when
-a spool with a tag of the expected color goes in. When the steps are done, press Print. A new page
+a spool with a tag of the expected color goes in. When the steps are done, press Print. To print a
+color from another spool, click the color and choose its bay, an empty one too. Your choice wins
+over the suggestion: the color's row shows that bay, Print uses it, and the steps never move its
+spool. The bay stays the color's until you change it, and Print says what it lacks. You can
+choose one spool for two colors. A new page
 (a reload, or another device) starts from the files, and you choose the file again from there. A file
 you chose stays open when you switch tabs. If another device opens another file, the page says
 "Another device opened" that file. Press **Plan … again** to plan yours again, or **← Files** to go
@@ -267,8 +273,8 @@ a light or a dark theme. The images above show sample data. Setup and details:
 
 ## Requirements
 
-- A Snapmaker U1 with the paxx extended firmware `v1.6.0-paxx12-22`.
-- ace2k `v0.13.0`, on the unit **and** on the printer (its host side). The installer installs
+- A Snapmaker U1 with the paxx extended firmware `v2.0.0-paxx12-24`.
+- ace2k `v0.14.0`, on the unit **and** on the printer (its host side). The installer installs
   it. The adapter does not attach to an ace2k whose host interface is older than `API_VERSION` 12
   (`v0.12.0-rc.1` has 6).
 - One ACE 2 Pro unit or more, each with its USB cable plugged into the printer.

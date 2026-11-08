@@ -327,9 +327,14 @@ class Ejector:
             self.adapter.reactor.unregister_timer(timer)
 
     def drop_eject(self, h: Hooked) -> None:
-        """Cancel an eject still to start, and drop what its earlier unloads kept."""
+        """Cancel an eject still to start, and drop what its earlier unloads kept.
+
+        A unit unload of the eject that still runs keeps all of it (the travel spent, the length
+        asked, its mark of an eject that the user asked for): a U1 failure on the head is not that
+        unload's end, which is judged with them (on_final).
+        """
         self.cancel_eject(h)
-        self._eject_forget(h)
+        self._eject_forget(h, keep=h.key in self.ejects)
 
     def schedule_eject(
         self,
@@ -401,12 +406,15 @@ class Ejector:
             try_eject, self.adapter.reactor.monotonic()
         )
 
-    def _eject_forget(self, h: Hooked) -> None:
+    def _eject_forget(self, h: Hooked, keep: bool = False) -> None:
         """Drop what the unloads of an eject kept: the travel spent, the length asked, its end.
 
         The eject is over, so it is no longer one that the user asked for (h.eject_by_user). A
-        caller that needs that mark reads it first.
+        caller that needs that mark reads it first. With keep (a unit unload of the eject still
+        runs), nothing is dropped.
         """
+        if keep:
+            return
         h.eject_by_user = False
         self.eject_spent.pop(h.key, None)
         self.eject_asked.pop(h.key, None)
@@ -426,8 +434,9 @@ class Ejector:
         head, and its end brings the eject. With for_screen (the Unload of the U1's screen, see
         ace2k_u1_screen_unload), a held filament is only fed back: the U1's unload that the screen
         asked for is the one that runs. With asked (ACEK_EJECT, from the page or the console), the
-        user takes the spool out: an eject that ends well with the bay empty drops the spool record
-        of the lane (see on_final). The automatic ejects keep it.
+        user takes the spool out: once the unit's own unload of the eject ends, well or in error,
+        the spool record of the lane goes when the bay reads empty (see _arm_spool_drop). An eject
+        that never reached that unload, and the automatic ejects, keep it.
         """
         h = self.adapter.find(lane, unit)
         if h is None:
@@ -439,7 +448,7 @@ class Ejector:
         job = EjectJob(h)
         job.for_screen = for_screen
         h.eject_by_user = asked and not for_screen
-        h.eject_drop = False
+        h.end_eject_drop()
         self.eject_jobs[h.key] = job
 
         def run(eventtime: float, job: EjectJob = job) -> float:
@@ -1106,10 +1115,8 @@ class Ejector:
     def on_final(self, h: Hooked, event: FeedEvent) -> None:
         """Handle a final event of the lane of h, after the adapter's own handling.
 
-        It acts on the end of the unit unload of an eject, when it is that unload's. An eject
-        that the user asked for and that ended "unloaded", or with its tail at the bay, drops the
-        spool record of the lane once the bay reads empty (h.eject_drop, see GripWatch.bay_watch).
-        Any other end keeps it.
+        It acts on the end of the unit unload of an eject, when it is that unload's. Whether the
+        lane's spool record goes with it is _arm_spool_drop's rule.
         """
         kind = event.get("kind")
         move = self.ejects.get(h.key)
@@ -1126,14 +1133,14 @@ class Ejector:
             end = self._stuck_at_bay(h, event)
         if end == EJECT_AGAIN:
             return
-        # Read before _eject_forget clears it. Ended "unloaded", or with the tail at the bay
-        # (EJECT_AT_BAY, taken out by hand next), an eject that the user asked for takes the spool
-        # out.
+        # Ended "unloaded", or with the tail at the bay (EJECT_AT_BAY, taken out by hand next).
         took_out = kind == "unloaded" or end is not None
-        by_user = h.eject_by_user and took_out
+        # Both read before _eject_forget clears them (eject_ends among them), so the drop is
+        # judged on the state that judged the end.
+        by_user, judged = h.eject_by_user, self._judged_here(h)
         back = self.eject_spent.get(h.key, 0.0) + moved_mm(event)  # the whole eject's
         self._eject_forget(h)
-        h.eject_drop = by_user
+        self._arm_spool_drop(h, by_user and judged)
         if took_out:
             self._head_emptied(h)
         if end is not None:  # this is EJECT_AT_BAY
@@ -1144,6 +1151,25 @@ class Ejector:
             self.adapter.say(
                 f"ace2k_u1: lane {n} eject failed: {kind} — ACEK_CLEAR {self.adapter.lane_args(h)}"
             )
+
+    @staticmethod
+    def _arm_spool_drop(h: Hooked, armed: bool) -> None:
+        """The one rule for an eject's drop of the lane's spool record (h.eject_drop).
+
+        It is armed (armed) at the end of the unit's own unload of an eject that the user asked
+        for and that judged that end itself (_judged_here: no U1 flow on the head, no print),
+        whatever the end: "unloaded", the tail at the bay, or any failure of the unload (such as
+        unload_incomplete with the tip left on the bay's sensor, which the user then pulls out by
+        hand). An unload run again or taken over by the safety net is not an end. Then the record
+        and the mark of a forgotten tag go once the bay reads empty (GripWatch.bay_watch), seconds
+        or minutes later. It is disarmed (Hooked.end_eject_drop) only by a real move of the lane:
+        a move this adapter starts (Adapter.started), its mode out of idle and error in its status
+        (a move of the unit, GripWatch.eject_drop_ends), or a load of the head that the U1 starts
+        (hook_states). A filament put into the empty bay and a new spool record disarm it too. A
+        push or a pull by hand never does. Anything else keeps the record: an eject that never
+        reached the unit's unload, the automatic ejects, a failed eject whose bay stays full.
+        """
+        h.eject_drop = armed
 
     def _head_emptied(self, h: Hooked) -> None:
         """Forget the lane of a shared head once the eject took that lane out of its bay.

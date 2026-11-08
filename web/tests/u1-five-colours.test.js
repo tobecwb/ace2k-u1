@@ -25,7 +25,8 @@ loadEnglish();
 const real = () => JSON.parse(readFileSync(new URL('./fixtures/u1-five-colours.json', import.meta.url), 'utf8'));
 const FILE = 'objeto_5_cores_PLA_1h36m.gcode';
 
-/** @param {any} status @param {Record<string, unknown>} [print] */
+// The picks given are the user's own, set in the colour picker (overrides), unless print says otherwise.
+/** @param {any} status @param {Record<string, any>} [print] */
 const appOf = (status, print = {}) => ({
   status,
   online: true,
@@ -36,7 +37,15 @@ const appOf = (status, print = {}) => ({
   events: [],
   printOptions: {},
   folds: {},
-  print: { open: true, files: [], file: FILE, choice: {}, choiceId: null, ...print },
+  print: {
+    open: true,
+    files: [],
+    file: FILE,
+    choice: {},
+    choiceId: null,
+    overrides: Object.keys(print.choice ?? {}).map(Number),
+    ...print,
+  },
   ui: { tab: 'print', panel: null, sheet: false },
 });
 
@@ -107,23 +116,32 @@ test('real U1: Define opens the bay card with Edit spool already open', () => {
   assert.deepEqual([app.edit?.unit, app.edit?.lane], ['a', 1]);
 });
 
-test('real U1: Print sends the bays the user picked, more swaps and all, without following the suggestion', async () => {
+test('real U1: Print sends the bays the user picked, more swaps and all, and the guide never fights them', async () => {
   const app = appOf(defined(real()), { choice: PICKS, choiceId: `${FILE}\n${real().ace2k_u1.plan.mtime}` });
   const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
-  // The suggestion still has steps; they do not hold Print back.
-  assert.ok(guideOf(app)?.steps.length);
+  // The colours the user set print from their bays: the guide asks nothing, and the other colours keep their spools.
+  assert.deepEqual(guideOf(app)?.steps, []);
+  assert.deepEqual(
+    now.place?.lines.map((l) => [l.tools, l.key, l.act]),
+    [
+      [[0], 'a:4', 'there'],
+      [[1], 'a:2', 'there'],
+      [[3], 'b:1', 'there'],
+      [[4], 'a:1', 'there'],
+      [[6], 'a:3', 'there'],
+    ],
+  );
   const gate = printGate(now, false);
   assert.deepEqual([gate.block, gate.asIs], [null, true]);
   const out = renderHtml(html`<${PlanView} app=${app} ctx=${live(app).ctx} />`);
   assert.ok(!/class="btn go" disabled/.test(out));
-  // Peach (colour 5) prints from the blue spool, and a step is still pending for black: Print asks, naming each.
+  // Peach (colour 5) prints from the blue spool: Print asks, naming it.
   const no = live(app, false);
   await no.ctx.run('print_go');
   assert.equal(no.confirm.length, 1);
   // The blue spool has no colour name from the host: it is named by its material, with the colour after the bay.
   const blue = t('print.as_is_colour_hex', { head: 'T0', n: 5, what: 'PLA', key: 'a:1', colour: '#1f6feb' });
   assert.ok(no.confirm[0].includes(blue), no.confirm[0]);
-  assert.ok(no.confirm[0].includes('a:3'), no.confirm[0]);
   // Red (colour 2) prints from the red spool: nothing to ask about it.
   assert.ok(!no.confirm[0].includes('color 2'));
   assert.deepEqual(no.sent, []);
@@ -163,8 +181,7 @@ test('real U1: the bar, its summary and the Define lines read the bays Print sen
   const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
   const gate = printGate(now, false);
   const out = textOf(renderHtml(html`<${PlanView} app=${app} ctx=${live(app).ctx} />`));
-  // Steps exist, but Print sends the bays as they are: the note says so, never "N steps left".
-  assert.ok(out.includes(t('print.as_is_note')));
+  // No steps: the bays the user set are the bays Print sends, never "N steps left".
   assert.ok(!/steps? left in the bays/.test(out));
   // The summary counts the swaps of those bays on the live lanes.
   const n = /** @type {number} */ (sentSwaps(now.plan, gate.choice, now.lanes));
@@ -197,12 +214,17 @@ test('real U1: the head-use bar shows the bays as they are, and follows the spoo
   const bar = renderHtml(html`<${Timeline} plan=${now.plan} choice=${asIs} headOf=${headOf} t=${t} />`);
   const out = renderHtml(html`<${PlanView} app=${app} ctx=${live(app).ctx} />`);
   assert.ok(out.includes(bar));
-  // T0 swaps between red (a:2) and peach (a:1), as it is: not the suggestion's count.
+  // T0 swaps between red (a:2) and peach (a:1), as the user set them: the planner counts the same.
   const n = swaps(now.plan.order, asIs, headOf)[0];
-  assert.ok(n > (now.place?.best ?? 0));
+  assert.ok(n > 0);
+  assert.equal(
+    Object.values(swaps(now.plan.order, asIs, headOf)).reduce((a, b) => a + b, 0),
+    now.place?.best,
+  );
   assert.ok(textOf(bar).includes(`T0 ${t('timeline.count', { n })}`));
-  // Peach picked from b:1's head instead: T0 prints only red, and the bar follows.
-  const moved = appOf(app.status, { ...app.print, choice: { 1: 'a:2', 4: 'b:1' } });
+  // Peach set to b:1 instead, together with brown, which the user leaves on it: T0 prints only red, and the bar
+  // follows. (Brown not set, b:1 would be peach's alone, and the suggestion would place brown elsewhere.)
+  const moved = appOf(app.status, { ...app.print, choice: { 1: 'a:2', 4: 'b:1', 3: 'b:1' }, overrides: [1, 3, 4] });
   const after = textOf(renderHtml(html`<${PlanView} app=${moved} ctx=${live(moved).ctx} />`));
   assert.ok(after.includes(`T0 ${t('timeline.count', { n: 0 })}`));
 });
@@ -219,9 +241,9 @@ test('real U1: the guide past its last step keeps working on every status', () =
 });
 
 test('real U1: the confirm names a spool by the host colour name; a spool of no material blocks', () => {
-  // White (colour 1) picked on a:3, whose spool the host names "black".
+  // White (colour 1) picked on a:3, whose spool the host names "black", and black (colour 7) set to it too.
   const app = appOf(defined(real()), {
-    choice: { ...PICKS, 0: 'a:3' },
+    choice: { ...PICKS, 0: 'a:3', 6: 'a:3' },
     choiceId: `${FILE}\n${real().ace2k_u1.plan.mtime}`,
   });
   const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));

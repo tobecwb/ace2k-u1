@@ -129,8 +129,16 @@ console says
 [`ACEK_SPOOL`](#acek_spool) record and its forgotten tag ([`ACEK_TAG_FORGET`](#acek_tag_forget)),
 as when you take the spool out by hand: you eject to take the spool out. This holds on every path,
 with the head empty or held, on a shared head or on a head the lane feeds alone. An eject that
-leaves its tail at the bay drops them once you pull the tail out. An eject that fails or is
-canceled keeps both.
+leaves its tail at the bay drops them once you pull the tail out. So does an eject whose unit
+unload ends in any error (`unload_incomplete`, `stuck` or any other), once the bay reads empty:
+you pull the tip out by hand, seconds or minutes later. The drop waits, however long that takes,
+until a real move of the lane: a move the adapter starts (the follow among them), the lane's mode
+out of idle and error in its status (a move of the unit), or a load of the head that the U1
+starts. A push or a pull by hand never ends it. A filament put into the empty bay, or a new record
+from Edit spool, ends it too. These keep both: a failed eject
+whose bay stays full, an eject that ends before the unit's unload (it does not start, the U1's
+unload of the head fails, no material set), an unload failure while the U1 runs a flow on the
+head or a print runs, and an eject that a new pull of the lane cancels.
 
 The steps and their console lines are under [Taking a filament out of its bay](install.md#taking-a-filament-out-of-its-bay).
 
@@ -248,7 +256,7 @@ When the unit gives no distance for the move, the line says so and nothing is fe
 | `UNIT` | the unit that owns the lane; required with several units |
 | `LANE` | required, 1–4 |
 | `LENGTH` | 10–300 mm; default `probe_mm` (100) |
-| `SPEED` | 5–70 mm/s, kept within the unit's own speed range; default `probe_speed` (50). The line shows the speed used |
+| `SPEED` | 5–80 mm/s, kept within the unit's own speed range; default `probe_speed` (50). The line shows the speed used |
 
 **Refusals.** A G-code error, nothing moved: `ace2k_u1: lane n free check refused: <reason>`. The
 reasons:
@@ -341,7 +349,8 @@ The console says `ace2k_u1: lane a:2 spool: PLA #ff8800`.
 
 The record is saved in `ace2k_u1_spools.json`, beside `printer.cfg`, so it stays after a restart.
 It is dropped when you take the spool out of its bay by hand, when an
-[`ACEK_EJECT`](#acek_eject) ends with the bay empty, and when the spool runs out in a shared head.
+[`ACEK_EJECT`](#acek_eject) ends with the bay empty or the bay empties after it (a failed eject
+included), and when the spool runs out in a shared head.
 The adapter's own roll backs (a swap, a refill, the probe, a load that is refused) keep it.
 
 Who reads it:
@@ -676,13 +685,31 @@ head's lane. Then the U1's own `T<n>` runs. The swap goes through these steps:
    cleaned once, so this cleans the nozzle the second time, with no purge, and leaves the head at
    the U1's idle position. A refill with no tool of the plan runs the U1's
    `INNER_PREEXTRUDE_FILAMENT … LENGTH=0` instead. The next print move takes the head to the part.
+   The pre-extrusion's retraction matches the slicer's. The slicer retracts a tool before its `T`
+   (10 mm in the files seen) and pushes that much back when the same tool returns. So when the
+   tool returns to the head, the step first retracts the rest at 30 mm/s, at the cleaning area
+   where the load left the head, in one script: `SAVE_GCODE_STATE NAME=ACEK_SWAP_RETRACT`,
+   `M83`, `G1 E-<mm − 0.5> F1800`, `RESTORE_GCODE_STATE NAME=ACEK_SWAP_RETRACT`. The print's E
+   mode and E position stay as they were. The print's flow factor scales this retraction as it
+   scales the slicer's push, so the two stay equal. The U1's pre-extrusion then retracts its own
+   0.5 mm, runs its fan and cleans. The tool's value is spent as the retraction starts: a swap
+   that fails there may miss it once, but never retracts it twice. The U1's macro cannot take the length itself: it fails on a
+   `RETRACT_LENGTH`. The nozzle leaves the bin retracted by what the slicer will push back.
+   If the retraction is the U1's 0.5 mm or less, nothing is added, and the console says
+   `…, the U1's own 0.5 mm retraction covers the slicer's 0.3 mm`. Without this, the push lands
+   on a nozzle the purge left full and leaves a blob on the prime tower. A tool's first use and a
+   refill keep the U1's own 0.5 mm. So does a swap that runs while the print is paused, such as a
+   swap finished by `RESUME`: the U1 would not count a longer retraction then. The tool's value
+   stays for its next return. A reading that is not a retraction (more than 15 mm, or read during
+   a pause) never replaces a tool's value. The values are kept per print.
 
 X and Y must be homed. The console says `ace2k_u1: head 1: a:1 → a:2 (T1)` at the start and
 `ace2k_u1: head 1: a:2 in (113 s)` at the end. A swap takes about two minutes.
 
 The swap's `return` step already pre-extruded the tool, so the file's own
 `SM_PRINT_PREEXTRUDE_FILAMENT` right after that `T` is skipped, even if it is forced. The console
-says `ace2k_u1: head 1: pre-extrusion after the swap (T1)` when the step runs it, and
+says `ace2k_u1: head 1: pre-extrusion after the swap (T1)` when the step runs it (with
+`, retracting 10 mm as the slicer did` when it matches the slicer's retraction), and
 `ace2k_u1: head 1: pre-extrusion after the refill` after a refill.
 
 The first `M109` for the swapped tool after a swap does not wait when its temperature is within
@@ -934,6 +961,16 @@ tab.
 each head's lane swaps and the start options. It is offered when a head is fed by several lanes.
 When the page plans the file again, your choices stay while the new plan still offers them for the
 same color and material; a message names any that went back to the suggestion.
+Click a color to choose its bay. Every bay is offered, an empty one too, but not a spool of
+another material. The bay you choose is the color's until you change it: emptied, refilled with
+another spool, its spool moved elsewhere, or the file planned again, the color stays there (only
+a bay the new plan no longer lists, its unit gone, is dropped, with the message).
+**Print** says what the bay lacks: `No spool for color 2: put one in a:2 or pick a bay.`, `… define
+a:2 first.` for a spool with no material set, or `a:2 holds PETG and color 2 is PLA: …`. A spool of
+the same material in another color prints: its row names the color in amber, and a message says
+`a:2 now holds black for color 2` once for each new spool. An empty bay you choose gets a step to put a new spool
+there. **put a new … spool — the planner picks the bay** lets the planner choose the bay; the
+color's row then reads `new spool → a:2`.
 **Print** sends `ACEK_PLAN_SET`, then `SDCARD_PRINT_FILE_WITH_PARAMETERS` with the tool table and
 the options, as the U1's screen does
 ([Printing more colors than heads](install.md#printing-more-colors-than-heads)).

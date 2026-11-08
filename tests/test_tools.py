@@ -1355,9 +1355,9 @@ def test_the_start_load_into_an_empty_shared_head_finds_a_lane_in_the_way(
     assert slot.current is slot.lanes[0]  # T0's a:1 handed over
     assert started_moves(a) == [
         (0, "feed", 2000.0, 70.0),  # blocked after 480 mm, at feed_speed
-        (0, "rollback", 480.0, 70.0),
+        (0, "rollback", 480.0, 80.0),
         (1, "feed", 2000.0, 50.0),  # a:2 sets the head's sensor: it was in the way
-        (1, "rollback", 1000.0, 70.0),  # behind the splitter
+        (1, "rollback", 1000.0, 80.0),  # behind the splitter
         (0, "feed", 2000.0, 70.0),  # pushed again: at the sensor
     ]
     assert "ace2k_u1: head 1: a:2 was past the splitter: rolled back" in rig.gcode.lines
@@ -2646,7 +2646,8 @@ def test_a_swap_retracts_nothing_and_ends_with_the_head_primed(tmp_path: Path) -
     """No retraction of the swap's own. The load macro's purge primed the head, so the swap
     counts the 20 mm the U1's pre-extrusion used to purge: it starts, with no purge, at
     printing_e_pos 0 for any slicer retraction up to 20 mm, and a later pause, flush or resume
-    does not retract the slicer's retraction from before the swap."""
+    does not retract the slicer's retraction from before the swap. It ends at the -0.5 of the
+    U1's own retraction."""
     for saved in (0.0, -0.03, -10.0):
         rig, a = swap_rig(tmp_path)
         rig.printer.objects["extruder"].printing_e_pos = saved
@@ -2654,17 +2655,17 @@ def test_a_swap_retracts_nothing_and_ends_with_the_head_primed(tmp_path: Path) -
         tool(rig, 2)
         assert not [line for line in rig.sent if line.startswith("G1 E")]
         assert rig.u1.e_pos_at_preextrude == [0.0]
-        assert rig.printer.objects["extruder"].printing_e_pos == 0.0
+        assert rig.printer.objects["extruder"].printing_e_pos == -0.5
 
 
 def test_the_u1_model_pre_extrudes_its_length(tmp_path: Path) -> None:
     """The U1's pre-extrusion extrudes LENGTH (20 mm by default), then retracts 0.5 mm and
-    cleans; SOFT=1 is a string and leaves the length as it is."""
+    cleans, its cleans moving no filament; SOFT=1 is a string and leaves the length as it is."""
     for line, end in (
-        ("SM_PRINT_PREEXTRUDE_FILAMENT INDEX=2 FORCE=1", 0.0),
-        ("SM_PRINT_PREEXTRUDE_FILAMENT INDEX=2 FORCE=1 LENGTH=0", -5.5),
-        ("INNER_PREEXTRUDE_FILAMENT SOFT=1 TEMP=230 LENGTH=0", -5.5),
-        ("INNER_PREEXTRUDE_FILAMENT SOFT=1 TEMP=230", 0.0),
+        ("SM_PRINT_PREEXTRUDE_FILAMENT INDEX=2 FORCE=1", -0.5),
+        ("SM_PRINT_PREEXTRUDE_FILAMENT INDEX=2 FORCE=1 LENGTH=0", -10.5),
+        ("INNER_PREEXTRUDE_FILAMENT SOFT=1 TEMP=230 LENGTH=0", -10.5),
+        ("INNER_PREEXTRUDE_FILAMENT SOFT=1 TEMP=230", -0.5),
     ):
         rig, _a = swap_rig(tmp_path)
         rig.printer.objects["extruder"].printing_e_pos = -10.0
@@ -5808,10 +5809,10 @@ def test_a_unit_with_host_interface_17_bounds_a_swaps_moves_by_its_own_budget(
     a.feed.on_start = on_start
     tool(rig, 2)
     assert (0, 100.0, 50.0) in a.feed.waits  # the free check: probe_mm at probe_speed
-    assert (0, 970.0, 70.0) in a.feed.waits  # the roll back: the rest at swap_speed
+    assert (0, 970.0, 80.0) in a.feed.waits  # the roll back: the rest at swap_speed
     assert rig.module.swapper.swap_pending is None
     # only the roll back counts the unit's tail: the free check's tip may still be in the head
-    assert a.feed.reverse_waits == [(0, 970.0, 70.0)]
+    assert a.feed.reverse_waits == [(0, 970.0, 80.0)]
 
 
 def test_a_swaps_roll_back_that_runs_into_the_units_tail_ends_normally(

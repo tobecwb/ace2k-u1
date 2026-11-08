@@ -879,9 +879,9 @@ def test_a_blocked_push_finds_the_lane_in_the_way(tmp_path: Path, no_insist: Non
     assert rig.module.probe.push_in(slot, slot.lanes[0], speed=70.0) is None
     assert moves(a) == [
         (0, "feed", 2000.0, 70.0),  # blocked after 480 mm
-        (0, "rollback", 480.0, 70.0),  # what it pushed, at swap_speed
+        (0, "rollback", 480.0, 80.0),  # what it pushed, at swap_speed
         (1, "feed", 2000.0, 50.0),  # a:2 sets the head's sensor: it was in the way
-        (1, "rollback", 1000.0, 70.0),  # headN_splitter_mm at swap_speed
+        (1, "rollback", 1000.0, 80.0),  # headN_splitter_mm at swap_speed
         (0, "feed", 2000.0, 70.0),  # pushed again
     ]
     assert pushes["a1"] == 2
@@ -940,7 +940,7 @@ def test_a_search_push_that_ends_done_was_not_in_the_way(tmp_path: Path, no_insi
     a.feed.on_start = on_start
     with pytest.raises(ace2k_u1_probe.ProbeError, match="blocked in the tube, not by another lane"):
         rig.module.probe.push_in(slot, slot.lanes[0], speed=70.0)
-    assert (1, "rollback", 1995.0, 70.0) in moves(a)  # what it pushed, out of the tube
+    assert (1, "rollback", 1995.0, 80.0) in moves(a)  # what it pushed, out of the tube
 
 
 def test_a_later_move_that_fails_otherwise_rolls_back_what_the_push_took(tmp_path: Path) -> None:
@@ -1148,9 +1148,9 @@ def test_a_parked_lane_that_reaches_the_head_at_its_distance_is_not_in_the_way(
     assert rig.module.probe.push_in(slot, slot.lanes[0], speed=70.0) is None
     assert moves(a) == [
         (0, "feed", 2000.0, 70.0),  # blocked after 1480 mm
-        (0, "rollback", 1480.0, 70.0),
+        (0, "rollback", 1480.0, 80.0),
         (1, "feed", 2000.0, 50.0),  # reaches the sensor at 1010 mm: from behind the splitter
-        (1, "rollback", 1010.0, 70.0),  # what it pushed: its tip where it was
+        (1, "rollback", 1010.0, 80.0),  # what it pushed: its tip where it was
         (0, "feed", 2000.0, 70.0),  # pushed again
     ]
     lines = rig.gcode.lines
@@ -1203,7 +1203,7 @@ def test_a_blocked_push_with_no_distance_rolls_back_the_heads_splitter_mm(
     assert rig.module.probe.push_in(slot, slot.lanes[0], speed=70.0) is None
     assert moves(a)[:2] == [
         (0, "feed", 2000.0, 70.0),  # blocked, no distance on its event
-        (0, "rollback", 1000.0, 70.0),  # head 1's splitter_mm, at swap_speed
+        (0, "rollback", 1000.0, 80.0),  # head 1's splitter_mm, at swap_speed
     ]
 
 

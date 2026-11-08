@@ -85,7 +85,7 @@ def test_the_swap_keys_take_their_defaults() -> None:
         LanesConfig(Printer(fakes.FakeReactor(), {}, []), {}),
         ace2k_u1_config.lane_counts([(0, "a", 0), (0, "a", 1)]),
     )
-    assert keys.swap_speed == 70.0
+    assert keys.swap_speed == 80.0
     assert keys.splitter_mm == {0: 1000.0}
     assert keys.splitter_default == {0}
     assert keys.colour_max_distance == 25.0 and keys.colour_min_margin == 8.0

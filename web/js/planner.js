@@ -55,23 +55,42 @@ export const SWAP_S = 90;
 // A tool that the user merged into another (merges, see mergeRoot) is in the group of the tool it joins.
 // Tools of the same colour and material share one spool, as swaps() already counts them.
 // A tool with no colour is a group of its own. The groups are in the order of their first tool.
+// The colours the user set to a bay (mine: root -> bay) are grouped by that bay: two colours set to one bay print
+// from its one spool, and two of the same colour set to two bays stay apart. A colour picked NEW never joins one the
+// user set to a bay: the user asked for a new spool for it.
 /**
  * @param {Plan} plan @param {number[]} used @param {Record<number, number>} [merges]
- * @returns {{ of: number[], count: number }}
+ * @param {Map<number, string>} [mine] @param {Choice} [pick] @returns {{ of: number[], count: number }}
  */
-function groupsOf(plan, used, merges = {}) {
-  // The root tool of each group, in group order.
-  /** @type {number[]} */
-  const firsts = [];
-  const of = used.map((n) => {
-    const r = mergeRoot(plan, merges, n);
-    const tool = plan.tools[r];
-    const g = firsts.findIndex((f) => f === r || (tool.colour && sameTool(plan.tools[f], tool)));
-    if (g >= 0) return g;
-    firsts.push(r);
-    return firsts.length - 1;
+function groupsOf(plan, used, merges = {}, mine = new Map(), pick = {}) {
+  const roots = used.map((n) => mergeRoot(plan, merges, n));
+  /** @param {number} f @param {number} r */
+  const twin = (f, r) => Boolean(plan.tools[r].colour) && sameTool(plan.tools[f], plan.tools[r]);
+  // The group of each root, as a name, whatever the order of the tools: the bay the user set it to; else, unless it
+  // asked for a new spool, the bay the user set one of its twins to; else its first twin not set to a bay (one that
+  // takes no set twin's bay itself); else itself.
+  /** @param {number} r @returns {string} */
+  const setTwin = (r) => {
+    const f = roots.find((x) => mine.has(x) && twin(x, r));
+    return f === undefined ? '' : `bay:${mine.get(f)}`;
+  };
+  /** @param {number} r @returns {string} */
+  const name = (r) => {
+    const bay = mine.get(r);
+    if (bay !== undefined) return `bay:${bay}`;
+    const set = pick[r] === NEW ? '' : setTwin(r);
+    if (set) return set;
+    const f = roots.find((x) => !mine.has(x) && twin(x, r) && (pick[x] === NEW || !setTwin(x)));
+    return `tool:${f ?? r}`;
+  };
+  /** @type {string[]} */
+  const names = [];
+  const of = roots.map((r) => {
+    const k = name(r);
+    if (!names.includes(k)) names.push(k);
+    return names.indexOf(k);
   });
-  return { of, count: firsts.length };
+  return { of, count: names.length };
 }
 
 // The file's T order in groups. A repeat of a group on consecutive T lines is merged.
@@ -111,23 +130,70 @@ function bitCount(mask) {
 // holds a spool that is not of another material. When two tools pick one lane, the first owns it.
 // A group owns the lane of its first tool, in tool order, that owns one.
 // A group with a tool picked NEW (a new spool) owns none, and a lane with an unknown spool is never owned.
+// The tools the user chose a bay for (mine: tool -> bay) come first, and own their bay whatever it holds: the user's
+// choice wins over every suggestion.
 /**
  * @param {Plan} plan @param {number[]} used @param {{ of: number[], count: number }} groups
- * @param {Choice} pick @param {PlanLane[]} lanes @param {Set<number>} fresh @returns {(PlanLane | null)[]}
+ * @param {Choice} pick @param {PlanLane[]} lanes @param {Set<number>} fresh @param {Map<number, string>} mine
+ * @returns {(PlanLane | null)[]}
  */
-function owned(plan, used, groups, pick, lanes, fresh) {
+function owned(plan, used, groups, pick, lanes, fresh, mine) {
   /** @type {(PlanLane | null)[]} */
   const own = Array.from({ length: groups.count }, () => null);
   const taken = new Set();
-  used.forEach((n, i) => {
+  /** @param {number} n @param {number} i */
+  const take = (n, i) => {
     const g = groups.of[i];
     const lane = laneByKey(lanes, pick[n]);
-    if (own[g] || fresh.has(g) || !lane || lane.empty || lane.unknown || taken.has(lane.key)) return;
-    if (materialMatch(plan.tools[n]?.material, lane.material) === 'other') return;
+    if (own[g] || fresh.has(g) || !lane || taken.has(lane.key)) return;
+    const theirs = mine.has(n);
+    if (!theirs && (lane.empty || lane.unknown)) return;
+    if (!theirs && materialMatch(plan.tools[n]?.material, lane.material) === 'other') return;
     taken.add(lane.key);
     own[g] = lane;
-  });
+  };
+  for (const first of [true, false])
+    used.forEach((n, i) => {
+      if (mine.has(n) === first) take(n, i);
+    });
   return own;
+}
+
+// The bays the user chose (tool -> bay): the tools of fixed that the file prints, that join no other colour and whose
+// pick is a bay on a head. NEW is not a bay: the planner says where to put the new spool.
+/**
+ * @param {Plan} plan @param {number[]} used @param {Choice} pick @param {PlanLane[]} lanes
+ * @param {Record<number, number>} merges @param {number[]} fixed @returns {Map<number, string>}
+ */
+function chosenBays(plan, used, pick, lanes, merges, fixed) {
+  /** @type {Map<number, string>} */
+  const out = new Map();
+  for (const n of used) {
+    const key = pick[n];
+    if (!fixed.includes(n) || mergeRoot(plan, merges, n) !== n || !key || key === NEW) continue;
+    if (laneByKey(lanes, key)?.head == null) continue;
+    out.set(n, key);
+  }
+  return out;
+}
+
+// The rule that a bay the user set is the user's, for the pick as it is: a colour the user did not set (not in fixed)
+// whose pick is a bay the user set for another colour has no bay as it is (null), so it never prints from that spool
+// unasked; the suggestion places it. A colour of the same colour and material (a twin) still shares it. placement()
+// applies it to the pick it is given, and the page shows and prints from the same (state.js planNow).
+/** @param {Plan} plan @param {Choice} pick @param {number[]} fixed @returns {Choice} */
+export function userPick(plan, pick, fixed) {
+  /** @type {Map<string, number[]>} */
+  const taken = new Map();
+  for (const j of fixed)
+    if (pick[j] && pick[j] !== NEW) taken.set(String(pick[j]), [...(taken.get(String(pick[j])) ?? []), j]);
+  if (!taken.size) return pick;
+  const out = { ...pick };
+  plan.tools.forEach((tool, n) => {
+    const set = taken.get(String(pick[n]));
+    if (set && !fixed.includes(n) && !set.some((j) => sameTool(tool, plan.tools[j]))) out[n] = null;
+  });
+  return out;
 }
 
 // The groups that have a tool picked NEW: the user asked for a new spool for them.
@@ -143,16 +209,17 @@ function freshGroups(used, groups, pick) {
 const NONE = 0x7fffffff;
 
 // The exact search over count groups. caps holds the lanes of each head, and kept the head where
-// each group keeps its spool (-1 for none). It returns the groups of each head as bit masks.
+// each group keeps its spool (-1 for none). fixed holds, as a mask, the groups that stay on the head where they keep
+// their spool: the user chose their spool. It returns the groups of each head as bit masks.
 // The masks are 32-bit numbers, so count must stay below 31, and the tables hold 2 ** count states
 // per head. It stays at 16 or less: work() searches only when every group has a hooked lane of its
 // own, and there are at most four units of 4 lanes.
 // When the heads cannot hold the groups, swaps and moved are Infinity and masks is empty.
 /**
  * @param {number[]} order @param {number} count @param {number[]} caps @param {number[]} kept
- * @returns {Best}
+ * @param {number} [fixed] @returns {Best}
  */
-export function search(order, count, caps, kept) {
+export function search(order, count, caps, kept, fixed = 0) {
   const heads = caps.length;
   const states = 2 ** count;
   // The swaps of each set of groups on one head, -1 until worked out.
@@ -179,11 +246,14 @@ export function search(order, count, caps, kept) {
     if (h === heads) return -1;
     const at = h * states + rest;
     if (swapsAt[at] >= 0) return at;
+    // The fixed groups of this head go here, and the fixed groups of the other heads never do.
+    const must = rest & fixed & keptMask[h];
     /** @type {number[]} */
     const bits = [];
-    for (let i = 0; i < count; i += 1) if ((rest >> i) & 1) bits.push(i);
-    const lo = Math.max(0, bits.length - room[h]);
-    const hi = Math.min(caps[h], bits.length);
+    for (let i = 0; i < count; i += 1) if ((rest >> i) & 1 && !((fixed >> i) & 1)) bits.push(i);
+    const left = bitCount(rest);
+    const lo = Math.max(0, left - room[h]);
+    const hi = Math.min(caps[h], left);
     let bestSwaps = Infinity;
     let bestMoved = Infinity;
     let bestMask = 0;
@@ -205,7 +275,7 @@ export function search(order, count, caps, kept) {
       if (size === hi) return;
       for (let j = from; j < bits.length; j += 1) walk(j + 1, mask | (1 << bits[j]), size + 1);
     };
-    walk(0, 0, 0);
+    if (bitCount(must) <= hi) walk(0, must, bitCount(must));
     swapsAt[at] = bestSwaps === Infinity ? NONE : bestSwaps;
     movedAt[at] = bestMoved;
     maskAt[at] = bestMask;
@@ -347,14 +417,28 @@ function actOf(lane, from, tools, owners, fresh = false) {
   return [{ act: spoolVerdict(lane, tools) === 'match' ? 'there' : 'check', from: null }, false];
 }
 
+// The act of the line of a group the user set to its bay: see linesOf.
+/** @param {PlanLane} lane @param {import('./types.js').Tool[]} tools @returns {[PlaceAct, boolean]} */
+function chosenAct(lane, tools) {
+  if (lane.empty) return [{ act: 'put', from: null }, false];
+  // Colours of two materials set to one bay ('mixed') have no spool that prints them all: no step can do it, and
+  // Print refuses, naming the colour of the other material (bayProblem).
+  return spoolVerdict(lane, tools) === 'material'
+    ? [{ act: 'put', from: null }, true]
+    : [{ act: 'there', from: null }, false];
+}
+
 // The lines of the block, one per group, the choice of each tool from the lane of its group,
 // and the lanes to take out.
+// A group the user set to its bay (pinned, a mask) reads "there", whatever its colour: unless the bay is empty now (put a
+// spool there) or holds a spool of a material none of its colours is (take it out, put one of their material). A spool
+// with no material keeps "there": the page asks to define it (Define), as for every such bay.
 /**
- * @param {Plan} plan @param {{ used: number[], of: number[], fresh: Set<number> }} groups @param {string[]} lane
- * @param {(PlanLane | null)[]} own @param {Set<string>} owners @param {PlanLane[]} lanes
+ * @param {Plan} plan @param {{ used: number[], of: number[], fresh: Set<number>, pinned: number }} groups
+ * @param {string[]} lane @param {(PlanLane | null)[]} own @param {Set<string>} owners @param {PlanLane[]} lanes
  * @returns {{ lines: PlaceLine[], choice: Choice, takeOut: string[] }}
  */
-function linesOf(plan, { used, of, fresh }, lane, own, owners, lanes) {
+function linesOf(plan, { used, of, fresh, pinned }, lane, own, owners, lanes) {
   /** @type {Choice} */
   const choice = {};
   used.forEach((n, i) => {
@@ -365,24 +449,26 @@ function linesOf(plan, { used, of, fresh }, lane, own, owners, lanes) {
   const lines = lane.map((key, g) => {
     const tools = used.filter((_, i) => of[i] === g);
     const from = own[g]?.key ?? null;
-    const [act, out] = actOf(
-      /** @type {PlanLane} */ (laneByKey(lanes, key)),
-      from,
-      tools.map((n) => plan.tools[n]),
-      owners,
-      fresh.has(g),
-    );
+    const at = /** @type {PlanLane} */ (laneByKey(lanes, key));
+    const group = tools.map((n) => plan.tools[n]);
+    const [act, out] = (pinned >> g) & 1 ? chosenAct(at, group) : actOf(at, from, group, owners, fresh.has(g));
     if (out) takeOut.push(key);
     return { tools, key, ...act };
   });
   return { lines, choice, takeOut };
 }
 
+// The placement. The bays the user chose (fixed) are kept as they are: those colours print from them, the guide has no
+// step for them (but a put into an empty bay or over another material, see linesOf), and no other colour is put in
+// them nor takes their spool (userPick). The other colours keep the suggestion they had (the search as if nothing
+// were fixed); only when that suggestion uses a chosen bay are they placed again, around the chosen bays.
 /**
- * @param {Plan} plan @param {number[]} used @param {Choice} pick @param {PlanLane[]} lanes
- * @param {Record<number, number>} merges @returns {Placement}
+ * @param {Plan} plan @param {number[]} used @param {Choice} given @param {PlanLane[]} lanes
+ * @param {Record<number, number>} merges @param {number[]} fixed @returns {Placement}
  */
-function work(plan, used, pick, lanes, merges) {
+function work(plan, used, given, lanes, merges, fixed) {
+  const pick = userPick(plan, given, fixed);
+  const mine = chosenBays(plan, used, pick, lanes, merges, fixed);
   const byHead = Array.from({ length: HEADS }, (_, h) => lanes.filter((l) => l.head === h));
   const total = byHead.reduce((a, l) => a + l.length, 0);
   const headOf = headOfIn(lanes);
@@ -394,24 +480,50 @@ function work(plan, used, pick, lanes, merges) {
   const counts = swaps(plan.order, asIs, headOf);
   // A pick that names no hooked lane on a head has no swaps to count.
   const now = used.every((n) => headOf(asIs[n]) != null) ? Object.values(counts).reduce((a, b) => a + b, 0) : null;
-  const groups = groupsOf(plan, used, merges);
+  const groups = groupsOf(plan, used, merges, mine, pick);
   const base = { colours: groups.count, lanes: total, now };
   const none = { fits: false, lines: [], takeOut: [], best: null, choice: {} };
   if (groups.count > total) return { ...base, ...none };
   if (groups.count > MAX_GROUPS) return { ...base, ...none, tooMany: true };
   planStats.searches += 1;
   const fresh = freshGroups(used, groups, pick);
-  const own = owned(plan, used, groups, pick, lanes, fresh);
+  const own = owned(plan, used, groups, pick, lanes, fresh, mine);
   const owners = new Set(own.flatMap((l) => (l ? [l.key] : [])));
   const kept = own.map((l) => l?.head ?? -1);
-  const found = search(
-    groupOrder(plan.order, used, groups.of),
-    groups.count,
-    byHead.map((l) => l.length),
-    kept,
-  );
+  // The groups that keep the bay the user chose, as a mask.
+  const pinned = used.reduce((m, n, i) => {
+    const g = groups.of[i];
+    return mine.has(n) && own[g]?.key === mine.get(n) ? m | (1 << g) : m;
+  }, 0);
+  const order = groupOrder(plan.order, used, groups.of);
+  const caps = byHead.map((l) => l.length);
+  const found = search(order, groups.count, caps, kept);
   const lane = assign(found.masks, own, owners, byHead);
-  const { lines, choice, takeOut } = linesOf(plan, { used, of: groups.of, fresh }, lane, own, owners, lanes);
+  const of = { used, of: groups.of, fresh, pinned };
+  if (pinned) {
+    // The suggestion with the chosen bays put back: it stands while no other colour got one of them.
+    const back = lane.map((key, g) => ((pinned >> g) & 1 ? /** @type {PlanLane} */ (own[g]).key : key));
+    if (new Set(back).size === back.length) {
+      const { lines, choice, takeOut } = linesOf(plan, of, back, own, owners, lanes);
+      // Counted as the search counts: the groups of each head.
+      const best = byHead.reduce((sum, hl) => {
+        const keys = new Set(hl.map((l) => l.key));
+        return (
+          sum +
+          headSwaps(
+            order,
+            back.reduce((m, key, g) => (keys.has(key) ? m | (1 << g) : m), 0),
+          )
+        );
+      }, 0);
+      return { ...base, fits: true, lines, takeOut, best, choice };
+    }
+    const around = search(order, groups.count, caps, kept, pinned);
+    const again = assign(around.masks, own, owners, byHead);
+    const { lines, choice, takeOut } = linesOf(plan, of, again, own, owners, lanes);
+    return { ...base, fits: true, lines, takeOut, best: around.swaps, choice };
+  }
+  const { lines, choice, takeOut } = linesOf(plan, of, lane, own, owners, lanes);
   return { ...base, fits: true, lines, takeOut, best: found.swaps, choice };
 }
 
@@ -427,12 +539,13 @@ export const planStats = { searches: 0 };
 
 // Where to put each spool for plan, from the pick (chosen() in print-plan.js), the lanes (the plan's,
 // or liveLanes) and the user's merges (tool -> the tool it joins). A pick may be NEW: a new spool.
+// fixed lists the tools whose bay the user chose: they print from it, whatever the suggestion would say (see work).
 // It is null when the plan has no T order or no tool that the file prints.
 /**
  * @param {Plan | null | undefined} plan @param {Choice} pick @param {PlanLane[]} lanes
- * @param {Record<number, number>} [merges] @returns {Placement | null}
+ * @param {Record<number, number>} [merges] @param {number[]} [fixed] @returns {Placement | null}
  */
-export function placement(plan, pick, lanes, merges = {}) {
+export function placement(plan, pick, lanes, merges = {}, fixed = []) {
   if (!plan || !Array.isArray(plan.order) || !plan.order.length) return null;
   const used = plan.tools.map((_, n) => n).filter(usedTest(plan.order));
   const read = lanes.map(({ key, head, empty, material, unknown, colour }) => ({
@@ -444,14 +557,14 @@ export function placement(plan, pick, lanes, merges = {}) {
     colour,
   }));
   const roots = used.map((n) => mergeRoot(plan, merges, n));
-  const key = JSON.stringify([planId(plan), used.map((n) => pick[n] ?? null), read, roots]);
+  const key = JSON.stringify([planId(plan), used.map((n) => pick[n] ?? null), read, roots, fixed]);
   if (memo.has(key)) {
     const value = /** @type {Placement | null} */ (memo.get(key));
     memo.delete(key); // the most recent last
     memo.set(key, value);
     return value;
   }
-  const value = used.length ? work(plan, used, pick, lanes, merges) : null;
+  const value = used.length ? work(plan, used, pick, lanes, merges, fixed) : null;
   memo.set(key, value);
   if (memo.size > MEMO_SIZE) memo.delete(/** @type {string} */ (memo.keys().next().value));
   return value;
@@ -459,18 +572,21 @@ export function placement(plan, pick, lanes, merges = {}) {
 
 // The change in best swaps if tool n took value: a lane key, NEW, or { merge: j } to join tool j.
 // A lane or NEW also takes tool n out of the merges, and a merge drops tool n's own pick.
+// fixed lists the tools whose bay the user chose (see placement): a bay makes tool n one of them.
 // It is null when that choice leaves more colours than lanes (the picker shows "does not fit"),
 // and 0 when the plan has nothing to place.
 /**
  * @param {Plan} plan @param {Choice} pick @param {PlanLane[]} lanes @param {Record<number, number>} merges
- * @param {number} n @param {string | { merge: number }} value @returns {number | null}
+ * @param {number} n @param {string | { merge: number }} value @param {number[]} [fixed] @returns {number | null}
  */
-export function pickCost(plan, pick, lanes, merges, n, value) {
-  const base = placement(plan, pick, lanes, merges)?.best ?? 0;
+export function pickCost(plan, pick, lanes, merges, n, value, fixed = []) {
+  const base = placement(plan, pick, lanes, merges, fixed)?.best ?? 0;
   const lane = typeof value === 'string';
   const p2 = lane ? { ...pick, [n]: value } : without(pick, n);
   const m2 = lane ? without(merges, n) : { ...merges, [n]: value.merge };
-  const after = placement(plan, p2, lanes, m2);
+  const others = fixed.filter((x) => x !== n);
+  const f2 = lane && value !== NEW ? [...others, n].sort((a, b) => a - b) : others;
+  const after = placement(plan, p2, lanes, m2, f2);
   if (!after) return 0;
   return after.best === null ? null : after.best - base;
 }

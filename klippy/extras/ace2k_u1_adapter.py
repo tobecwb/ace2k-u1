@@ -64,6 +64,7 @@ try:
         api_at_least,
         parked_slot,
         unit_key,
+        unit_speed,
     )
     from .ace2k_u1_eject import EJECT_PROBE_MM, EJECT_REST_STATES
     from .ace2k_u1_grip import OUT_START_MODES
@@ -91,6 +92,7 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
         api_at_least,
         parked_slot,
         unit_key,
+        unit_speed,
     )
     from ace2k_u1_eject import (  # type: ignore[no-redef]
         EJECT_PROBE_MM,
@@ -724,7 +726,7 @@ class Adapter:
         h.motion_open = h.motion_seq is not None
         h.parked_at_sensor = False  # the lane moves: where its tip stops is not known yet
         h.ended_at = None
-        h.eject_drop = False  # a new move after an eject: the bay it empties is not the eject's
+        h.end_eject_drop()  # a new move after an eject: the bay it empties is not the eject's
         if getattr(move, "mode", None) in OUT_START_MODES:
             self.moved_out(h)
         h.grip_live = False  # a start clears the grip of the lane on the unit
@@ -790,14 +792,8 @@ class Adapter:
 
     @staticmethod
     def within_speed(h: Hooked, speed: float) -> float:
-        """Return speed limited to the speed bounds of the unit of h (when ace2k gives them)."""
-        low = getattr(h.api, "speed_min", None)
-        high = getattr(h.api, "speed_max", None)
-        if isinstance(low, (int, float)) and speed < low:
-            speed = low
-        if isinstance(high, (int, float)) and speed > high:
-            speed = high
-        return speed
+        """Return speed limited to the speed bounds of the unit of h (unit_speed)."""
+        return unit_speed(h.api, speed)
 
     def refusals(self) -> tuple[type[Exception], ...]:
         """Return what the hand_over of the core refuses with.

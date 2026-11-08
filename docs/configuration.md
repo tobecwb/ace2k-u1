@@ -20,16 +20,16 @@ ace2k's own settings, in `ace2k.cfg` (`[ace2k]`), are described in ace2k's
 | Setting | Default | Range | What it does |
 |---|---|---|---|
 | `lanes` | `1, 2, 3, 4` | one unit: lanes 1–4; several units: `<unit>:<lane>` entries; lanes joined by `+` feed one head | The lanes wired to a head. With one unit, lane n always feeds head n, and a lane left out is not hooked: its head stays the U1's own. A lane left out feeds no head, so the adapter keeps ace2k's follow off it: it never pushes its filament when its plunger moves, and ace2k's `ACEK_STATUS` says `follow=off (held: not in [ace2k_u1] lanes)` (with ace2k host interface 21 or later; before, `follow=` is not shown). A follow it kept from before a restart is stopped once the adapter hooks. With several units, each entry names a unit and a lane, and its place in the list is its head (`-` leaves that head the U1's own) ([Several units](#several-units)). Lanes joined by `+` feed one head through a splitter: `a:1+a:2, a:3, a:4` ([Several spools in one head](#several-spools-in-one-head)). |
-| `feed_speed` | `70` | mm/s; the unit's own bounds, 9–70, apply | The speed of the push toward a head, and of the follow. ace2k arms the follow at Klipper's start at this speed too. |
+| `feed_speed` | `70` | mm/s; the unit's own bounds, 9–80, apply | The speed of the push toward a head, and of the follow. ace2k arms the follow at Klipper's start at this speed too. |
 | `head_budget_mm` | `2000` | mm, above 0 | The longest push toward a head before the head's filament sensor must have seen the filament. Set it above the longest path from a bay to its head: two splitters in a row can make it longer than 2 000 mm (use `3000` there). A push longer than the unit's longest move (2 000 mm) runs in several moves, and stops when one ends short without having carried the filament. The limit stays: a tube come loose from a splitter wastes at most this much filament, once. |
 | `poll_ms` | `200` | 50–1000 ms | How often the adapter watches the bays. |
-| `tag_push_speed` | `70` | mm/s, 0 or the unit's 9–70 | A spool you put in a bay whose head only that lane feeds. The unit pulls the filament to its parking point, searches further for the spool's tag, and comes back to the parking point. When the U1 loads the head meanwhile and the tag is not read yet, the adapter stops that search and pushes on from where the filament is, with no return. Up to the search's reach (750 mm from the bay, ace2k's `rfid_search_mm`) the push runs at this speed, so the tag can still be read on the way; then, or once the tag is read, at `feed_speed`. At or above `feed_speed` the whole push runs at `feed_speed`. Reads on the move held at every speed up to the unit's 70 mm/s (bench 2026-10-24: Bambu Lab, Anycubic and Snapmaker tags, three times each at 30, 40, 50, 60 and 70 mm/s). `0`: the search runs and comes back first, as before. A value above 0 and under 9 stops Klipper at the start with a config error. A head that several lanes feed never cuts the search. A filament that waited behind an old piece in the head is not cut either: the unit's load pulls it from the bay to the head's sensor in one go. That pull starts at 30 mm/s (or ace2k's `load_speed`, or this speed, when lower), so the drive gear catches the tip, and keeps that speed until the tag is read or the search's reach is behind, then runs at `feed_speed`. If that pull ends by itself short of the head with the tag not read yet, the push that goes on runs at this speed for the rest of the search's reach. That pull counts against `head_budget_mm`. |
+| `tag_push_speed` | `70` | mm/s, 0 or the unit's 9–80 | A spool you put in a bay whose head only that lane feeds. The unit pulls the filament to its parking point, searches further for the spool's tag, and comes back to the parking point. When the U1 loads the head meanwhile and the tag is not read yet, the adapter stops that search and pushes on from where the filament is, with no return. Up to the search's reach (750 mm from the bay, ace2k's `rfid_search_mm`) the push runs at this speed, so the tag can still be read on the way; then, or once the tag is read, at `feed_speed`. At or above `feed_speed` the whole push runs at `feed_speed`. Reads on the move held at every speed up to 70 mm/s (bench 2026-10-24: Bambu Lab, Anycubic and Snapmaker tags, three times each at 30, 40, 50, 60 and 70 mm/s). `0`: the search runs and comes back first, as before. A value above 0 and under 9 stops Klipper at the start with a config error. A head that several lanes feed never cuts the search. A filament that waited behind an old piece in the head is not cut either: the unit's load pulls it from the bay to the head's sensor in one go. That pull starts at 30 mm/s (or ace2k's `load_speed`, or this speed, when lower), so the drive gear catches the tip, and keeps that speed until the tag is read or the search's reach is behind, then runs at `feed_speed`. If that pull ends by itself short of the head with the tag not read yet, the push that goes on runs at this speed for the rest of the search's reach. That pull counts against `head_budget_mm`. |
 | `retry_push_mm` | `10` | 1–40 mm | When the U1's load finds that the filament did not extrude, the U1 would pulse its own side motor to push the tip into the extruder's gears. Here that motor is out of the filament's path. So instead, the adapter pauses the lane's follow, feeds this far, and arms the follow again. |
 | `apply_tags` | `True` | `True` / `False` | A spool's tag sets its head's filament setting on the U1 ([How a spool's tag sets the head's filament](install.md#how-a-spools-tag-sets-the-heads-filament)). `False` turns that off; loading and feeding are unaffected. |
 | `runout_source` | `head` | `head` / `unit` | What pauses the print when a spool runs out at the bay. `head`: the head's own sensor, when the end of the filament reaches it. `unit`: the adapter, as soon as the bay's sensor sees the end; the head is unloaded, the rest rolls back out of the bay, and `RESUME` loads the new spool, as in a shared head ([What pauses the print](install.md#what-pauses-the-print)). A head that several lanes feed does not use it: the print pauses as soon as the bay's sensor sees the end ([When a spool runs out in a shared head](install.md#when-a-spool-runs-out-in-a-shared-head)). |
 | `grip_mm` | the unit's own, `40` | 10–45 mm | How far the unit pulls a filament you insert while its head still holds a piece that does not belong to this lane. It pulls just until the gear holds the filament. On a head that one lane feeds, a unit with ace2k v0.13.0 or later pulls nothing: the filament waits in the bay for the U1's load ([The wait](install.md#the-wait)). |
 | `eject_probe_mm` | `80` | 20–150 mm | When the head's sensor sees filament, `ACEK_EJECT` first rolls the filament back up to this far. It stops sooner if the lane's buffer plunger is pulled tight. This tells whether the head holds it. Keep it longer than the slack between the unit and the head, which measured about 50 mm. A value below 20 is raised to 20, with a warning when Klipper starts ([Taking a filament out of its bay](install.md#taking-a-filament-out-of-its-bay)). |
-| `eject_probe_speed` | `10` | 5–30 mm/s, within the unit's own speeds (9–70) | That probe's speed. A value below the unit's floor is refused when the adapter hooks ([Speeds and lengths the unit refuses](#speeds-and-lengths-the-unit-refuses)). |
+| `eject_probe_speed` | `10` | 5–30 mm/s, within the unit's own speeds (9–80) | That probe's speed. A value below the unit's floor is refused when the adapter hooks ([Speeds and lengths the unit refuses](#speeds-and-lengths-the-unit-refuses)). |
 | `eject_settle_ms` | `500` | 200–2000 ms | After the probe, how long to wait for the lane's buffer plunger. Back at rest: the filament is free, and the unit unloads it. Moved: the head holds the filament, and the U1 unloads the head first. |
 | `temp_ranges` | `PLA:190-230, PETG:220-260, ABS:230-270, ASA:230-270, TPU:210-240` | `<material>:<low>-<high>` entries, separated by commas; 150–350 °C, low below high; empty for none | The temperature range of each material, in °C. A head set outside the range of its lane's material gets a warning on the console and among the page's events, as `head 1: 260 °C is above PLA's 190–230 °C (lane a:2)`. The head still heats; nothing is refused. The check runs when a print starts, for each tool of the file and the lane it prints with. Outside a print it also runs for `M104`, `M109` and the temperature set on the U1's screen or in Fluidd. The U1's own heating during its load, unload and manual feed is not checked. A temperature below 150 °C (a standby or a warm-up) and a material that is not listed never warn. A material is compared as in `unload_temps`; a material that is not listed takes the range of its first word, so `PLA Matte` uses `PLA`. |
 
@@ -39,9 +39,9 @@ The settings below are used only by a head that several lanes feed
 | Setting | Default | Range | What it does |
 |---|---|---|---|
 | `head1_splitter_mm` … `head4_splitter_mm` | `1000` | mm, above 0, up to 2000; only on a head several lanes feed | How far the old lane rolls back at a lane swap, so that its tip is behind the head's splitter. Measure it with [`ACEK_SPLITTER_MEASURE`](commands.md#acek_splitter_measure), or with a tape ([How far the old lane rolls back](#how-far-the-old-lane-rolls-back)). Set on a head with one lane or none, it stops Klipper. |
-| `swap_speed` | `70` | mm/s, within the unit's own speeds (9–70), checked only with a head that several lanes feed | The speed of a swap's roll back of the old lane, and of its push of the new lane to the head. |
+| `swap_speed` | `80`, or the unit's top speed when lower (70 on an older ace2k image), for each unit's moves | mm/s, within the unit's own speeds (9–80); set, it is checked with a head that several lanes feed, and otherwise clamped to the unit's speeds with a warning | The speed of a swap's roll back of the old lane, and of its push of the new lane to the head. |
 | `probe_mm` | `100` | 60–300 mm | How far the probe rolls each lane back to find which lane is in a head. The swap's free check rolls back up to this far too. Keep it longer than the slack between the unit and the head (about 50 mm). A held lane takes up that slack with its plunger at rest, so a shorter value reads it as free. |
-| `probe_speed` | `50` | mm/s, within the unit's own speeds (9–70), checked only with a head that several lanes feed | The speed of every probe move, the swap's free check among them. |
+| `probe_speed` | `50` | mm/s, within the unit's own speeds (9–80), checked only with a head that several lanes feed | The speed of every probe move, the swap's free check among them. |
 | `probe_max_temp` | `60` | 30–150 °C | The probe of a head whose sensor sees filament runs only on a cold head: the cold gear holds the filament, and that is what the probe reads. The adapter turns the heater off and waits until the head is below this temperature, with the head's print fan at full speed. It gives up after 15 minutes. |
 | `unload_temps` | `PLA:220` | `<material>:<°C>` entries, separated by commas; 150–350 °C | The temperature at which a swap forms the old filament's tip, per material: `PLA:220, PETG:240`. A material not listed uses the U1's own unload temperature for it. A material is compared in upper case, as one word: only letters, digits, `-`, `+` and `_` count, so `PLA SILK` and `PLASILK` are the same entry. |
 | `colour_max_distance` | `25` | above 0 | `ACEK_PLAN` suggests a spool for each color of a file. This is the farthest a spool's color may be from the file's color. It is measured as the eye sees colors (CIE76 ΔE, where about 2.3 is the smallest difference you can see). When no spool is that close, none is suggested and you choose one. The web page's own planner does not read this key: it always uses 25. |
@@ -49,20 +49,27 @@ The settings below are used only by a head that several lanes feed
 
 ### Speeds and lengths the unit refuses
 
-The unit's firmware has its own limits for a move: a speed of 9–70 mm/s, and at most 2000 mm in
+The unit's firmware has its own limits for a move: a speed of 9–80 mm/s, and at most 2000 mm in
 one move (ace2k reads them from the unit when it connects). When the adapter hooks, it checks
 `eject_probe_speed` against the speeds of each unit in use. With a head that several lanes feed,
-it also checks `swap_speed` and `probe_speed`. Without such a head nothing uses these two keys,
-and they are not checked. A speed outside the unit's limits would make the unit refuse every such
+it also checks `probe_speed`, and `swap_speed` when it is set. Without such a head nothing uses
+`probe_speed`, and it is not checked; a `swap_speed` that is set and outside a unit's speeds (a
+push to a head that a lane blocks rolls back at it) does not stop the hook: the console says
+`ace2k_u1: swap_speed 90 is outside the unit's 9..80 mm/s: its moves run at 80 mm/s`, and that
+unit's moves run within its speeds. A `swap_speed` left out is not checked: each unit's moves run
+at 80 mm/s, or at the unit's top speed when it is lower, and the console says so once for such a
+unit: `ace2k_u1: swap_speed defaults to the unit's top speed, 70 mm/s` (an older ace2k image), or
+`ace2k_u1: the unit reports no top speed: swap_speed is 70 mm/s` (an image that gives no speeds).
+A speed outside the unit's limits would make the unit refuse every such
 move, so nothing is hooked, and the console says why, as for `grip_mm`:
 
-- `ace2k_u1: not hooked: eject_probe_speed 5 is outside the unit's 9..70 mm/s`;
-- `ace2k_u1: not hooked: swap_speed 80 is outside the unit's 9..70 mm/s` (the same for
+- `ace2k_u1: not hooked: eject_probe_speed 5 is outside the unit's 9..80 mm/s`;
+- `ace2k_u1: not hooked: swap_speed 90 is outside the unit's 9..80 mm/s` (the same for
   `probe_speed`).
 
-With several units, each line names its unit (`ace2k b: swap_speed 80 …`). Set the value within
+With several units, each line names its unit (`ace2k b: swap_speed 90 …`). Set the value within
 the limits and restart Klipper. An older unit image that does not give its speeds is checked
-against 70 mm/s only: `swap_speed 80 is above 70 mm/s`.
+against 70 mm/s only: `swap_speed 75 is above 70 mm/s`.
 
 `probe_mm` is checked when Klipper starts: above 300 mm, the adapter's own limit, Klipper stops
 with its config error. With a head that several lanes feed, the hook also checks it against the
@@ -228,7 +235,7 @@ file sets. After `SAVE_CONFIG` the value is at the end of `printer.cfg`.
 
 A value that is too short leaves the old tip past the splitter. The new lane cannot pass it, so
 the swap fails and the print pauses. A value that is too long only costs time: at `swap_speed`,
-70 mm/s, 990 mm take about 14 s.
+80 mm/s, 990 mm take about 12 s.
 
 The path from a bay to a shared head is longer than to a head with its own tube. Set
 `head_budget_mm` above the longest one. With two splitters in a row a bay was more than 2 000 mm
@@ -307,6 +314,12 @@ pre-extrusion with no purge (`LENGTH=0`): its fan, its cut, a second clean, and 
 position. A refill with no tool of the plan runs it with no purge too. One purge, two cleans: a
 few seconds more, but the nozzle oozes less on the way to the part. Without the macro's clean,
 the nozzle is cleaned once. Nothing breaks either way.
+
+That pre-extrusion retracts 0.5 mm. When the tool has been on the head before, the swap first
+retracts the rest of what the slicer retracted when the tool left (10 mm in the files seen),
+because the slicer pushes that much back at the tower. A tool used for the first time keeps the
+U1's 0.5 mm. So `ACEK_SWAP_LOAD` must not retract: its retraction would add to this one, and the
+colour would start thin.
 
 The adapter selects the head (`T<head> A0`) before each macro, so the macros act on that head.
 

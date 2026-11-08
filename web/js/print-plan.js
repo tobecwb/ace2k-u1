@@ -70,16 +70,18 @@ const idFile = (id) => (id == null ? null : id.slice(0, id.lastIndexOf('\n')));
 // A lane is offered while its bay holds a spool that is not of another known material.
 // A tool whose material is not known keeps its lane, because its select lists the chosen lane
 // and the adapter accepts it.
-// A pick of NEW (a new spool) is kept while its tool is unchanged: it names no lane.
+// A pick of NEW (a new spool) is kept while its tool is unchanged: it names no lane. So is a bay the user set
+// (userBays), whatever it holds now: the bay is the colour's choice, and Print says what it lacks.
 // The user's merges and the pinned spools go with it: a merge is kept while both its tools are unchanged and still
 // of the same known material, and a pin while its tool's pick is kept.
 /**
  * @param {PrintState} print
  * @param {Plan | null | undefined} plan
+ * @param {number[]} [mine] the bays the user set (userBays), when the caller has them already
  * @returns {{ choice: Choice, dropped: { n: number, key: string }[], merges: Record<number, number>,
  *   pinned: Record<number, Pin> } | null}
  */
-export function carriedChoice(print, plan) {
+export function carriedChoice(print, plan, mine = userBays(print.choice, print.overrides)) {
   if (!plan || idFile(print.choiceId) !== plan.file) return null;
   const merges = print.merges ?? {};
   const pinned = print.pinned ?? {};
@@ -90,16 +92,21 @@ export function carriedChoice(print, plan) {
     const before = print.choiceTools?.[n];
     return Boolean(tool && before && sameTool(tool, before));
   };
-  return { ...carriedPicks(print.choice, pinned, plan, unchanged), merges: carriedMerges(merges, plan, unchanged) };
+  return {
+    ...carriedPicks(print.choice, pinned, plan, unchanged, mine),
+    merges: carriedMerges(merges, plan, unchanged),
+  };
 }
 
-// The picks (and their pins) that a re-plan keeps: the tool is unchanged, and its pick is NEW or a lane the new plan
-// still offers it. The others are dropped.
+// The picks (and their pins) that a re-plan keeps: the tool is unchanged, and its pick is NEW, a bay the user set
+// (mine) that the new plan still lists (whatever it holds; a plan that lists no bays keeps it), or a lane the new plan
+// still offers it. The others are dropped: a bay the user set on a unit that is gone too.
 /**
  * @param {Choice} picks @param {Record<number, Pin>} pinned @param {Plan} plan @param {(n: number) => boolean} unchanged
+ * @param {number[]} mine
  * @returns {{ choice: Choice, dropped: { n: number, key: string }[], pinned: Record<number, Pin> }}
  */
-function carriedPicks(picks, pinned, plan, unchanged) {
+function carriedPicks(picks, pinned, plan, unchanged, mine) {
   /** @type {Choice} */
   const choice = {};
   /** @type {Record<number, Pin>} */
@@ -112,7 +119,9 @@ function carriedPicks(picks, pinned, plan, unchanged) {
     // True when the new plan still offers the pick. An unchanged tool is in the plan, so its material can be read.
     /** @returns {boolean} */
     const offered = () =>
-      key === NEW || Boolean(lane && !lane.empty && materialMatch(plan.tools[n].material, lane.material) !== 'other');
+      key === NEW ||
+      (mine.includes(n) && (lane !== undefined || !plan.lanes?.length)) ||
+      Boolean(lane && !lane.empty && materialMatch(plan.tools[n].material, lane.material) !== 'other');
     if (!unchanged(n) || !offered()) {
       dropped.push({ n, key });
       continue;
@@ -166,6 +175,20 @@ function learnt(pin, lane) {
   return next.uid === pin.uid && next.look === pin.look && !pin.was ? pin : next;
 }
 
+// True when a bay holds a known spool that is neither the pinned one nor the one the pin replaced (was).
+/** @param {Pin} pin @param {PlanLane | undefined} bay */
+const otherSpool = (pin, bay) => Boolean(bay?.spool && bay.material && !samePin(pin, bay) && !samePin(pin.was, bay));
+
+// The colours whose bay the user set in the colour picker (overrides) and still picks: a bay, not NEW. This is the one
+// rule of a bay the user set, read by the planner (through planNow's fixed), the pins (rekeyPicks) and a re-plan
+// (carriedChoice): the BAY is the colour's choice until the user changes it, not the spool in it. Empty, refilled
+// with another spool, its spool moved elsewhere: the pick stays on that bay. Whether it can print is Print's question
+// (printGate): no spool, no material or another material blocks it with its reason.
+/** @param {Choice} choice @param {number[] | undefined} overrides @returns {number[]} */
+export function userBays(choice, overrides = []) {
+  return overrides.filter((n) => choice[n] && choice[n] !== NEW).sort((a, b) => a - b);
+}
+
 // The picks after the bays changed, by the pins (tool -> Pin). A pin is dropped only when its spool is certainly
 // gone, never on a gap:
 // - its spool in its bay: kept (the bay it was in wins a tie);
@@ -173,34 +196,82 @@ function learnt(pin, lane) {
 // - its bay empty (the spool in hand during a move), gone from the status, holding a spool of no material, or still
 //   showing the spool the pin replaced (was: the status lags a "Save and use"): kept as it is;
 // - its bay holding another known spool, and its spool in no bay: dropped with its pick, and listed in lost.
-// A pick with no pin (NEW, or the suggestion) stays. Returns the same objects when nothing changed.
+// Those rules are for the picks the page settled. A bay the user set (mine, userBays) never moves nor goes: its pin
+// only follows what the bay holds (userPin), and refilled lists the colours whose bay now holds another known spool,
+// once per spool, so the page compares it with the colour. Returns the same objects when nothing changed.
 /**
- * @param {Choice} choice @param {Record<number, Pin>} pinned @param {PlanLane[]} lanes
- * @returns {{ choice: Choice, pinned: Record<number, Pin>, lost: number[] }}
+ * @param {Choice} choice @param {Record<number, Pin>} pinned @param {PlanLane[]} lanes @param {number[]} mine
+ * @returns {{ choice: Choice, pinned: Record<number, Pin>, lost: number[], refilled: number[] }}
  */
-export function rekeyPicks(choice, pinned, lanes) {
-  const out = { ...choice };
-  const pins = { ...pinned };
-  /** @type {number[]} */
-  const lost = [];
-  let changed = false;
-  for (const [k, pin] of Object.entries(pinned)) {
-    const n = Number(k);
-    const bay = laneByKey(lanes, choice[n]);
-    const at = samePin(pin, bay) ? bay : lanes.find((l) => samePin(pin, l));
-    if (at) {
-      const next = learnt(pin, at);
-      if (at === bay && next === pin) continue;
-      out[n] = at.key;
-      pins[n] = next;
-    } else if (bay?.spool && bay.material && !samePin(pin.was, bay)) {
-      delete out[n];
-      delete pins[n];
-      lost.push(n);
-    } else continue;
-    changed = true;
+export function rekeyPicks(choice, pinned, lanes, mine) {
+  const r = { choice: { ...choice }, pinned: { ...pinned }, lost: [], refilled: [], changed: false };
+  for (const n of mine) userRekey(r, n, userPin(pinned[n], laneByKey(lanes, choice[n])));
+  for (const [k, pin] of Object.entries(pinned))
+    if (!mine.includes(Number(k)))
+      settledRekey(r, Number(k), rekeyOne(pin, laneByKey(lanes, choice[Number(k)]), lanes));
+  const { lost, refilled } = r;
+  return r.changed ? { choice: r.choice, pinned: r.pinned, lost, refilled } : { choice, pinned, lost, refilled };
+}
+
+/** @typedef {{ choice: Choice, pinned: Record<number, Pin>, lost: number[], refilled: number[], changed: boolean }} Rekey */
+
+// rekeyPicks's step for a bay the user set: its pin from userPin. The pick never changes.
+/** @param {Rekey} r @param {number} n @param {{ pin: Pin, refilled: boolean } | null | undefined} next */
+function userRekey(r, n, next) {
+  if (next === undefined) return;
+  r.changed = true;
+  if (next === null) delete r.pinned[n];
+  else {
+    r.pinned[n] = next.pin;
+    if (next.refilled) r.refilled.push(n);
   }
-  return changed ? { choice: out, pinned: pins, lost } : { choice, pinned, lost };
+}
+
+// rekeyPicks's step for a pick the page settled: rekeyOne's verdict.
+/** @param {Rekey} r @param {number} n @param {{ key: string, pin: Pin } | 'lost' | null} next */
+function settledRekey(r, n, next) {
+  if (next === null) return;
+  r.changed = true;
+  if (next === 'lost') {
+    delete r.choice[n];
+    delete r.pinned[n];
+    r.lost.push(n);
+  } else {
+    r.choice[n] = next.key;
+    r.pinned[n] = next.pin;
+  }
+}
+
+// The pin of a bay the user set, from what the bay holds: undefined for no change (the bay empty or gone, the same
+// spool, or the status still showing the spool a "Save and use" replaced), null to drop a pin the bay's spool can no
+// longer be told by (no uid, and its material or colour not known), else the new pin. refilled is true when the bay's
+// spool is new to the pin (another uid or look, the first spool in a bay picked empty, or a look learnt later): the
+// page then compares that spool with the colour, once.
+/** @param {Pin | undefined} pin @param {PlanLane | undefined} bay @returns {{ pin: Pin, refilled: boolean } | null | undefined} */
+function userPin(pin, bay) {
+  const here = pinOf(bay);
+  if (!here || (pin && !samePin(pin, bay) && samePin(pin.was, bay))) return undefined;
+  if (pin && samePin(pin, bay)) {
+    const next = learnt(pin, /** @type {PlanLane} */ (bay));
+    return next === pin ? undefined : { pin: next, refilled: next.look !== pin.look };
+  }
+  if (!here.uid && !here.look) return pin ? null : undefined;
+  return { pin: here, refilled: true };
+}
+
+// What rekeyPicks does with the pin of a pick the page settled, on bay (the pick's bay): null for nothing, 'lost' to
+// drop it, else the pick's bay and pin from now on.
+/**
+ * @param {Pin} pin @param {PlanLane | undefined} bay @param {PlanLane[]} lanes
+ * @returns {{ key: string, pin: Pin } | 'lost' | null}
+ */
+function rekeyOne(pin, bay, lanes) {
+  const at = samePin(pin, bay) ? bay : lanes.find((l) => samePin(pin, l));
+  if (at) {
+    const next = learnt(pin, at);
+    return at === bay && next === pin ? null : { key: at.key, pin: next };
+  }
+  return otherSpool(pin, bay) ? 'lost' : null;
 }
 
 // True when a tool of a new plan matches the same tool of the plan that the choice was made for.
@@ -541,10 +612,11 @@ function undefinedPick(plan, user, choice, lanes, merges) {
  *   print with. A put still pending for a colour (its bay empty, holding a spool of no material, or one the steps
  *   take out) blocks, naming the colour and the bay (print.no_spool). Other pending steps (a check of a spool of a
  *   known material) do not: Print asks about them at the start. It blocks too on what bayProblem says of the bays it
- *   sends, a tool beyond T31, or a print on. A placement that does not fit blocks.
+ *   sends, a tool beyond T31, or a print on. A placement that does not fit blocks. A bay the user set (fixed) that
+ *   holds a spool of another known material blocks naming the bay and both materials (print.bay_material).
  * - With no placement at all (a plan with no T order), the picks are sent, as before the guide.
  * @param {{ plan: Plan, lanes: PlanLane[], pick: Choice, user?: Choice, merges?: Record<number, number>,
- *   place: import('./planner.js').Placement | null }} now
+ *   place: import('./planner.js').Placement | null, fixed?: number[] }} now
  * @param {boolean} busy
  * @returns {{ choice: Choice, block: string | null, asIs: boolean }}
  */
@@ -560,7 +632,10 @@ export function printGate(now, busy) {
   const a = blocked(plan, asIs, lanes);
   if (![...a.missing, ...a.wrong, ...a.unset, ...highTools(plan.order, asIs)].length)
     return { choice: asIs, block: busy ? t('print.busy') : null, asIs: true };
-  if (!place.fits) return { choice: {}, block: noFitWords(place, plan, now.merges), asIs: false };
+  const mine = userBayGroups(now);
+  const theirs = [...mine].map(([key, roots]) => userBayWords(now, key, roots));
+  if (!place.fits)
+    return { choice: {}, block: joinWords([noFitWords(place, plan, now.merges), ...theirs]), asIs: false };
   const choice = place.choice;
   const used = usedTest(plan.order);
   // The bays whose spool the steps take out or move to another bay: what they hold now is not what prints.
@@ -570,7 +645,8 @@ export function printGate(now, busy) {
   /** @type {Map<string, { empty: boolean, roots: Set<number> }>} */
   const puts = new Map();
   plan.tools.forEach((tool, n) => {
-    if (!used(n)) return;
+    // A colour on a bay the user set is worded once, with that bay (userBayWords).
+    if (!used(n) || mine.has(String(choice[n]))) return;
     const lane = laneByKey(lanes, choice[n]);
     const p = lane ? bayProblem(tool, choice[n], lanes) : 'missing';
     // A colour prints only from a bay that holds, right now, a spool of a known material it may print with (bayProblem
@@ -586,9 +662,48 @@ export function printGate(now, busy) {
     } else if (p) out[p].push(n);
   });
   const { missing, wrong, unset } = out;
-  const block = reasonWords(busy, missing, wrong, unset, highTools(plan.order, choice), puts);
-  return { choice, block, asIs: false };
+  const words = reasonWords(busy, missing, wrong, unset, highTools(plan.order, choice), puts);
+  return { choice, block: joinWords([words, ...theirs]), asIs: false };
 }
+
+// Lines of words as one reason, or null when there is none.
+/** @param {(string | null)[]} lines */
+const joinWords = (lines) => lines.filter(Boolean).join(' ') || null;
+
+// The bays the user set (now.fixed), each with the colours it is set for (merge roots), in colour order.
+/** @param {{ plan: Plan, pick: Choice, merges?: Record<number, number>, fixed?: number[] }} now */
+function userBayGroups(now) {
+  /** @type {Map<string, number[]>} */
+  const out = new Map();
+  for (const n of now.fixed ?? []) {
+    const key = now.pick[mergeRoot(now.plan, now.merges ?? {}, n)];
+    if (key) out.set(String(key), [...(out.get(String(key)) ?? []), n]);
+  }
+  return out;
+}
+
+// The one wording of a bay the user set: what it lacks to print its colours (roots), by bayProblem, or null when it
+// prints them. The bay stays the colours' choice (userBays) whatever it holds:
+// - empty: "No spool for colour n: put one in a:2 or pick a bay" (print.no_spool);
+// - a spool of no material: "define a:2 first" (print.define_first);
+// - a spool of another material than one of the colours: the bay and both materials (print.bay_material).
+/** @param {{ plan: Plan, lanes: PlanLane[] }} now @param {string} key @param {number[]} roots @returns {string | null} */
+function userBayWords(now, key, roots) {
+  const lane = laneByKey(now.lanes, key);
+  for (const n of roots) {
+    const p = bayProblem(now.plan.tools[n], key, now.lanes);
+    if (p === 'missing') return t('print.no_spool', { tools: colourNames(roots), key });
+    if (p === 'unset') return t('print.define_first', { key, n: n + 1 });
+    if (p === 'wrong' && lane)
+      return t('print.bay_material', { key, what: lane.material, want: now.plan.tools[n].material, n: n + 1 });
+    if (p === 'wrong') return t('print.choose_first', { tools: colourNames([n]) });
+  }
+  return null;
+}
+
+// Colours named as Print names them: "color 1, color 3".
+/** @param {number[]} ns */
+const colourNames = (ns) => ns.map((n) => t('print.colour_n', { n: n + 1 })).join(', ');
 
 // The swaps of what Print sends, counted on the live lanes' heads, or null while a colour the file prints has no
 // bay on a head.
@@ -603,8 +718,16 @@ export function sentSwaps(plan, choice, lanes) {
 // A pick that asks for a new spool: the tool's group owns no spool in the units.
 export const NEW = 'new';
 
+// A #rrggbb colour, as the page draws and compares it.
+export const HEX = /^#[0-9a-fA-F]{6}$/;
+
 // The largest distance (CIE76 ΔE) at which a spool matches a file's colour: the host's colour_max_distance.
 export const CLOSE = 25;
+// True when a spool's colour is far enough from the file's colour to be named: at CLOSE or beyond, it no longer
+// counts as the file's colour. A colour that is not known is never flagged.
+/** @param {string | null | undefined} spool @param {string | null | undefined} file */
+export const colourDiffers = (spool, file) =>
+  HEX.test(spool ?? '') && HEX.test(file ?? '') && colourDistance(String(spool), String(file)) >= CLOSE;
 // Below this distance (ΔE) two of the file's colours look the same, and the page offers to join them.
 export const SIMILAR = 12;
 
@@ -687,6 +810,12 @@ export function colourName(colour) {
   }
   return best[0];
 }
+
+// A bay's spool colour as the page names it, in a colour's row and its messages: the host's name while the plan read
+// that colour, else the name the host would give it (colourName), else its code.
+/** @param {Pick<PlanLane, 'colour' | 'colour_name'>} lane @returns {string} */
+export const laneColourName = (lane) =>
+  lane.colour_name ?? colourName(lane.colour) ?? String(lane.colour).toUpperCase();
 
 // True when a distance is a match: below CLOSE. At CLOSE a spool no longer matches, as the colour rows name it (ColourRows).
 // The file cards and the guided steps both test a spool with it.

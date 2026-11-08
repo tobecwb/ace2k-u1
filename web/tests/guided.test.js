@@ -1123,6 +1123,7 @@ const now = {
   ],
   place: { lines: [] },
 };
+now.planLanes = now.lanes;
 const white = { id: 'w', colour: '#ffffff', material: 'PETG', tag: true };
 
 test('stepText and stepSub: each kind of step in words', () => {

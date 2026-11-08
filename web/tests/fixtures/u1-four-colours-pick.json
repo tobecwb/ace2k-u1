@@ -1,0 +1,849 @@
+{
+ "print_stats": {
+  "filename": "",
+  "total_duration": 0.0,
+  "print_duration": 0.0,
+  "filament_used": 0.0,
+  "state": "standby",
+  "exception": {},
+  "message": "",
+  "info": {
+   "total_layer": null,
+   "current_layer": null
+  }
+ },
+ "print_task_config": {
+  "filament_vendor": [
+   "Generic",
+   "NONE",
+   "NONE",
+   "NONE"
+  ],
+  "filament_type": [
+   "PLA",
+   "NONE",
+   "NONE",
+   "NONE"
+  ],
+  "filament_sub_type": [
+   "Basic",
+   "NONE",
+   "NONE",
+   "NONE"
+  ],
+  "filament_color": [
+   4294967295,
+   4294967295,
+   4294967295,
+   4294967295
+  ],
+  "filament_color_rgba": [
+   "FFFFFFFF",
+   "FFFFFFFF",
+   "FFFFFFFF",
+   "FFFFFFFF"
+  ],
+  "filament_official": [
+   false,
+   false,
+   false,
+   false
+  ],
+  "filament_sku": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "filament_edit": [
+   false,
+   false,
+   false,
+   false
+  ],
+  "filament_exist": [
+   false,
+   false,
+   false,
+   false
+  ],
+  "filament_soft": [
+   false,
+   false,
+   false,
+   false
+  ],
+  "extruder_map_table": [
+   0,
+   1,
+   2,
+   3,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "extruders_used": [
+   false,
+   false,
+   false,
+   false
+  ],
+  "extruders_replenished": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "time_lapse_camera": false,
+  "auto_bed_leveling": false,
+  "flow_calibrate": false,
+  "shaper_calibrate": false,
+  "auto_replenish_filament": true,
+  "filament_entangle_detect": true,
+  "filament_entangle_sen": "low",
+  "reprint_info": {
+   "auto_bed_leveling": false,
+   "flow_calibrate": false,
+   "flow_calib_extruders": [
+    true,
+    true,
+    true,
+    true
+   ],
+   "time_lapse_camera": false,
+   "extruder_map_table": [
+    0,
+    1,
+    2,
+    3,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "extruders_used": [
+    false,
+    false,
+    false,
+    false
+   ],
+   "end_unload_filament": [
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "filament_color_multi": [
+   {
+    "nums": 1,
+    "alpha": 255,
+    "mode": 0,
+    "colors": [
+     "FFFFFF"
+    ]
+   },
+   {
+    "nums": 1,
+    "alpha": 255,
+    "mode": 0,
+    "colors": [
+     "FFFFFF"
+    ]
+   },
+   {
+    "nums": 1,
+    "alpha": 255,
+    "mode": 0,
+    "colors": [
+     "FFFFFF"
+    ]
+   },
+   {
+    "nums": 1,
+    "alpha": 255,
+    "mode": 0,
+    "colors": [
+     "FFFFFF"
+    ]
+   }
+  ],
+  "flow_calib_extruders": [
+   true,
+   true,
+   true,
+   true
+  ],
+  "replenish_ignore_color": false,
+  "end_led_turn_off": true,
+  "end_unload_filament": [
+   false,
+   false,
+   false,
+   false
+  ],
+  "filament_spool_id": [
+   0,
+   0,
+   0,
+   0
+  ]
+ },
+ "ace2k_u1": {
+  "heads": [
+   [
+    {
+     "unit": "a",
+     "lane": 1
+    },
+    {
+     "unit": "a",
+     "lane": 2
+    },
+    {
+     "unit": "a",
+     "lane": 3
+    },
+    {
+     "unit": "a",
+     "lane": 4
+    }
+   ],
+   null,
+   null,
+   [
+    {
+     "unit": "b",
+     "lane": 1
+    }
+   ]
+  ],
+  "current": [
+   null,
+   null,
+   null,
+   {
+    "unit": "b",
+    "lane": 1
+   }
+  ],
+  "setting_for": [
+   null,
+   null,
+   null,
+   null
+  ],
+  "pause_reason": null,
+  "resuming": false,
+  "hooked": true,
+  "plan": {
+   "file": "4_cores_bench_e05.gcode",
+   "mtime": 1794062043.0568,
+   "tools": [
+    {
+     "colour": "#000000",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:1",
+     "why": "closest"
+    },
+    {
+     "colour": "#ffffff",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:2",
+     "why": "closest"
+    },
+    {
+     "colour": "#eb087e",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": null,
+     "why": "too_far"
+    },
+    {
+     "colour": "#ff2e2e",
+     "material": "PLA",
+     "temp": 220,
+     "first_temp": 220,
+     "lane": "a:4",
+     "why": "closest"
+    }
+   ],
+   "order": [
+    0,
+    1,
+    2,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2
+   ],
+   "raw": [
+    0,
+    0,
+    0,
+    0,
+    1,
+    2,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2,
+    0,
+    1,
+    3,
+    0,
+    1,
+    2
+   ],
+   "order_at": [
+    7389,
+    15564,
+    147265,
+    153267,
+    163627,
+    181465,
+    188483,
+    199665,
+    217483,
+    224521,
+    235719,
+    253431,
+    260475,
+    270818,
+    287684,
+    293897,
+    304240,
+    321841,
+    328901,
+    340138,
+    357764,
+    364867,
+    376103,
+    393597,
+    400668,
+    411929,
+    429445,
+    436548,
+    447796,
+    465193,
+    472275,
+    483514,
+    500971,
+    508064,
+    523582,
+    545400,
+    556712
+   ],
+   "size": 604454,
+   "heads": {
+    "0": 36
+   },
+   "set": true,
+   "choice": {
+    "0": "a:1",
+    "1": "a:2",
+    "2": "a:3",
+    "3": "a:4"
+   },
+   "lanes": [
+    {
+     "key": "a:1",
+     "head": 0,
+     "colour": "#000000",
+     "colour_name": "black",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "a:2",
+     "head": 0,
+     "colour": "#eff0f1",
+     "colour_name": "white",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "a:3",
+     "head": 0,
+     "colour": "#e86fa8",
+     "colour_name": "pink",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "a:4",
+     "head": 0,
+     "colour": "#d32c34",
+     "colour_name": "red",
+     "material": "PLA",
+     "empty": false
+    },
+    {
+     "key": "b:1",
+     "head": 3,
+     "colour": null,
+     "colour_name": null,
+     "material": null,
+     "empty": true
+    }
+   ],
+   "end_unload": false
+  },
+  "spools": {
+   "a:3": {
+    "color": "#e86fa8",
+    "type": "PLA",
+    "vendor": "Generic"
+   },
+   "a:4": {
+    "color": "#d32c34",
+    "type": "PLA",
+    "vendor": "Generic"
+   }
+  },
+  "lanes": {
+   "a:1": {
+    "tag_forgotten": false,
+    "push_end": null,
+    "material_set": true,
+    "eject_no_material": false
+   },
+   "a:2": {
+    "tag_forgotten": false,
+    "push_end": null,
+    "material_set": true,
+    "eject_no_material": false
+   },
+   "a:3": {
+    "tag_forgotten": false,
+    "push_end": null,
+    "material_set": true,
+    "eject_no_material": false
+   },
+   "a:4": {
+    "tag_forgotten": false,
+    "push_end": null,
+    "material_set": true,
+    "eject_no_material": false
+   },
+   "b:1": {
+    "tag_forgotten": false,
+    "push_end": null,
+    "material_set": false,
+    "eject_no_material": false
+   }
+  },
+  "probe_cold": [
+   true,
+   null,
+   null,
+   null
+  ],
+  "probe_max_temp": 60.0
+ },
+ "ace2k_units": {
+  "units": [
+   "ace2k a",
+   "ace2k b"
+  ],
+  "active_lanes": {
+   "extruder": null
+  }
+ },
+ "webhooks": {
+  "state": "ready",
+  "state_message": "Printer is ready"
+ },
+ "ace2k a": {
+  "version": "0.13.0",
+  "link_proven": true,
+  "health": {
+   "ok": true,
+   "failing": [],
+   "latched": [],
+   "post_ms": 2040,
+   "reset_cause": "software",
+   "stale": false,
+   "link_gap_ms": 14930,
+   "link_lost_ms": 3000
+  },
+  "chamber": 26.351,
+  "humidity": 81.2,
+  "ptc_left": 24.837,
+  "ptc_right": 23.887,
+  "dryer": {
+   "state": "idle",
+   "target": null,
+   "drive": null,
+   "duty": 0,
+   "remaining": null,
+   "fans": {
+    "left": false,
+    "right": false
+   },
+   "flaps": {
+    "bottom": "closed",
+    "rear": "closed"
+   },
+   "fault": null,
+   "notices": [],
+   "owner": "none",
+   "fans_commanded": false,
+   "events_lost": 0,
+   "humidity_allowed": false,
+   "mode": "manual",
+   "limit": 40,
+   "max_failures": 4,
+   "failures": 0,
+   "stopped": false,
+   "cold": false,
+   "above_s": 0,
+   "own": false,
+   "bound": false,
+   "profile": {
+    "temp": 45,
+    "minutes": 360
+   },
+   "rh": 81
+  },
+  "lanes": [
+   {
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": {
+     "kind": "stopped",
+     "mode": "following",
+     "motor_mm": 0.0,
+     "filament_mm": 0.0,
+     "seq": 1,
+     "stop_by": "host",
+     "tag_search": false
+    },
+    "tag": {
+     "state": "read",
+     "uid": "00000001",
+     "source": "restored",
+     "record": {
+      "format": "bambu",
+      "brand": "Bambu Lab",
+      "material": "PLA",
+      "name": "PLA Lite",
+      "color_rgba": "000000FF",
+      "uid": "00000001"
+     }
+    }
+   },
+   {
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": {
+     "kind": "stopped",
+     "mode": "following",
+     "motor_mm": 0.0,
+     "filament_mm": 0.0,
+     "seq": 1,
+     "stop_by": "host",
+     "tag_search": false
+    },
+    "tag": {
+     "state": "read",
+     "uid": "00000002",
+     "source": "restored",
+     "record": {
+      "format": "anycubic",
+      "brand": "AC",
+      "material": "PLA",
+      "name": null,
+      "color_rgba": "EFF0F1FF",
+      "uid": "00000002"
+     }
+    }
+   },
+   {
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": {
+     "kind": "stopped",
+     "mode": "following",
+     "motor_mm": 0.0,
+     "filament_mm": 0.0,
+     "seq": 1,
+     "stop_by": "host",
+     "tag_search": false
+    },
+    "tag": {
+     "state": "pending",
+     "uid": null,
+     "source": null,
+     "record": null
+    }
+   },
+   {
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": {
+     "kind": "stopped",
+     "mode": "following",
+     "motor_mm": 0.0,
+     "filament_mm": 0.0,
+     "seq": 1,
+     "stop_by": "host",
+     "tag_search": false
+    },
+    "tag": {
+     "state": "pending",
+     "uid": null,
+     "source": null,
+     "record": null
+    }
+   }
+  ]
+ },
+ "ace2k b": {
+  "version": "0.13.0",
+  "link_proven": true,
+  "health": {
+   "ok": true,
+   "failing": [],
+   "latched": [],
+   "post_ms": 2040,
+   "reset_cause": "power-on",
+   "stale": false,
+   "link_gap_ms": 1010,
+   "link_lost_ms": 3000
+  },
+  "chamber": 25.468,
+  "humidity": 61.0,
+  "ptc_left": 24.375,
+  "ptc_right": 23.995,
+  "dryer": {
+   "state": "idle",
+   "target": null,
+   "drive": null,
+   "duty": 0,
+   "remaining": null,
+   "fans": {
+    "left": false,
+    "right": false
+   },
+   "flaps": {
+    "bottom": "closed",
+    "rear": "closed"
+   },
+   "fault": null,
+   "notices": [],
+   "owner": "none",
+   "fans_commanded": false,
+   "events_lost": 0,
+   "humidity_allowed": false,
+   "mode": "manual",
+   "limit": 40,
+   "max_failures": 4,
+   "failures": 0,
+   "stopped": false,
+   "cold": false,
+   "above_s": 0,
+   "own": false,
+   "bound": false,
+   "profile": {
+    "temp": 45,
+    "minutes": 360
+   },
+   "rh": 61
+  },
+  "lanes": [
+   {
+    "insert": false,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "unknown",
+     "uid": null,
+     "source": null,
+     "record": null
+    }
+   },
+   {
+    "insert": true,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "pending",
+     "uid": null,
+     "source": null,
+     "record": null
+    }
+   },
+   {
+    "insert": false,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "unknown",
+     "uid": null,
+     "source": null,
+     "record": null
+    }
+   },
+   {
+    "insert": false,
+    "rest": true,
+    "pushed": false,
+    "mode": "idle",
+    "error": null,
+    "encoder_mm": 0.0,
+    "ff_on": true,
+    "last_event": null,
+    "tag": {
+     "state": "unknown",
+     "uid": null,
+     "source": null,
+     "record": null
+    }
+   }
+  ]
+ }
+}

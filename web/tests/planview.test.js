@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { options } from 'preact';
 import { html } from '../js/ui/html.js';
 import { App } from '../js/ui/App.js';
 import { SidePanel } from '../js/ui/SidePanel.js';
@@ -14,15 +13,24 @@ import {
   showStep,
   swapsWords,
 } from '../js/ui/PlanView.js';
-import { ColourRows, LaneChip, colourDiffers, swatch } from '../js/ui/ColourChips.js';
+import { ColourRows, LaneChip, swatch } from '../js/ui/ColourChips.js';
 import { ColourPicker, costWords, joinable, unitHeading, toolWords } from '../js/ui/ColourPicker.js';
 import { runAction } from '../js/actions.js';
 import { keepChoice } from '../js/printflow.js';
 import { pickCost, SWAP_S } from '../js/planner.js';
-import { NEW, carriedChoice, rekeyPicks, pinOf, lookOf } from '../js/print-plan.js';
+import {
+  NEW,
+  carriedChoice,
+  colourDiffers,
+  noFitWords,
+  printGate,
+  rekeyPicks,
+  pinOf,
+  lookOf,
+} from '../js/print-plan.js';
 import { hintKept, mergesOf, planNow } from '../js/state.js';
 import { DASH, fmtHM } from '../js/format.js';
-import { renderHtml, textOf } from './ui-helpers.js';
+import { buttons, rendered, renderHtml, textIn, textOf } from './ui-helpers.js';
 import { loadEnglish } from './helpers.js';
 import { t } from '../js/i18n.js';
 
@@ -77,27 +85,6 @@ const appOf = (status, print = {}, panel = null) => ({
   ui: { tab: 'print', panel, sheet: false },
 });
 
-// The markup of a component, and every element vnode it made, so a test can press its buttons.
-function rendered(vnode) {
-  const nodes = [];
-  const prev = options.vnode;
-  options.vnode = (v) => {
-    if (typeof v.type === 'string') nodes.push(v);
-    prev?.(v);
-  };
-  try {
-    return { out: renderHtml(vnode), nodes };
-  } finally {
-    options.vnode = prev;
-  }
-}
-// The text of a vnode (or a list of them), with its children's text.
-const textIn = (v) => {
-  if (Array.isArray(v)) return v.map(textIn).join('');
-  if (!v || typeof v !== 'object') return String(v ?? '');
-  return textIn(v.props.children);
-};
-const buttons = (nodes) => nodes.filter((n) => n.type === 'button');
 const button = (nodes, words) => buttons(nodes).find((n) => textIn(n).replace(/\s+/g, ' ').trim() === words);
 
 // A ctx whose run goes through the real actions (render is a no-op), and records each call.
@@ -252,7 +239,7 @@ test('a chip shows the spool it prints from, the bay, and the colour named in am
   assert.ok(!red.includes('📌'));
   // White and black get a new spool each.
   const white = textOf(renderHtml(html`<${LaneChip} ctx=${{ t }} now=${now} n=${0} />`));
-  assert.match(white, /^new in [234]$/);
+  assert.match(white, /^new spool → [234]$/);
   // Picked by the user onto the red spool once red takes a new one, white is named in amber, with the pin.
   const { ctx } = live(app);
   runAction(ctx, 'pick', { n: '1', key: NEW });
@@ -262,7 +249,7 @@ test('a chip shows the spool it prints from, the bay, and the colour named in am
   const chip = renderHtml(html`<${LaneChip} ctx=${{ t }} now=${after} n=${0} />`);
   const line = after.place.lines.find((l) => l.tools.includes(0));
   assert.match(chip, /class="lk alt"/);
-  assert.ok(textOf(chip).includes(t('print.key_colour', { key: line.key, colour: '#DD3333' })));
+  assert.ok(textOf(chip).includes(t('print.key_colour', { key: line.key, colour: 'red' })));
   assert.ok(chip.includes('title="chosen by you"'));
   // A put the user asked for carries the pin too.
   assert.ok(renderHtml(html`<${LaneChip} ctx=${{ t }} now=${after} n=${6} />`).includes('📌'));
@@ -341,12 +328,14 @@ test('the picker: costs equal pickCost for two bays; another material, an empty 
   assert.equal(button(nodes, t('print.back_to_suggestion')), undefined);
 });
 
-test('the picker: an empty bay is disabled; a new spool and a join carry their costs; back to the suggestion', () => {
+test('the picker: an empty bay is picked like any other; a new spool and a join carry their costs; back to the suggestion', () => {
   const app = appOf(unknown());
   const now = planNow(app);
   const { nodes, runs } = picker(app, 0);
   const empty = buttons(nodes).find((b) => textIn(b).includes(t('units.empty')));
-  assert.equal(empty.props.disabled, true);
+  assert.ok(!empty.props.disabled);
+  empty.props.onClick();
+  assert.equal(runs.at(-1)?.[0], 'pick');
   const fresh = button(
     nodes,
     `${t('print.put_new', { what: 'PLA #FFFFFF' })}${costWords(t, pickCost(now.plan, now.pick, now.lanes, now.merges, 0, NEW)).text}`,
@@ -378,11 +367,13 @@ test('the picker marks the picked bay; while the plan does not fit, no choice is
   const { nodes } = picker(app, 0);
   const four = buttons(nodes).find((b) => textIn(b).startsWith('4'));
   assert.deepEqual([four.props.class, four.props['aria-pressed']], ['opt sel', true]);
-  // Four bays, five printed colours: a new spool still does not fit, so it shows no number, and stays offered. Red's
-  // bay is a join with red (both colours print from that spool), which seats one colour less: it says so.
+  // Four bays, five printed colours: a new spool still does not fit, so it shows no number, and stays offered. Red
+  // set by the user to its bay: that bay is shared with red (both colours would print from that spool), it says so.
   const s = unknown();
   s.ace2k_u1.plan = { ...plan, order: five.order };
-  const big = picker(appOf(s), 0);
+  const bigApp = appOf(s);
+  runAction(live(bigApp).ctx, 'pick', { n: '1', key: '1' });
+  const big = picker(bigApp, 0);
   const fresh = buttons(big.nodes).find((b) => textIn(b).includes(t('print.put_new', { what: 'PLA #FFFFFF' })));
   assert.deepEqual([Boolean(fresh.props.disabled), textIn(fresh).includes(t('print.no_fit'))], [false, false]);
   const red = buttons(big.nodes).find((b) => textIn(b).startsWith('1'));
@@ -569,50 +560,50 @@ for (const [shape, k] of [
     const pin = { uid: null, look: 'pla:#ffffff' };
     const choice = { 0: k(4) };
     // The spool in hand during a move: its bay is empty and it is in no bay. The pick waits.
-    let got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3)), bayOf(k(4))]);
+    let got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3)), bayOf(k(4))], []);
     assert.equal(got.choice, choice);
     assert.deepEqual(got.lost, []);
     // A bay gone from the status, or a spool of no material in it: kept as well.
-    assert.equal(rekeyPicks(choice, { 0: pin }, []).choice, choice);
-    assert.equal(rekeyPicks(choice, { 0: pin }, [bayOf(k(4), { material: null, colour: null })]).choice, choice);
+    assert.equal(rekeyPicks(choice, { 0: pin }, [], []).choice, choice);
+    assert.equal(rekeyPicks(choice, { 0: pin }, [bayOf(k(4), { material: null, colour: null })], []).choice, choice);
     // Put in bay 3: the pick follows it.
-    got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3), WHITE), bayOf(k(4))]);
+    got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3), WHITE), bayOf(k(4))], []);
     assert.deepEqual(got.choice, { 0: k(3) });
     // Two white spools: the bay it was in wins.
-    assert.equal(rekeyPicks(choice, { 0: pin }, [bayOf(k(3), WHITE), bayOf(k(4), WHITE)]).choice, choice);
+    assert.equal(rekeyPicks(choice, { 0: pin }, [bayOf(k(3), WHITE), bayOf(k(4), WHITE)], []).choice, choice);
     // Another known spool in its bay, and the white one in no bay: dropped, and listed as lost.
-    got = rekeyPicks({ ...choice, 2: NEW }, { 0: pin }, [bayOf(k(3)), bayOf(k(4), RED)]);
+    got = rekeyPicks({ ...choice, 2: NEW }, { 0: pin }, [bayOf(k(3)), bayOf(k(4), RED)], []);
     assert.deepEqual([got.choice, got.pinned, got.lost], [{ 2: NEW }, {}, [0]]);
   });
 
   test(`the pin rules (${shape}): a tag read after the pick, or a material in other case, keeps it`, () => {
     const pin = { uid: null, look: 'pla:#ffffff' };
     // The tag is read later: the spool now has a uid. Kept, and the pin learns the uid.
-    let got = rekeyPicks({ 0: k(2) }, { 0: pin }, [bayOf(k(2), { ...WHITE, uid: 'U1' })]);
+    let got = rekeyPicks({ 0: k(2) }, { 0: pin }, [bayOf(k(2), { ...WHITE, uid: 'U1' })], []);
     assert.deepEqual([got.choice, got.pinned], [{ 0: k(2) }, { 0: { uid: 'U1', look: 'pla:#ffffff' } }]);
     // Then the tag's record names another colour: the uid still matches, the pick stays.
-    got = rekeyPicks(got.choice, got.pinned, [bayOf(k(2), { material: 'PLA', colour: '#fafafa', uid: 'U1' })]);
+    got = rekeyPicks(got.choice, got.pinned, [bayOf(k(2), { material: 'PLA', colour: '#fafafa', uid: 'U1' })], []);
     assert.deepEqual([got.choice, got.lost], [{ 0: k(2) }, []]);
     // "pla" and "#FFFFFF" in the bay: the same look.
     const same = { 0: k(2) };
-    assert.equal(rekeyPicks(same, { 0: pin }, [bayOf(k(2), { material: 'pla ', colour: '#FFFFFF' })]).choice, same);
+    assert.equal(rekeyPicks(same, { 0: pin }, [bayOf(k(2), { material: 'pla ', colour: '#FFFFFF' })], []).choice, same);
   });
 
   test(`the pin rules (${shape}): after "Save and use" the old spool still showing keeps, the new one settles it`, () => {
     const pin = { uid: null, look: 'petg:#000000', was: { uid: null, look: 'pla:#ffffff' } };
     const choice = { 0: k(3) };
     // The status still shows the spool the bay held before the save: kept.
-    let got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3), WHITE)]);
+    let got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3), WHITE)], []);
     assert.equal(got.choice, choice);
     // The saved spool shows: the pin keeps it, and forgets the old spool.
-    got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3), { material: 'PETG', colour: '#000000' })]);
+    got = rekeyPicks(choice, { 0: pin }, [bayOf(k(3), { material: 'PETG', colour: '#000000' })], []);
     assert.deepEqual(got.pinned, { 0: { uid: null, look: 'petg:#000000' } });
     // A third, known spool: dropped.
-    assert.deepEqual(rekeyPicks(choice, { 0: pin }, [bayOf(k(3), RED)]).lost, [0]);
+    assert.deepEqual(rekeyPicks(choice, { 0: pin }, [bayOf(k(3), RED)], []).lost, [0]);
   });
 }
 
-test('keepChoice: a spool taken out keeps its pick, put elsewhere moves it, replaced by another drops it with a toast', () => {
+test('keepChoice: a bay the user set stays the pick, taken out, its spool moved away, or refilled with another', () => {
   const s = shared(); // white PLA in bay 4, on head T0 with bay 1
   const app = appOf(s);
   const { ctx } = live(app);
@@ -634,20 +625,57 @@ test('keepChoice: a spool taken out keeps its pick, put elsewhere moves it, repl
   const same = app.print.choice;
   keep();
   assert.equal(app.print.choice, same, 'nothing moved: the same objects');
-  withBays(white, out); // put in bay 3 (the bay of no material is emptied first in real life; here it is replaced)
-  assert.deepEqual(app.print.choice, { 0: '3' });
+  withBays(white, out); // put in bay 3: the pick is the bay, not the spool
+  assert.deepEqual(app.print.choice, { 0: '4' });
   const red = { ...white, tag: { state: 'read', record: { brand: 'X', material: 'PLA', color_rgba: 'D32C34FF' } } };
-  withBays(red, out); // a red spool where the white one was, and the white in no bay
-  assert.deepEqual([app.print.choice, app.print.pinned], [{}, {}]);
-  assert.deepEqual(toasts, ['color 1 lost its spool, back to the suggestion']);
+  withBays(white, red); // a red spool in bay 4
+  // The pick stays on bay 4, the pin now on the red spool, and one toast says it.
+  assert.deepEqual([app.print.choice, app.print.pinned], [{ 0: '4' }, { 0: { uid: null, look: 'pla:#d32c34' } }]);
+  assert.equal(toasts.length, 1);
+  assert.match(toasts[0], /^4 now holds .+ for color 1$/);
+  withBays(white, red); // the same again: no second toast
+  assert.equal(toasts.length, 1);
 });
 
-test('keepChoice: a re-plan follows a spool that moved, before checking the new plan', () => {
+test('the pin rules: a bay the user set is the pick whatever it holds; its pin follows what the bay holds', () => {
+  const pin = { uid: null, look: 'pla:#ffffff' };
+  const choice = { 0: 'a:1' };
+  // Edit spool turned a:1 black and a:2 white: the pick stays on a:1, on the black spool now, listed as refilled.
+  const lanes = [bayOf('a:1', { material: 'PLA', colour: '#000000' }), bayOf('a:2', WHITE)];
+  const got = rekeyPicks(choice, { 0: pin }, lanes, [0]);
+  assert.deepEqual(
+    [got.choice, got.pinned, got.lost, got.refilled],
+    [choice, { 0: { uid: null, look: 'pla:#000000' } }, [], [0]],
+  );
+  // The same status again: nothing changes.
+  const again = rekeyPicks(got.choice, got.pinned, lanes, [0]);
+  assert.deepEqual([again.choice === got.choice, again.pinned === got.pinned, again.refilled], [true, true, []]);
+  // A pick the page settled (not the user's) still follows its spool.
+  assert.deepEqual(rekeyPicks(choice, { 0: pin }, lanes, []).choice, { 0: 'a:2' });
+  // Its bay empty and its spool in a:2: the user's pick stays on a:1.
+  const empty = rekeyPicks(choice, { 0: pin }, [bayOf('a:1'), bayOf('a:2', WHITE)], [0]);
+  assert.equal(empty.choice, choice);
+  // A spool whose colour is not known, with no uid: the pin it can no longer be told by goes, the bay stays.
+  const vague = rekeyPicks(choice, { 0: pin }, [bayOf('a:1', { material: 'PLA', colour: null })], [0]);
+  assert.deepEqual([vague.choice, vague.pinned, vague.refilled], [choice, {}, []]);
+  const twice = rekeyPicks(vague.choice, vague.pinned, [bayOf('a:1', { material: 'PLA', colour: null })], [0]);
+  assert.equal(twice.pinned, vague.pinned);
+  // Its colour known later: pinned again, and listed as refilled, so the page compares it with the colour once.
+  const known = rekeyPicks(choice, {}, [bayOf('a:1', { material: 'PLA', colour: '#000000' })], [0]);
+  assert.deepEqual([known.pinned, known.refilled], [{ 0: { uid: null, look: 'pla:#000000' } }, [0]]);
+  // A tagged spool whose colour becomes known later (the same uid learns a look): refilled as well.
+  const tagged = rekeyPicks(choice, { 0: { uid: 'U1', look: null } }, [bayOf('a:1', { ...WHITE, uid: 'U1' })], [0]);
+  assert.deepEqual([tagged.pinned, tagged.refilled], [{ 0: { uid: 'U1', look: 'pla:#ffffff' } }, [0]]);
+  // A tag read later on the same look (it only learns a uid): not new to the pin.
+  assert.deepEqual(rekeyPicks(choice, { 0: pin }, [bayOf('a:1', { ...WHITE, uid: 'U1' })], [0]).refilled, []);
+});
+
+test('keepChoice: a re-plan keeps a bay the user set, also one that is empty now, with no "dropped" toast', () => {
   const s = shared();
   const app = appOf(s);
   const { ctx } = live(app);
   ctx.run('pick', { n: '0', key: '4' });
-  // The white spool moved to bay 3, and the file was planned again: the new plan's snapshot no longer has it in 4.
+  // The white spool moved to bay 3, and the file was planned again: the new plan's snapshot has bay 4 empty.
   const next = structuredClone(s);
   next.ace2k.lanes[2] = next.ace2k.lanes[3];
   next.ace2k.lanes[3] = { ...next.ace2k.lanes[3], insert: false, tag: { state: 'unknown', record: null } };
@@ -662,7 +690,10 @@ test('keepChoice: a re-plan follows a spool that moved, before checking the new 
   app.status = next;
   const toasts = [];
   keepChoice({ app, t, toast: (m) => toasts.push(m) });
-  assert.deepEqual([app.print.choice, app.print.choiceId, toasts], [{ 0: '3' }, 'five.gcode\n2', []]);
+  assert.deepEqual(
+    [app.print.choice, app.print.overrides, app.print.choiceId, toasts],
+    [{ 0: '4' }, [0], 'five.gcode\n2', []],
+  );
 });
 
 test('a plan with no T order: the picker offers every bay at +0, as nothing is placed', () => {
@@ -792,4 +823,50 @@ test('cmpLine: the comparison in one line, with the time stopped, or why the sug
   assert.equal(cmpLine(t, null, 1, 'x'), t('print.cmp_line', { as_is: DASH, best: '1 swap', time: fmtHM(SWAP_S) }));
   assert.equal(cmpLine(t, 3, 2, 'x'), `As it is 3 swaps · with the suggestion 2 swaps, ≈ ${fmtHM(2 * SWAP_S)} stopped`);
   assert.equal(cmpLine(t, 0, null, 'why'), 'As it is 0 swaps · with the suggestion: why');
+});
+
+test('keepChoice: a bay the user set that the new plan no longer lists (its unit gone) is dropped, with the toast', () => {
+  const s0 = shared();
+  const app = appOf(s0);
+  const { ctx } = live(app);
+  ctx.run('pick', { n: '0', key: '4' });
+  const next = structuredClone(s0);
+  next.ace2k_u1.plan = {
+    ...plan,
+    mtime: 2,
+    lanes: [{ key: '3', head: 2, colour: '#ffffff', material: 'PLA', empty: false }],
+  };
+  app.status = next;
+  const toasts = [];
+  keepChoice({ app, t, toast: (m) => toasts.push(m) });
+  assert.deepEqual([app.print.choice, app.print.overrides], [{}, []]);
+  assert.deepEqual(toasts, [t('print.choice_dropped', { choices: 'color 1: 4' })]);
+});
+
+test('printGate: a placement that does not fit still says what each bay the user set lacks', () => {
+  const p3 = {
+    file: 'three.gcode',
+    mtime: 1,
+    tools: [
+      { colour: '#ffffff', material: 'PLA' },
+      { colour: '#000000', material: 'PLA' },
+      { colour: '#ff0000', material: 'PLA' },
+    ],
+    order: [0, 1, 2, 0],
+  };
+  const lanes = [
+    { key: 'a:1', head: 0, material: null, colour: null, empty: true },
+    { key: 'a:2', head: 0, material: 'PLA', colour: '#000000', empty: false, materialSet: true },
+  ];
+  const pick = { 0: 'a:1', 1: 'a:2' };
+  const place = /** @type {any} */ ({ fits: false, colours: 3, lanes: 2, lines: [], takeOut: [], choice: {} });
+  const gate = printGate({ plan: p3, lanes, pick, user: pick, merges: {}, place, fixed: [0] }, false);
+  assert.ok(gate.block?.includes(t('print.no_spool', { tools: 'color 1', key: 'a:1' })), String(gate.block));
+  assert.ok(gate.block?.startsWith(noFitWords(place, p3, {})), String(gate.block));
+  // A bay that prints its colour adds nothing; a bay gone from the status asks for a spool.
+  const more = printGate(
+    { plan: p3, lanes, pick: { ...pick, 2: 'z:9' }, user: pick, merges: {}, place, fixed: [1, 2] },
+    false,
+  );
+  assert.equal(more.block, `${noFitWords(place, p3, {})} ${t('print.choose_first', { tools: 'color 3' })}`);
 });

@@ -156,7 +156,7 @@ class Rollback:
         """
         adapter = self._adapter()
         reactor = self.host.reactor
-        speed = self.host.swap_cfg.swap_speed
+        speed = self.host.swap_cfg.swap_speed_for(h.api)
         free = bool(getattr(h.api, "has_free_rollback", False))
         h.follow_wanted = False  # the lane leaves the head, so its follow is not armed again
         held = h.hold  # it is given back as it was, because the hold of another step outlives this

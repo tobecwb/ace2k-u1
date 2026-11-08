@@ -66,9 +66,13 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
 # - The spool.
 # - The load (heated to the printing temperature, grip, purge, the U1's clean).
 # - A read of the sensor of the head.
-# - The U1's own pre-extrusion: one clean and its idle exit.
-# The swap makes no retraction of its own. It makes no move to the part either, because the next
-# print move takes the head there.
+# - The U1's own pre-extrusion: its retraction, one clean and its idle exit.
+# The slicer retracts a tool before its T, and pushes that much back when the same tool comes
+# back. On a shared head the swap has just purged the nozzle full. So the pre-extrusion retracts
+# what the slicer retracted when the arriving tool last left the head (10 mm in the files seen).
+# Otherwise the slicer's push lands on a full nozzle and leaves a blob on the prime tower. A tool
+# used for the first time, or with nothing known, keeps the U1's own 0.5 mm. The swap makes no
+# move to the part, because the next print move takes the head there.
 SWAP_STEPS = (
     "unload",
     "free",
@@ -97,8 +101,32 @@ DEFAULT_NOZZLE_MM = 0.4  # for a nozzle whose extruder does not say its diameter
 # The U1's own pre-extrusion length. The swap runs it with LENGTH=0, and adds this to
 # printing_e_pos itself, as the U1 counted it when the pre-extrusion purged.
 U1_PREEXTRUDE_MM = 20.0
+# The speed of the return step's retraction, in mm/min (30 mm/s).
+RETRACT_F = 1800
+# The retraction of the U1's own pre-extrusion, in mm. The return step retracts the rest.
+U1_PREEXTRUDE_RETRACT_MM = 0.5
+# The G-code state the return step's retraction saves and restores.
+RETRACT_STATE = "ACEK_SWAP_RETRACT"
 U1_UNLOAD_TEMP = 250.0  # the unload temperature of the U1 when its filament table cannot tell
 U1_LOAD_TEMP = 250.0  # the load temperature of the U1 when its filament table cannot tell
+
+
+def retract_script(rest: float) -> str:
+    """The return step's retraction of rest mm, as one script.
+
+    It runs at the print's speed and flow factors, with no M220 or M221. The flow factor scales
+    the slicer's push back at the tower too, so the retraction stays equal to it. And on the U1,
+    M220 and M221 write the factors to the power-loss record, which the restore does not write
+    back.
+    """
+    return "\n".join(
+        (
+            f"SAVE_GCODE_STATE NAME={RETRACT_STATE}",
+            "M83",
+            f"G1 E-{rest:g} F{RETRACT_F}",
+            f"RESTORE_GCODE_STATE NAME={RETRACT_STATE}",
+        )
+    )
 
 
 class _Unread(Enum):
@@ -159,6 +187,10 @@ class SwapState:
     freed_mm: float = 0.0  # how far the free check of this attempt rolled the old lane back
     lane_error: str | None = None  # the error of the new lane after its load, once (_lane_fit)
     print_temp: float | None = None  # the PRINT_TEMP its load macro left the head at
+    # printing_e_pos as the swap started, kept only while the print was printing: the slicer's
+    # retraction of the tool that leaves. It is recorded once the old lane is known
+    # (_record_left), then set back to None.
+    left_e_pos: float | None = None
     # The head read empty before the last push of the new lane, and that push ended with only the
     # new lane moved toward the head since. A sensor set after it is the new lane (_probe_head).
     pushed_alone: bool = False
@@ -490,7 +522,8 @@ class Swapper:
         - The head takes its spool.
         - The load macro, with printing_e_pos of the head at 0.
         - A read of the sensor of the head.
-        - The idle exit of the U1, with no retraction.
+        - The U1's pre-extrusion, with no purge: the retraction the slicer will push back
+          (_step_return), a clean and the idle exit.
         A head whose lane is not known is probed first.
 
         A failure puts the head back and pauses the print plainly. RESUME finishes the swap.
@@ -559,6 +592,8 @@ class Swapper:
                     self.host.tracker.drop_owed_heat(head)  # the head swaps: it docks no more
                     self.host.u1.script("SAVE_GCODE_STATE NAME=ACEK_SWAP")
                     state.e_pos = self.e_pos(head)
+                    if adapter.print_state() == "printing":
+                        state.left_e_pos = state.e_pos  # the slicer's retraction, not a pause's
                     state.saved = True
                     if step == SWAP_STEPS[0]:
                         self._xy_homed_or_raise(head)  # before the probe moves any lane
@@ -569,6 +604,7 @@ class Swapper:
                         step = "hand over"  # an internal error of the core is raised as this step's
                         self._adapter().head_watch.hand_head(slot, found)
                         step = state.step
+                self._record_left(state)  # the old lane is known now, from the probe if needed
                 # "restore" means that every step is done and only the G-code restore is left.
                 at = state.step
                 steps = SWAP_STEPS[SWAP_STEPS.index(at) :] if at in SWAP_STEPS else ()
@@ -883,7 +919,7 @@ class Swapper:
         budget_mm = self._push_budget(state)
         state.pushed_alone = False
         error = self._probe().push_in(
-            state.slot, new, speed=self.host.swap_cfg.swap_speed, budget=budget_mm
+            state.slot, new, speed=self.host.swap_cfg.swap_speed_for(new.api), budget=budget_mm
         )
         # The push returned, so the new lane moved last, after the head read empty. A push that
         # raised may have moved another lane of the head in its search, and leaves this False.
@@ -955,10 +991,17 @@ class Swapper:
         # the cleaning area: one purge, two cleans. A soft filament purges nothing here either:
         # the U1's macro sets its 10 mm only when SOFT is True, and SOFT=1 reaches it as the
         # string "1". For a tool it runs forced, and the U1 records the tool as pre-extruded,
-        # so the file's call right after the swap is skipped. A refill with no tool runs the
-        # same macro directly, with no purge too: its load macro has purged. The restore then
-        # puts back the G-code state with no move, and the next print move takes the head to
-        # the part. If the print is paused, the RESUME of the U1 moves back by itself.
+        # so the file's call right after the swap is skipped. The macro retracts 0.5 mm before
+        # its fan and its clean. When the tool owes more (_retract_owed: what the slicer
+        # retracted when the tool last left the head, because the slicer pushes that much back
+        # at the tower), _retract_rest spends it and retracts the rest just before the macro.
+        # The head is then hot at the cleaning area after the load macro's purge and clean, so
+        # the nozzle leaves the bin retracted by the total and the macro's clean comes last.
+        # With nothing known, in a pause, or for a refill, the U1's 0.5 mm stays alone.
+        # A refill with no tool runs the same macro directly, with no purge too: its load macro
+        # has purged. The restore then puts back the G-code state with no move, and the next
+        # print move takes the head to the part. If the print is paused, the RESUME of the U1
+        # moves back by itself.
         head, timer = state.slot.head, state.timer
         # A mark left from an earlier swap must not skip this swap's own pre-extrusion.
         self.host.tracker.preextrude_after = None
@@ -967,9 +1010,12 @@ class Swapper:
         self.host.u1.script(f"T{head} A0", timer)
         self._primed_e_pos(head)
         if state.tool is not None:
-            self.host.u1.script(f"{PREEXTRUDE} INDEX={state.tool} FORCE=1 LENGTH=0", timer)
+            tool = state.tool
+            mm = self._retract_owed(state)
+            said = "" if mm is None else self._retract_rest(state, tool, mm)
+            self.host.u1.script(f"{PREEXTRUDE} INDEX={tool} FORCE=1 LENGTH=0", timer)
             self._adapter().say(
-                f"ace2k_u1: head {head + 1}: pre-extrusion after the swap (T{state.tool})"
+                f"ace2k_u1: head {head + 1}: pre-extrusion after the swap (T{tool}){said}"
             )
             return
         # The temperature the load left the head at. With no tool, it is the U1's load temperature.
@@ -977,6 +1023,58 @@ class Swapper:
         soft = self._soft(head)
         self.host.u1.script(f"{INNER_PREEXTRUDE} SOFT={soft} TEMP={temp:g} LENGTH=0", timer)
         self._adapter().say(f"ace2k_u1: head {head + 1}: pre-extrusion after the refill")
+
+    def _retract_rest(self, state: SwapState, tool: int, mm: float) -> str:
+        """Retracts what mm adds to the U1's 0.5 mm, before the U1's pre-extrusion runs.
+
+        Returns the end of the console line. The retraction is not passed to the U1's macro as
+        RETRACT_LENGTH. The macro cannot take it: it applies abs to the parameter as a string,
+        and fails. So the rest is a G1 E of its own, in one script between a save and a restore
+        of the G-code state, as the U1's macro does with its own retraction. The restore puts the
+        print's E mode and its E position back. Only the filament moves back.
+
+        The value is spent first, before anything is sent. So a failure can cost the slicer's
+        retraction once (the retry runs in the pause, with the U1's 0.5 mm only), but the swap
+        never retracts it twice. A failure after this is sent cannot tell whether the G1 ran.
+        So the saved printing_e_pos that the failure puts back is lowered by the rest: the
+        resume and the flush of the U1 then count the filament the G1 may have pulled back. On
+        a failure the swap's own restore puts the G-code state back (put_back).
+        """
+        self.host.tracker.spend_retract(tool)
+        rest = round(mm - U1_PREEXTRUDE_RETRACT_MM, 2)
+        if rest <= 0:
+            return (
+                f", the U1's own {U1_PREEXTRUDE_RETRACT_MM:g} mm retraction covers"
+                f" the slicer's {mm:g} mm"
+            )
+        if state.e_pos is not None:
+            state.e_pos -= rest
+        self.host.u1.script(retract_script(rest), state.timer)
+        return f", retracting {mm:g} mm as the slicer did"
+
+    def _record_left(self, state: SwapState) -> None:
+        """Records what the slicer retracted the tool that leaves the head, once.
+
+        It runs when the old lane of the swap is known: at the start, or after the probe that
+        names it at RESUME. Only a swap that a T asked for records. A refill swaps a lane for
+        itself, and no tool leaves.
+        """
+        e_pos, state.left_e_pos = state.left_e_pos, None
+        if e_pos is None or state.refill or state.tool is None:
+            return
+        self.host.tracker.record_retract(state.slot.head, state.old, state.tool, e_pos)
+
+    def _retract_owed(self, state: SwapState) -> float | None:
+        """Returns what the return step retracts for the tool in all, or None for the U1's 0.5 mm.
+
+        It is what the slicer retracted when the tool last left the head. It is used only while
+        the print is printing. In a pause the U1 does not count the retraction in printing_e_pos,
+        so the nozzle and the U1 would disagree. The value then stays for a later return. A
+        refill keeps the 0.5 mm, because the slicer pushes nothing back after it.
+        """
+        if state.refill or state.tool is None or self._adapter().print_state() != "printing":
+            return None
+        return self.host.tracker.retract_for(state.tool)
 
     def _primed_e_pos(self, head: int) -> None:
         """Counts the purge of the load macro in printing_e_pos of the head, before the return.

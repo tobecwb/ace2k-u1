@@ -32,6 +32,9 @@ PRINTING_BELOW_C = 40.0
 PRINTING_FLOOR_C = 150.0
 # How far an M109 may be from the swap's temperature to skip its wait: the U1's settle delta.
 WAIT_SKIP_DELTA = 1.5
+# The longest retraction a swap copies from the slicer. The slicer's own retraction before a T is
+# 10 mm in the files seen. A value past this is not a retraction, so it counts as unknown.
+RETRACT_MAX_MM = 15.0
 
 
 def _next_index(seq: Sequence[int], start: int, n: int) -> int | None:
@@ -169,6 +172,11 @@ class PrintTracker:
         # takes it (take_owed_heat). It is dropped at the start or end of a print, by a failed
         # swap and when a swap onto the head starts (drop_owed_heat).
         self.owed_heat: dict[int, tuple[float, str]] = {}
+        # tool -> mm: what the slicer retracted when the tool last left its shared head. The slicer
+        # pushes it back when the tool comes back, so the swap that brings the tool back retracts
+        # as much. A swap records it (record_retract) and spends it at its return step. It is
+        # dropped at the start or end of a print.
+        self.retract_owed: dict[int, float] = {}
 
     def read_plan(self, path: str) -> ace2k_u1_plan.ParsedPlan:
         """Runs ace2k_u1_plan.read_file(path) in a thread of its own.
@@ -325,17 +333,68 @@ class PrintTracker:
         self.wait_skip_tool = self.wait_skip_temp = None
 
     def reset_print(self) -> None:
-        """Clears what a print leaves here: its T index, the marks of a swap, the owed heat."""
+        """Clears what a print leaves here: its T index, the marks of a swap, the owed heat and the
+        owed retractions."""
         self.t_index = self.t_raw = -1
         self.preextrude_after = None
         self.drop_owed_heat()
         self.clear_wait_skip()
+        self.retract_owed = {}
 
     def after_swap(self, head: int, tool: int | None, temp: float | None) -> None:
         """Marks a swap's end: the file's pre-extrusion and its first M109 are skipped."""
         self.preextrude_after = head
         self.wait_skip_tool = tool
         self.wait_skip_temp = temp
+
+    def record_retract(self, head: int, old: Hooked | None, tool: int, e_pos: float | None) -> None:
+        """Records what the slicer retracted the tool that left head, before the T of tool.
+
+        A swap calls this once, when the lane that leaves the head is known: old. e_pos is the
+        head's printing_e_pos read as the swap started, while the print was printing; the
+        slicer's retraction before the T is -e_pos. The tool that left is the last T of the file
+        on head (_left_head). A reading of 0 means the slicer retracted nothing, so that tool
+        owes nothing. A reading up to RETRACT_MAX_MM replaces the tool's record. Anything else
+        (no number, too far, the tool not known) leaves the record as it was: the slicer
+        retracts a tool the same way at each T, so its earlier value is the better guess.
+        """
+        left = self._left_head(head, old, tool)
+        if left is None or e_pos is None:
+            return
+        mm = -e_pos
+        if mm <= 0.0:
+            self.retract_owed.pop(left, None)
+        elif mm <= RETRACT_MAX_MM:
+            self.retract_owed[left] = round(mm, 2)
+
+    def retract_for(self, tool: int) -> float | None:
+        """Returns what the slicer retracted tool when it last left its head, or None."""
+        return self.retract_owed.get(tool)
+
+    def spend_retract(self, tool: int) -> None:
+        """Forgets the value of tool once a swap has retracted it."""
+        self.retract_owed.pop(tool, None)
+
+    def _left_head(self, head: int, old: Hooked | None, tool: int) -> int | None:
+        """Returns the tool of the last T line of the file on head, before the T of tool.
+
+        The print must be at the T of tool in the file's T lines (t_raw). The tool found must
+        have old, the lane that leaves the head, as its lane. Otherwise the tool that left is not
+        known for sure, and this returns None. So does a print with no running plan.
+        """
+        plan = self._plan_running()
+        if plan is None or old is None:
+            return None
+        raw = plan.raw or ()
+        i = self.t_raw
+        if not (0 <= i < len(raw) and raw[i] == tool):
+            return None
+        choice = cast("dict[int, Hooked]", plan.choice)
+        for j in range(i - 1, -1, -1):
+            lane = choice.get(raw[j])
+            if lane is not None and lane.head == head:
+                return raw[j] if lane is old else None
+        return None
 
     def drop_owed_heat(self, head: int | None = None) -> None:
         """Drops the pre-heat that a head owes, or that every head owes when head is None."""

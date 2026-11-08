@@ -642,6 +642,8 @@ def hook_states(adapter: HooksAdapter, ff: FilamentFeed, by_ch: Route) -> None:
         if h.cold_unload and _cold_state(h, state, m):
             return
         _track_loaded(slot, h, prev, state, m)
+        if _load_starts(prev, state, m):
+            h.end_eject_drop()  # a load of the head ends the drop that an eject armed
         if state == m.FEED_STA_LOAD_FINISH:
             adapter.grip_watch.end_hold(h)
         if state == m.FEED_STA_LOAD_FINISH or state in pull:
@@ -664,6 +666,18 @@ def hook_states(adapter: HooksAdapter, ff: FilamentFeed, by_ch: Route) -> None:
             _left_load_finish(adapter, h, prev, state)
 
     ff._set_channel_state = set_channel_state
+
+
+def _load_starts(prev: str, state: str, m: FeedModule) -> bool:
+    """True when the channel goes from prev into a load of the U1 (its load or its manual feed).
+
+    That is a step of a load (U1_LOAD_STEPS, load_finish aside) entered from outside a load under
+    way: from a state that is no load step, or from load_finish (a new load of a loaded head).
+    The steps of one load, and a load_finish set again or re-derived, are not a new load.
+    """
+    if state == m.FEED_STA_LOAD_FINISH or not state.startswith(U1_LOAD_STEPS):
+        return False
+    return prev == m.FEED_STA_LOAD_FINISH or not prev.startswith(U1_LOAD_STEPS)
 
 
 def _track_loaded(slot: Slot, h: Hooked, prev: str, state: str, m: FeedModule) -> None:
