@@ -233,30 +233,39 @@ function pinFor(s, lane, want) {
   return pin && (pin.uid || pin.look) ? pin : null;
 }
 
-// A step that put a spool in a bay is done: the colour of its tools now prints from that bay. The pick of the
-// colour (its merge root, so the merges stay) becomes the bay, pinned on its spool as a pick in the colour picker
-// is, and a held spool that came from the step's move leaves the hand. The planner then owns that bay, and the
-// step's line reads "there". A take-out changes no pick.
+// A step that put a spool in a bay is done: the colours of its tools now print from that bay. The pick of each colour
+// (its merge root, so the merges stay) becomes the bay, pinned on its spool as a pick in the colour picker is, and a
+// held spool that came from the step's move leaves the hand. The planner then owns that bay, and the step's line reads
+// "there". A take-out changes no pick. A step that carries out the suggestion makes no colour one the user set
+// (print.overrides); a put into the bay the user set a colour to fulfils the user's own choice, and it stays set.
 // auto: settled by the page itself (settleMatches), not by the user's Done or a step seen done.
 /** @param {AppState} app @param {Guide} g @param {Step} s @param {boolean} [auto] */
 function settle(app, g, s, auto = false) {
   if (s.kind === 'out') return;
   const { plan, merges, lanes } = g.now;
-  const n = mergeRoot(plan, merges, s.tools[0]);
+  const roots = [...new Set(s.tools.map((x) => mergeRoot(plan, merges, x)))];
   const pin = pinFor(s, laneByKey(lanes, s.key), toolLook(g.now, s.tools));
+  const before = choiceFor(app.print, plan);
+  const choice = { ...before };
   const pinned = { ...(app.print.pinned ?? {}) };
-  if (pin) pinned[n] = pin;
-  else delete pinned[n];
+  for (const n of roots) {
+    choice[n] = s.key;
+    if (pin) pinned[n] = pin;
+    else delete pinned[n];
+  }
   const from = s.kind === 'move' ? s.from : s.kind === 'putBack' ? s.spool.from : null;
+  // The colours whose own choice the step fulfils: set by the user to the step's bay.
+  const kept = (app.print.overrides ?? []).filter((x) => !roots.includes(x) || before[x] === s.key);
   app.print = {
     ...app.print,
-    choice: { ...choiceFor(app.print, plan), [n]: s.key },
+    choice,
     pinned,
     choiceId: planId(plan),
     choiceTools: plan.tools,
     held: (app.print.held ?? []).filter((h) => h.from !== from),
     // A pick the page settled itself is kept apart from the user's own (settleMatches may settle it again).
-    auto: [...(app.print.auto ?? []).filter((x) => x !== n), ...(auto ? [n] : [])],
+    auto: [...(app.print.auto ?? []).filter((x) => !roots.includes(x)), ...(auto ? roots : [])],
+    overrides: kept,
   };
 }
 
@@ -392,7 +401,7 @@ export function wrongSpoolIn(now, s) {
 /** @param {PlanNow} now @param {string} key @returns {{ lane: LiveLane | undefined, held: boolean }} */
 function stepBay(now, key) {
   const lane = laneByKey(now.lanes, key);
-  const planned = laneByKey(now.planLanes ?? now.lanes, key);
+  const planned = laneByKey(now.planLanes, key);
   return { lane, held: Boolean(lane?.empty && planned && !planned.empty) };
 }
 

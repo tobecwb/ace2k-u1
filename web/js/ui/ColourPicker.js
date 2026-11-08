@@ -41,19 +41,17 @@ export function unitHeading(t, u, lanes) {
 }
 
 /**
- * One bay in the picker. An empty bay and a bay of another material are disabled and say why. A spool with no
- * material offers "? define and use". Any other bay shows the swaps it adds or saves, and picks that spool. A bay that
- * another colour already prints from says so ("shared with colour m"): its pick joins that colour, and its cost is
- * the join's.
+ * One bay in the picker. A bay of another material is disabled and says why. A spool with no material offers
+ * "? define and use". Any other bay shows the swaps it adds or saves, and picks that spool. An empty bay is picked the
+ * same way: the guide asks to put a new spool of the colour there, and Print waits until it holds one of a known
+ * material. A bay that another colour was set to by the user says so ("shared with colour m"): picked, both colours
+ * print from that spool. A pick is never a join.
  * @param {{ ctx: UiCtx, now: PlanNow, n: number, lane: PlanLane, roots: Map<string, number[]> }} props
  */
 function Bay({ ctx, now, n, lane, roots }) {
   const { t } = ctx;
   const tool = now.plan.tools[n];
   const name = `${lane.key} ${lane.material ?? ''}`.trim();
-  if (lane.empty)
-    return html`<button type="button" class="opt" disabled>
-      <span class="sp2 empty"></span><span>${lane.key}</span><span class="c">${t('units.empty')}</span></button>`;
   if (lane.unknown) {
     const data = { n: String(n), key: lane.key, material: tool.material ?? '', colour: tool.colour ?? '' };
     // The same action as the "Other options" row of this spool.
@@ -65,7 +63,7 @@ function Bay({ ctx, now, n, lane, roots }) {
     return html`<button type="button" class="opt" disabled title=${t('print.other_material')}>
       ${swatch(lane.colour)}<span>${name}</span><span class="c">${t('print.other_material')}</span></button>`;
   const owner = bayOwner(now.plan, roots, now.merges, n, lane.key);
-  const d = pickCost(now.plan, now.pick, now.lanes, now.merges, n, owner === null ? lane.key : { merge: owner });
+  const d = pickCost(now.plan, now.raw, now.planLanes, now.merges, n, lane.key, now.fixed);
   const cost = costWords(t, d, now.place?.fits ?? true);
   // Marked when colour n prints from this bay: the pick of its root (its own, or the colour it really joins).
   const root = mergeRoot(now.plan, now.merges, n);
@@ -73,7 +71,8 @@ function Bay({ ctx, now, n, lane, roots }) {
   const shared = owner ?? (on && root !== n ? root : null);
   return html`<button type="button" class=${on ? 'opt sel' : 'opt'} aria-pressed=${on}
     onClick=${() => ctx.run('pick', { n: String(n), key: lane.key })}>
-    ${swatch(lane.colour)}<span>${name}</span>
+    ${lane.empty ? html`<span class="sp2 empty"></span>` : swatch(lane.colour)}<span>${name}</span>
+    ${lane.empty ? html`<span class="note">${t('units.empty')}</span>` : null}
     ${shared === null ? null : html`<span class="note">${t('print.shared_with', { m: shared + 1 })}</span>`}
     <span class=${cost.cls}>${cost.text}</span></button>`;
 }
@@ -106,7 +105,8 @@ export function joinable(now, n) {
   );
 }
 
-// The colour picker of file colour n, in the side panel: the bays of every unit with each spool's swap cost,
+// The colour picker of file colour n, in the side panel: the bays of every unit with each spool's swap cost, read as
+// the planner reads them (planLanes: a spool "eject all" holds in hand counts in its bay, as in the plan),
 // a new spool, a join with another colour of the same material, and "back to the suggestion" once the user
 // picked or merged. A file colour that is gone (another file, a new plan) says so.
 /** @param {{ app: AppState, ctx: UiCtx, n: number }} props */
@@ -115,16 +115,16 @@ export function ColourPicker({ app, ctx, n }) {
   const now = planNow(app);
   const tool = now?.plan.tools[n];
   if (!now || !tool || !usedTest(now.plan.order)(n)) return html`<p class="note">${t('panel.gone')}</p>`;
-  const units = [...new Set(now.lanes.map((l) => unitOfKey(l.key)))];
+  const units = [...new Set(now.planLanes.map((l) => unitOfKey(l.key)))];
   const s = String(n);
   const fits = now.place?.fits ?? true;
   const words = toolWords(tool);
   const define = { n: s, material: tool.material ?? '', colour: tool.colour ?? '' };
-  // The colours on each bay, worked out once for every bay of the picker.
-  const roots = bayRoots(now.plan, now.pick, now.merges);
+  // The colours the user set on each bay, worked out once for every bay of the picker.
+  const roots = bayRoots(now.plan, Object.fromEntries(now.fixed.map((j) => [j, now.pick[j]])), now.merges);
   // The swaps that colour n adds or saves by taking v: a bay, NEW or a merge.
   /** @param {string | { merge: number }} v */
-  const cost = (v) => pickCost(now.plan, now.pick, now.lanes, now.merges, n, v);
+  const cost = (v) => pickCost(now.plan, now.raw, now.planLanes, now.merges, n, v, now.fixed);
   return html`<div class="card picker">
     <p class="t1">${swatch(tool.colour)} ${words}</p>
     <p class="note">${t('print.pick_note')}</p>
@@ -134,10 +134,10 @@ export function ColourPicker({ app, ctx, n }) {
         <p class="pn">${unitHeading(
           t,
           u,
-          now.lanes.filter((l) => unitOfKey(l.key) === u),
+          now.planLanes.filter((l) => unitOfKey(l.key) === u),
         )}</p>
         <div class="pb">
-          ${now.lanes
+          ${now.planLanes
             .filter((l) => unitOfKey(l.key) === u)
             .map((l) => html`<${Bay} key=${l.key} ctx=${ctx} now=${now} n=${n} lane=${l} roots=${roots} />`)}
         </div>
@@ -147,7 +147,7 @@ export function ColourPicker({ app, ctx, n }) {
     <${Row} ctx=${ctx} on=${now.pick[n] === NEW} d=${cost(NEW)} fits=${fits}
       run=${() => ctx.run('pick', { n: s, key: NEW })}>
       ${swatch(tool.colour, true)}<span>${words ? t('print.put_new', { what: words }) : t('print.put_new_any')}</span></${Row}>
-    ${now.lanes
+    ${now.planLanes
       .filter((l) => l.unknown)
       .map(
         (l) => html`<button type="button" class="row" key=${l.key}

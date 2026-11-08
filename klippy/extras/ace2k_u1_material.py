@@ -237,7 +237,7 @@ class MaterialGate:
         cfg = self.host.swap_cfg
         shared = adapter.shared(h)
         if shared:
-            then_mm, speed = cfg.splitter_mm[h.head], cfg.swap_speed
+            then_mm, speed = cfg.splitter_mm[h.head], cfg.swap_speed_for(h.api)
         else:
             then_mm, speed = BACK_OUT_MM, adapter.feed_speed_mm_s
         probe = cast("HeadProbe", adapter.insister)  # built at the hook, as the adapter

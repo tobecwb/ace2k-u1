@@ -2,8 +2,8 @@
 // endReading (a status step) is the one that writes app; printClock keeps the shown share in module state.
 // They have no effects, so they run under node.
 import { LANES, unitName, unitsOf, several, sliceFor, laneOf, laneErrs } from './model.js';
-import { planFor, liveLanes, chosen, choiceFor } from './print-plan.js';
-import { placement } from './planner.js';
+import { planFor, liveLanes, chosen, choiceFor, userBays } from './print-plan.js';
+import { placement, userPick } from './planner.js';
 import { dryerView } from './dryer-form.js';
 import { cycleProgress } from './history.js';
 import { clockOf, frameOf, hasBytes, shareOf } from './clock.js';
@@ -251,10 +251,13 @@ export const hintKept = (print, file) => (print.dismissed ?? []).includes(file);
  * What the plan view reads. plan is the plan of the chosen file. lanes are its lanes read from the live status.
  * user holds the user's own picks, pick the lane of each tool (the user's, else the set plan's, else the
  * suggestion), merges the user's merges, and place the placement of them all. planLanes are the lanes as the planner
- * read them (a spool held in hand by eject all counts in its bay).
+ * read them (a spool held in hand by eject all counts in its bay). fixed lists the colours whose bay the user set in
+ * the colour picker (print.overrides): they print from it, and the suggestion works around them. raw is the pick before
+ * userPick gives those bays to them (what placement and pickCost are given); pick is after it.
  * @typedef {{ plan: import('./types.js').Plan, lanes: import('./types.js').PlanLane[],
  *   user: import('./print-plan.js').Choice, pick: import('./print-plan.js').Choice, merges: Record<number, number>,
- *   place: import('./planner.js').Placement | null, planLanes?: import('./types.js').PlanLane[] }} PlanNow
+ *   place: import('./planner.js').Placement | null, planLanes: import('./types.js').PlanLane[],
+ *   fixed: number[], raw: import('./print-plan.js').Choice }} PlanNow
  */
 
 // The last planNow of each status, with the parts of the Print state it was worked out from.
@@ -268,7 +271,7 @@ const nowOf = new WeakMap();
 /** @param {AppState} app @returns {PlanNow | null} */
 export function planNow(app) {
   const p = app.print;
-  const from = [p.file, p.choice, p.choiceId, p.choiceTools, p.merges, p.pinned, p.held];
+  const from = [p.file, p.choice, p.choiceId, p.choiceTools, p.merges, p.pinned, p.held, p.overrides];
   const hit = nowOf.get(app.status);
   if (hit?.from.every((v, i) => v === from[i])) return hit.now;
   const now = workPlanNow(app);
@@ -282,11 +285,23 @@ function workPlanNow(app) {
   if (!plan) return null;
   const lanes = liveLanes(app.status, plan);
   const user = choiceFor(app.print, plan);
-  const pick = chosen(plan, user);
+  const fixed = userBays(user, app.print.overrides);
+  const raw = chosen(plan, user);
+  const pick = userPick(plan, raw, fixed);
   const merges = mergesOf(app.print);
   // planLanes: the lanes as the planner read them (spools held in hand by eject all count in their bays).
   const planLanes = withHeld(lanes, app.print.held);
-  return { plan, lanes, user, pick, merges, planLanes, place: placement(plan, pick, planLanes, merges) };
+  return {
+    plan,
+    lanes,
+    user,
+    raw,
+    pick,
+    merges,
+    planLanes,
+    fixed,
+    place: placement(plan, raw, planLanes, merges, fixed),
+  };
 }
 
 // The lanes as the planner reads them: an empty bay whose spool "eject all" took out (it is held, in hand) still
@@ -297,7 +312,7 @@ function withHeld(lanes, held) {
   if (!held?.length) return lanes;
   return lanes.map((l) => {
     const h = l.empty ? held.find((x) => x.from === l.key) : undefined;
-    return h ? { ...l, empty: false, unknown: false, material: h.material, colour: h.colour } : l;
+    return h ? { ...l, empty: false, unknown: false, material: h.material, colour: h.colour, spool: h } : l;
   });
 }
 

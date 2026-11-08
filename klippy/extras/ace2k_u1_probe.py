@@ -543,7 +543,9 @@ class HeadProbe:
                 " check the tube after the splitter"
             )
         if in_way is not None:
-            self.back(in_way, self.cfg.splitter_mm[slot.head], speed=self.cfg.swap_speed)
+            self.back(
+                in_way, self.cfg.splitter_mm[slot.head], speed=self.cfg.swap_speed_for(in_way.api)
+            )
             a.say(f"ace2k_u1: head {n}: {a.lane_text(in_way)} was past the splitter: rolled back")
             again = f"blocked again after {a.lane_text(in_way)} rolled back"
         else:
@@ -888,7 +890,7 @@ class HeadProbe:
         # the head is clear, and no other lane needs trying. It rolls back what it pushed (never
         # less than splitter_mm), so its tip is where it was, behind the splitter.
         back = max(self.cfg.splitter_mm[slot.head], pushed)
-        self.back(x, back, speed=self.cfg.swap_speed)
+        self.back(x, back, speed=self.cfg.swap_speed_for(x.api))
         a.say(
             f"ace2k_u1: head {n}: {a.lane_text(x)} reached the head from behind the "
             "splitter"
@@ -926,7 +928,7 @@ class HeadProbe:
             length = pushed
         else:
             length = max(pushed or 0.0, self.cfg.splitter_mm[slot.head])
-        self.back(h, length, speed=self.cfg.swap_speed)
+        self.back(h, length, speed=self.cfg.swap_speed_for(h.api))
 
     def _ease_after_set(self, slot: Slot, h: Hooked) -> None:
         """Ease the plunger after the push of h reached the sensor of the head.

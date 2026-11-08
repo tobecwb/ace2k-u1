@@ -2,8 +2,11 @@
 
 The user ejects to take the spool out. An ACEK_EJECT that ends well with the bay empty drops the
 lane's Edit spool record and its forgotten-tag mark, as a spool taken out by hand does: on a lane
-that feeds its head alone, and on a lane parked outside its shared head. An eject that fails keeps
-both, and so do the adapter's own roll backs, such as a swap's or a refill's.
+that feeds its head alone, and on a lane parked outside its shared head. So does an eject that
+ends its unit unload in error, once its filament leaves the bay (2026-11-07, a:4), until the lane
+really moves. A failed eject whose bay stays full keeps both, and so do an eject that never
+reached the unit's unload, an unload failure judged under a U1 flow, and the adapter's own roll
+backs, such as a swap's or a refill's.
 """
 
 from __future__ import annotations
@@ -61,13 +64,17 @@ def unload_ends(
     kind: str,
     filament_mm: float = -1918.0,
     motor_mm: float = 1950.0,
+    bay_empties: bool = True,
+    mode: str = "idle",
 ) -> None:
-    """The unit's unload of the eject ends with kind, the bay read empty first."""
+    """The unit's unload of the eject ends with kind, the lane then in mode. With bay_empties the
+    bay reads empty first, while the unload runs; without, it still reads full."""
     started = [mv for ln, m, _len, _s, mv in a.feed.started if ln == lane and m == "unload"]
     assert started, "the eject started no unload"
-    a.lanes[lane].update(insert=False, mode="unloading")
-    tick(rig)
-    a.lanes[lane]["mode"] = "idle"
+    if bay_empties:
+        a.lanes[lane].update(insert=False, mode="unloading")
+        tick(rig)
+    a.lanes[lane]["mode"] = mode
     event = {"kind": kind, "mode": "unloading", "seq": started[-1].seq, "unit": "a"}
     event.update(motor_mm=motor_mm, filament_mm=filament_mm)
     rig.adapter.on_feed_event(lane, event)
@@ -114,15 +121,77 @@ def test_a_drop_whose_write_fails_is_tried_again(tmp_path: Path) -> None:
     assert "a:3" not in records(rig)
 
 
-def test_a_failed_eject_keeps_the_record(tmp_path: Path) -> None:
+def test_a_failed_eject_whose_bay_stays_full_keeps_the_record(tmp_path: Path) -> None:
     rig, a, h = rig_with_spool(tmp_path, LONE)
     h.tag_forgotten = True
     eject(rig, LONE)
-    unload_ends(rig, a, LONE, "stuck", filament_mm=-100.0, motor_mm=130.0)  # held near its start
+    unload_ends(rig, a, LONE, "stuck", -100.0, 130.0, bay_empties=False, mode="error")  # held
+    assert any("lane a:3 eject failed: stuck" in ln for ln in rig.gcode.lines)
     tick(rig, 10.0)
     assert "a:3" in records(rig)
     assert h.tag_forgotten is True
-    assert h.eject_by_user is False and h.eject_drop is False
+    assert h.eject_by_user is False
+
+
+def test_a_failed_eject_whose_filament_left_the_bay_drops_the_record(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    h.tag_forgotten = True
+    eject(rig, LONE)
+    unload_ends(rig, a, LONE, "stuck", filament_mm=-100.0, motor_mm=130.0)  # the bay emptied
+    assert any("lane a:3 eject failed: stuck" in ln for ln in rig.gcode.lines)
+    assert "a:3" not in records(rig)
+    assert h.tag_forgotten is False
+
+
+def unload_incomplete_with_the_tip_at_the_bay(rig: SimpleNamespace, a: FakeAce2k) -> None:
+    """2026-11-07 (a:4): the unload ran its whole budget and ended unload_incomplete 1161 mm back,
+    the tip out of the unit's drive gear but still on the bay's sensor. A failure."""
+    unload_ends(rig, a, LONE, "unload_incomplete", -1161.4, 2100.0, bay_empties=False, mode="error")
+    assert any("lane a:3 eject failed: unload_incomplete" in ln for ln in rig.gcode.lines)
+
+
+@pytest.mark.parametrize("later_s", [2.0, 300.0])
+def test_a_failed_eject_whose_tip_is_pulled_out_later_drops_the_record(
+    tmp_path: Path, later_s: float
+) -> None:
+    """The user pulls the tip out by hand, 2 s or 5 min after the failure, the lane still in
+    error: a new spool with no tag is not given the old one's material."""
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    unload_incomplete_with_the_tip_at_the_bay(rig, a)
+    tick(rig, later_s)
+    assert "a:3" in records(rig) and h.eject_drop is True
+    a.lanes[LONE]["insert"] = False  # pulled out by hand
+    tick(rig)
+    assert "a:3" not in records(rig)
+    a.lanes[LONE].update(insert=True, mode="idle")  # a new spool with no tag
+    tick(rig)
+    assert "a:3" not in records(rig)
+
+
+def test_a_failed_eject_then_a_move_of_the_lane_keeps_the_record(tmp_path: Path) -> None:
+    """The drop of a failed eject lasts until the lane's next move: a bay that move empties is
+    the move's, not the eject's."""
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    unload_incomplete_with_the_tip_at_the_bay(rig, a)
+    rig.adapter.started(h, h.api.start_move(h.lane, "rollback", 100.0, 30.0))
+    assert h.eject_drop is False
+    a.lanes[LONE].update(insert=False, mode="rolling_back")
+    tick(rig)
+    assert "a:3" in records(rig)
+
+
+def test_a_failed_eject_the_adapter_started_keeps_the_record(tmp_path: Path) -> None:
+    """The eject at a print's end, not asked: its failure and an emptied bay keep the record."""
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    rig.adapter.ejector.start_eject(h.lane, h.unit)
+    tick(rig)
+    unload_incomplete_with_the_tip_at_the_bay(rig, a)
+    assert h.eject_drop is False
+    a.lanes[LONE]["insert"] = False
+    tick(rig)
+    assert "a:3" in records(rig)
 
 
 def test_a_roll_back_that_is_not_an_asked_eject_keeps_the_record(tmp_path: Path) -> None:
@@ -324,3 +393,171 @@ def test_an_unload_run_again_that_sticks_at_once_is_judged_on_the_whole_eject(
     failed = any("lane a:3 eject failed: stuck" in ln for ln in rig.gcode.lines)
     assert failed is not at_bay
     assert any("ejected (2020 mm back)" in ln for ln in rig.gcode.lines) is at_bay
+
+
+def test_an_eject_whose_unload_never_started_keeps_the_record(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    a.feed.refuse = "no_filament"  # the unit refuses the unload: the eject never started
+    eject(rig, LONE)
+    assert any("lane a:3 eject not started" in ln for ln in rig.gcode.lines)
+    tick(rig, 10.0)
+    assert h.eject_drop is False and "a:3" in records(rig)
+    # A bay that a move emptied keeps the record, as with no eject. (One emptied by hand with no
+    # move goes by the rule of a spool taken out by hand, with or without the eject.)
+    rig.adapter.moved_out(h)
+    a.lanes[LONE].update(insert=False, mode="rolling_back")
+    tick(rig)
+    assert "a:3" in records(rig)
+
+
+def held_by_the_head(rig: SimpleNamespace, a: FakeAce2k) -> None:
+    """The eject's probe finds the filament held by the head's gear and feeds it back: the U1's
+    unload of the head comes next, before any unit unload."""
+    rig.left.runout_sensor[LONE_CH].detected = True
+    rig.left._set_channel_state(LONE_CH, "load_finish")
+    eject(rig, LONE)
+    probe = [mv for ln, m, _len, _s, mv in a.feed.started if ln == LONE and m == "rollback"][-1]
+    a.lanes[LONE].update(rest=False, pushed=True)
+    probe.event = {"kind": "done", "mode": "rolling_back", "motor_mm": -80.0, "filament_mm": -79.0}
+    tick(rig, 10.0)
+    back = [mv for ln, m, _len, _s, mv in a.feed.started if ln == LONE and m == "feed"][-1]
+    a.lanes[LONE].update(rest=True, pushed=False)
+    back.event = {"kind": "done", "mode": "feeding", "motor_mm": 80.0, "filament_mm": 79.0}
+    tick(rig, 10.0)
+
+
+def test_a_u1_unload_that_fails_before_the_units_unload_keeps_the_record(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+
+    def fails(_script: str) -> None:
+        raise RuntimeError("the head is too cold")
+
+    rig.gcode.run_script = fails
+    held_by_the_head(rig, a)
+    assert any("eject failed: the U1's unload of e" in ln for ln in rig.gcode.lines)
+    assert h.eject_drop is False and h.eject_by_user is False
+    a.lanes[LONE].update(insert=False, mode="error")
+    tick(rig)
+    assert "a:3" in records(rig)
+
+
+def test_a_u1_failure_during_the_units_unload_leaves_its_end_deciding(tmp_path: Path) -> None:
+    """An unrelated U1 failure on the head while the eject's unit unload runs arms nothing, and
+    the unload's own end still drops the record."""
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    assert rig.adapter.ejector.unload_started(h)
+    rig.left._set_channel_state(LONE_CH, "preload_fail")
+    assert h.eject_drop is False and h.eject_by_user is True
+    unload_ends(rig, a, LONE, "unloaded")
+    assert "a:3" not in records(rig)
+
+
+def test_an_unload_failure_under_a_u1_flow_does_not_arm_the_drop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    monkeypatch.setattr(rig.adapter.ejector, "u1_flow", lambda _h: True)
+    unload_incomplete_failure = {"kind": "unload_incomplete", "unit": "a", "mode": "unloading"}
+    started = [mv for ln, m, _len, _s, mv in a.feed.started if ln == LONE and m == "unload"][-1]
+    unload_incomplete_failure.update(seq=started.seq, motor_mm=2100.0, filament_mm=-1161.4)
+    a.lanes[LONE]["mode"] = "error"
+    rig.adapter.on_feed_event(LONE, unload_incomplete_failure)
+    tick(rig)
+    assert h.eject_drop is False
+    a.lanes[LONE]["insert"] = False
+    tick(rig)
+    assert "a:3" in records(rig)
+
+
+def test_a_u1_load_after_a_failed_eject_ends_the_drop(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    unload_incomplete_with_the_tip_at_the_bay(rig, a)
+    assert h.eject_drop is True
+    rig.left._set_channel_state(LONE_CH, "load_prepare")  # the user reloads the head on the U1
+    assert h.eject_drop is False
+    a.lanes[LONE]["insert"] = False
+    tick(rig)
+    assert "a:3" in records(rig)
+
+
+def test_a_mode_out_of_idle_in_the_lanes_status_ends_the_drop(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    unload_incomplete_with_the_tip_at_the_bay(rig, a)
+    tick(rig, 10.0)  # the report after the end is believed
+    assert h.eject_drop is True
+    a.lanes[LONE]["mode"] = "feeding"  # a move of the unit
+    tick(rig)
+    assert h.eject_drop is False
+
+
+@pytest.mark.parametrize("change_mm", [40.0, -40.0, -5000.0])
+def test_the_encoder_alone_never_ends_the_drop(tmp_path: Path, change_mm: float) -> None:
+    """A push or a pull by hand, or a reset of the count: the drop stays."""
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    unload_incomplete_with_the_tip_at_the_bay(rig, a)
+    tick(rig, 10.0)
+    a.lanes[LONE]["encoder_mm"] = (a.lanes[LONE].get("encoder_mm") or 0.0) + change_mm
+    tick(rig)
+    assert h.eject_drop is True
+    a.lanes[LONE]["insert"] = False
+    tick(rig)
+    assert "a:3" not in records(rig)
+
+
+def test_a_load_finish_set_again_does_not_end_the_drop(tmp_path: Path) -> None:
+    """The U1 asserting load_finish over load_finish is no load; a new load from it is."""
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    rig.left._set_channel_state(LONE_CH, "load_finish")
+    h.eject_drop = True
+    rig.left._set_channel_state(LONE_CH, "load_finish")
+    assert h.eject_drop is True
+    rig.left._set_channel_state(LONE_CH, "load_prepare")
+    assert h.eject_drop is False
+
+
+def test_the_steps_of_one_load_are_one_start(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    rig.left._set_channel_state(LONE_CH, "load_prepare")
+    h.eject_drop = True  # (not reachable this way on the unit: only the guard is tested)
+    rig.left._set_channel_state(LONE_CH, "load_heating")
+    assert h.eject_drop is True
+
+
+def test_a_follow_arm_that_starts_nothing_keeps_the_drop(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    unload_incomplete_with_the_tip_at_the_bay(rig, a)
+    h.waits_behind = True  # the head runs on the piece ahead: no follow is sent
+    rig.adapter.follow.arm(h)
+    assert h.eject_drop is True
+    h.waits_behind = False
+    a.feed.refuse = "busy"  # the unit refuses the follow's start
+    rig.adapter.follow.arm(h)
+    assert not h.armed and h.eject_drop is True
+
+
+def test_an_unload_end_of_a_kind_not_listed_arms_the_drop(tmp_path: Path) -> None:
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    unload_ends(rig, a, LONE, "slip_detected", -800.0, 900.0, bay_empties=False, mode="error")
+    assert h.eject_drop is True
+    a.lanes[LONE]["insert"] = False
+    tick(rig)
+    assert "a:3" not in records(rig)
+
+
+def test_a_u1_failure_keeps_the_running_unloads_lengths(tmp_path: Path) -> None:
+    """The unload's own end is judged with the eject's real lengths after a U1 failure."""
+    rig, a, h = rig_with_spool(tmp_path, LONE)
+    eject(rig, LONE)
+    ejector = rig.adapter.ejector
+    ejector.eject_spent[h.key] = 1000.0
+    asked = ejector.eject_asked[h.key]
+    rig.left._set_channel_state(LONE_CH, "preload_fail")
+    assert ejector.eject_spent[h.key] == 1000.0 and ejector.eject_asked[h.key] == asked
+    assert h.eject_by_user is True

@@ -1029,19 +1029,23 @@ class GripWatch:
         running or ended within BAY_OUT_S. A bay that such a move emptied keeps the record. So does
         a record that was set on a bay that was already empty, until the bay fills and empties
         again. The mark of a forgotten tag (ACEK_TAG_FORGET) goes with the record, by the same
-        rule. An eject that the user asked for (ACEK_EJECT) and that ended well (h.eject_drop) drops
-        both too, once the bay reads empty, although its move emptied the bay. If the write of a
-        drop fails, it is tried again on the next tick (on_bay_empty returned False).
+        rule. An eject that the user asked for (ACEK_EJECT) drops both too once the bay reads empty
+        (h.eject_drop, armed by Ejector._arm_spool_drop), although its move emptied the bay, also
+        when its unload failed and the user pulls the tip out by hand, seconds or minutes later.
+        That lasts until a real move of the lane (see Ejector._arm_spool_drop) or a filament goes
+        into the empty bay. If the write of a drop fails, it is tried again on the next tick
+        (on_bay_empty returned False).
         """
         insert = lane.get("insert")
         was_empty = h.bay_empty
+        self.eject_drop_ends(h, lane)
         self._bay_edge(h, lane)
         self._setting_owner(h, insert, was_empty, eventtime)
         watch_tag_seen(h, lane)
         if insert is True:
             if not h.bay_full:
                 h.tag_forgotten = False  # a filament put into an empty bay is a new spool
-                h.eject_drop = False  # and the drop of an eject is for the spool that went out
+                h.end_eject_drop()  # and the drop of an eject is for the spool that went out
             h.bay_full = True
             h.drop_due = False
             return
@@ -1050,14 +1054,24 @@ class GripWatch:
         h.push_end = None  # no push of it is left to show
         if h.bay_full:
             self._bay_emptied(h, lane, eventtime)
-        if h.eject_drop:  # an eject the user asked for ended well, so the user takes the spool out
-            h.eject_drop = False
+        if h.eject_drop:  # an eject the user asked for is over, so the user takes the spool out
+            h.end_eject_drop()
             self.spool_taken_out(h)
         if h.drop_due and self.adapter.on_bay_empty is not None:
             try:
                 h.drop_due = self.adapter.on_bay_empty(h) is False
             except Exception:  # never into the bay watch
                 logging.exception("ace2k_u1: lane %s spool record", self.adapter.lane_text(h))
+
+    def eject_drop_ends(self, h: Hooked, lane: LaneView) -> None:
+        """End the drop that an eject armed (h.eject_drop) once the lane moves in its status.
+
+        That is a motion of the lane (Adapter.motion: its mode out of idle and error, once the
+        report after the eject's end can be believed, or its follow). Its encoder alone is no
+        move: a push or a pull by hand, or a reset of the count, keeps the drop.
+        """
+        if h.eject_drop and self.adapter.motion(h, lane) is not None:
+            h.end_eject_drop()
 
     def _setting_owner(self, h: Hooked, insert: object, was_empty: bool, eventtime: float) -> None:
         """Let the head's setting go with the spool it was written for (spool_left).

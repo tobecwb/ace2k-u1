@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, NoReturn
 
 import ace2k_u1
@@ -14,7 +15,6 @@ from test_config_macros import SPLITTERS, klipper_command
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
-    from types import SimpleNamespace
     from typing import Any
 
     import test_units
@@ -878,13 +878,14 @@ def bounded_rig(
     tmp_path: Path,
     values: Mapping[str, object],
     lanes: str | None = None,
+    top: float = 80.0,
 ) -> SimpleNamespace:
-    """test_tools' two-unit rig, its units' feeds with the dictionary's speed bounds (9..70
-    mm/s), hooked with values ([ace2k_u1] keys)."""
+    """test_tools' two-unit rig, its units' feeds with the dictionary's speed bounds (9..top
+    mm/s, 80 by default; 70 is an older image), hooked with values ([ace2k_u1] keys)."""
     import test_tools  # noqa: PLC0415 — test_tools imports this module
 
     monkeypatch.setattr(fakes.FakeFeedApi, "speed_min", 9.0, raising=False)
-    monkeypatch.setattr(fakes.FakeFeedApi, "speed_max", 70.0, raising=False)
+    monkeypatch.setattr(fakes.FakeFeedApi, "speed_max", top, raising=False)
     if lanes is None:
         return test_tools.tools_rig(tmp_path, values=values)[0]
     return test_tools.tools_rig(tmp_path, lanes=lanes, values=values)[0]
@@ -896,9 +897,9 @@ def bounded_rig(
         ("eject_probe_speed", 5.0),
         ("eject_probe_speed", 8.5),
         ("swap_speed", 5.0),
-        ("swap_speed", 80.0),
+        ("swap_speed", 90.0),
         ("probe_speed", 8.0),
-        ("probe_speed", 71.0),
+        ("probe_speed", 81.0),
     ],
 )
 def test_a_speed_outside_the_units_bounds_is_not_hooked_with_its_reason(
@@ -906,27 +907,107 @@ def test_a_speed_outside_the_units_bounds_is_not_hooked_with_its_reason(
 ) -> None:
     """Judged once at the hook against the unit's own bounds, as the grip is."""
     rig = bounded_rig(monkeypatch, tmp_path, {key: value})
-    why = f"{key} {value:g} is outside the unit's 9..70 mm/s"
+    why = f"{key} {value:g} is outside the unit's 9..80 mm/s"
     assert f"ace2k_u1: not hooked: ace2k a: {why}; ace2k b: {why}" in rig.gcode.lines
 
 
-@pytest.mark.parametrize("value", [5.0, 80.0])
-def test_without_a_shared_head_any_swap_and_probe_speed_is_accepted(
+@pytest.mark.parametrize("value", [5.0, 90.0])
+def test_without_a_shared_head_any_probe_speed_is_accepted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: float
 ) -> None:
-    """Nothing uses the two keys without a + group: out of the unit's bounds, even above 70
-    (once a config error), they are accepted and the adapter hooks."""
-    values = {"swap_speed": value, "probe_speed": value}
-    rig = bounded_rig(monkeypatch, tmp_path, values, "a:1, a:2")
+    """Nothing uses probe_speed without a + group: out of the unit's bounds, even above 80
+    (once a config error), it is accepted and the adapter hooks."""
+    rig = bounded_rig(monkeypatch, tmp_path, {"probe_speed": value}, "a:1, a:2")
     assert not rig.module.problems and rig.adapter.hooked
+
+
+@pytest.mark.parametrize(("value", "runs"), [(5.0, 9.0), (90.0, 80.0)])
+def test_without_a_shared_head_a_swap_speed_set_out_of_bounds_is_warned_and_clamped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: float, runs: float
+) -> None:
+    """A lone head's push that a lane blocks rolls back at swap_speed. With no + group a value
+    out of the unit's speeds still hooks: one warning, and the moves run within the unit's."""
+    rig = bounded_rig(monkeypatch, tmp_path, {"swap_speed": value}, "a:1, a:2")
+    assert not rig.module.problems and rig.adapter.hooked
+    why = f"swap_speed {value:g} is outside the unit's 9..80 mm/s"
+    notes = [line for line in rig.gcode.lines if "swap_speed" in line]
+    assert notes == [f"ace2k_u1: ace2k a: {why}: its moves run at {runs:g} mm/s"]
+    assert rig.module.swap_cfg.swap_speed_for(fakes.FakeFeedApi()) == runs
 
 
 def test_speeds_within_the_units_bounds_hook(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    values = {"eject_probe_speed": 9.0, "swap_speed": 70.0, "probe_speed": 9.0}
+    values = {"eject_probe_speed": 9.0, "swap_speed": 80.0, "probe_speed": 9.0}
     rig = bounded_rig(monkeypatch, tmp_path, values)
     assert not rig.module.problems and rig.adapter.hooked
+
+
+def test_the_default_swap_speed_follows_an_older_images_top_speed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    rig = bounded_rig(monkeypatch, tmp_path, {}, top=70.0)
+    assert not rig.module.problems and rig.adapter.hooked
+    cfg = rig.module.swap_cfg
+    assert cfg.swap_speed == 80.0  # the config itself is left as it was read
+    assert cfg.swap_speed_for(fakes.FakeFeedApi()) == 70.0
+    expected = [
+        "ace2k_u1: ace2k a: swap_speed defaults to the unit's top speed, 70 mm/s",
+        "ace2k_u1: ace2k b: swap_speed defaults to the unit's top speed, 70 mm/s",
+    ]
+    assert [line for line in rig.gcode.lines if "swap_speed" in line] == expected
+    rig.module._hook(0.0)  # a re-hook in the same connect does not say it again
+    assert [line for line in rig.gcode.lines if "swap_speed" in line] == expected
+
+
+def test_a_unit_that_reports_no_top_speed_runs_the_default_swap_speed_at_70(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(fakes.FakeFeedApi, "speed_max", None)
+    import test_tools  # noqa: PLC0415 — test_tools imports this module
+
+    rig = test_tools.tools_rig(tmp_path)[0]
+    assert not rig.module.problems and rig.adapter.hooked
+    assert rig.module.swap_cfg.swap_speed_for(fakes.FakeFeedApi()) == 70.0
+    assert [line for line in rig.gcode.lines if "swap_speed" in line] == [
+        "ace2k_u1: ace2k a: the unit reports no top speed: swap_speed is 70 mm/s",
+        "ace2k_u1: ace2k b: the unit reports no top speed: swap_speed is 70 mm/s",
+    ]
+
+
+def test_the_default_swap_speed_is_80_on_an_image_with_that_top_speed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    rig = bounded_rig(monkeypatch, tmp_path, {})
+    assert not rig.module.problems and rig.adapter.hooked
+    assert rig.module.swap_cfg.swap_speed_for(fakes.FakeFeedApi()) == 80.0
+
+
+def test_the_default_swap_speed_is_per_unit_and_70_without_limits() -> None:
+    cfg = ace2k_u1_config.SwapConfig(
+        swap_speed=ace2k_u1_config.SWAP_SPEED,
+        splitter_mm={},
+        splitter_default=set(),
+        colour_max_distance=25.0,
+        colour_min_margin=8.0,
+        probe_mm=100.0,
+        probe_speed=50.0,
+        probe_max_temp=60.0,
+        swap_speed_set=False,
+    )
+    assert cfg.swap_speed_for(SimpleNamespace(speed_max=70.0)) == 70.0
+    assert cfg.swap_speed_for(SimpleNamespace(speed_max=80.0)) == 80.0
+    assert cfg.swap_speed_for(SimpleNamespace()) == 70.0  # an image with no limits
+    cfg.swap_speed, cfg.swap_speed_set = 60.0, True
+    assert cfg.swap_speed_for(SimpleNamespace(speed_max=70.0)) == 60.0  # set: as it is
+
+
+def test_a_swap_speed_set_above_an_older_images_top_speed_is_not_hooked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    rig = bounded_rig(monkeypatch, tmp_path, {"swap_speed": 80.0}, top=70.0)
+    why = "swap_speed 80 is outside the unit's 9..70 mm/s"
+    assert f"ace2k_u1: not hooked: ace2k a: {why}; ace2k b: {why}" in rig.gcode.lines
 
 
 def test_without_the_units_bounds_a_swap_speed_above_70_is_not_hooked(tmp_path: Path) -> None:

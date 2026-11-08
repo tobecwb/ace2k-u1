@@ -58,7 +58,7 @@ UID_A = "0123456789abcdef01234567"
 UID_B = "89abcdef0123456789abcdef"
 # a new install with one unit: Enter at the four lanes: questions, then yes to "Install?"
 NEW_ONE = ["", "", "", "", "y"]
-PAXX = "1.6.0-paxx12-22-31c5a38\n"
+PAXX = "2.0.0-paxx12-24-0de1a77\n"
 DEBUG_MSG = (
     "Created /oem/.debug. No reboot is needed: the files written now survive the next boot, "
     "because the U1 wipes its overlay at boot only when this flag is missing."

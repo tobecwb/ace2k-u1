@@ -5,7 +5,7 @@ import { html } from '../js/ui/html.js';
 import { ColourPicker } from '../js/ui/ColourPicker.js';
 import { ColourRows } from '../js/ui/ColourChips.js';
 import { runAction } from '../js/actions.js';
-import { asIsChoice, bayRoots, printGate, sameTool, sentSwaps } from '../js/print-plan.js';
+import { asIsChoice, printGate, sentSwaps } from '../js/print-plan.js';
 import {
   asIsChecks,
   autoAdvance,
@@ -69,83 +69,111 @@ const sent = (app) => {
   return asIsChoice(now.plan, now.pick, now.merges);
 };
 
+const BAYS = ['a:2', 'a:3', 'a:4', 'b:1'];
+const USED = [0, 1, 3, 4, 6];
+// The bay each colour's row shows: its own line in the placement (never "= color m" for a pick).
+const rowKey = (app, n) => planNow(app)?.place?.lines.find((l) => l.tools.includes(n))?.key;
+
 for (const [key, other] of [
   ['a:4', 0],
   ['a:2', 1],
   ['a:3', 6],
 ]) {
-  test(`real U1: skin picked on ${key} prints from it, sharing the spool with color ${other + 1}, which keeps it`, () => {
+  test(`real U1: skin set to ${key} prints from it; color ${other + 1}, left to the suggestion, gives the bay up`, () => {
     const app = appOf();
     const ctx = live(app);
-    const before = sent(app)[other];
-    // The picker says the bay is shared with the colour already on it.
+    // Nothing set by the user yet: the picker says no bay is shared.
+    const picker = textOf(renderHtml(html`<${ColourPicker} app=${app} ctx=${ctx} n=${SKIN} />`));
+    assert.ok(!picker.includes(t('print.shared_with', { m: other + 1 })), picker);
+    ctx.run('pick', { n: String(SKIN), key });
+    // A pick, never a join.
+    assert.deepEqual([app.print.choice[SKIN], app.print.merges, app.print.overrides], [key, {}, [SKIN]]);
+    const after = sent(app);
+    // Skin prints from that bay; the other colour, which the user did not set, no longer counts on it.
+    assert.deepEqual([after[SKIN], after[other]], [key, null]);
+    // The row shows the bay, with no step for it, and the other colour is placed elsewhere.
+    const chips = textOf(renderHtml(html`<${ColourRows} app=${app} ctx=${ctx} now=${planNow(app)} />`));
+    assert.ok(!chips.includes('= color'), chips);
+    assert.equal(rowKey(app, SKIN), key);
+    assert.notEqual(rowKey(app, other), key);
+    assert.ok(!guideOf(app)?.steps.some((x) => x.tools?.includes(SKIN)));
+    const again = renderHtml(html`<${ColourPicker} app=${app} ctx=${ctx} n=${SKIN} />`);
+    assert.match(again, new RegExp(`class="opt sel"[^>]*>(?:(?!</button>).)*${key}`, 's'));
+  });
+
+  test(`real U1: color ${other + 1} and skin both set to ${key} by the user share its spool, shown plainly`, () => {
+    const app = appOf();
+    const ctx = live(app);
+    ctx.run('pick', { n: String(other), key });
+    // The picker says the bay is shared with the colour the user set on it.
     const picker = textOf(renderHtml(html`<${ColourPicker} app=${app} ctx=${ctx} n=${SKIN} />`));
     assert.ok(picker.includes(t('print.shared_with', { m: other + 1 })), picker);
     ctx.run('pick', { n: String(SKIN), key });
+    assert.deepEqual(app.print.merges, {});
     const after = sent(app);
-    // Skin prints from that bay, and the colour on it is not unpicked.
-    assert.deepEqual([after[SKIN], after[other]], [key, before]);
-    // The chips say both colours are on that bay, and the picker marks it.
+    assert.deepEqual([after[SKIN], after[other]], [key, key]);
+    // Both rows show the bay, never "= color m", and the guide moves neither nor that spool.
     const chips = textOf(renderHtml(html`<${ColourRows} app=${app} ctx=${ctx} now=${planNow(app)} />`));
-    assert.ok(chips.includes(`= color ${other + 1}`), chips);
-    const again = renderHtml(html`<${ColourPicker} app=${app} ctx=${ctx} n=${SKIN} />`);
-    assert.match(again, new RegExp(`class="opt sel"[^>]*>(?:(?!</button>).)*${key}`, 's'));
-    // The swaps counted are those of the bays sent.
+    assert.ok(!chips.includes('= color'), chips);
+    assert.deepEqual([rowKey(app, SKIN), rowKey(app, other)], [key, key]);
+    const steps = guideOf(app)?.steps ?? [];
+    assert.ok(!steps.some((x) => x.tools?.includes(SKIN) || x.tools?.includes(other)), JSON.stringify(steps));
+    assert.ok(!steps.some((x) => x.key === key || x.from === key), JSON.stringify(steps));
     const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
     assert.notEqual(sentSwaps(now.plan, after, now.lanes), null);
   });
 }
 
-// The invariant of every pick: no two colours of the file (roots of the merges, twins aside) pick the same bay.
-const assertOneRootPerBay = (app, why) => {
-  const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
-  const roots = bayRoots(now.plan, now.pick, now.merges);
-  for (const [key, rs] of roots) {
-    const apart = rs.filter((r) => !rs.some((q) => q < r && sameTool(now.plan.tools[q], now.plan.tools[r])));
-    assert.ok(apart.length <= 1, `${why}: ${key} is picked by ${apart.map((r) => `color ${r + 1}`).join(', ')}`);
+// Nothing is joined, and every colour the user set to a bay shows that bay, as its own line, with no step.
+/** @param {any} app @param {string} why */
+const assertShowsPicks = (app, why) => {
+  assert.deepEqual(app.print.merges, {}, why);
+  for (const j of app.print.overrides ?? []) {
+    const k = app.print.choice[j];
+    if (k === 'new') continue;
+    const line = planNow(app)?.place?.lines.find((l) => l.tools.includes(j));
+    assert.deepEqual([line?.key, line?.act], [k, 'there'], `${why}: color ${j + 1}`);
   }
 };
-const BAYS = ['a:2', 'a:3', 'a:4', 'b:1'];
-const USED = [0, 1, 3, 4, 6];
 
-test('real U1: whatever colour picks whatever bay, again and again, no two colours pick one bay', () => {
+test('real U1: whatever colour picks whatever bay, again and again, each row shows its pick and nothing joins', () => {
   const app = appOf();
   const ctx = live(app);
   for (let round = 0; round < 2; round += 1)
     for (const n of USED)
       for (const key of [...BAYS, 'new', BAYS[(n + round) % BAYS.length]]) {
         ctx.run('pick', { n: String(n), key });
-        assertOneRootPerBay(app, `color ${n + 1} on ${key}`);
+        assertShowsPicks(app, `color ${n + 1} on ${key}`);
       }
 });
 
-test('real U1: tapping again the bay a joined colour prints from changes nothing', () => {
+test('real U1: tapping again the bay a colour is set to changes nothing', () => {
   const app = appOf();
   const ctx = live(app);
   ctx.run('pick', { n: String(SKIN), key: 'a:4' });
   const before = app.print;
   ctx.run('pick', { n: String(SKIN), key: 'a:4' });
   assert.deepEqual([app.print.choice, app.print.merges], [before.choice, before.merges]);
-  assert.equal(app.print.merges[SKIN], 0);
+  assert.equal(app.print.choice[SKIN], 'a:4');
 });
 
-test('real U1: "Save and use" on a bay another colour prints from joins it', async () => {
+test('real U1: "Save and use" on a bay another colour prints from sets the colour to it, no join', async () => {
   const app = appOf();
   const ctx = live(app);
   ctx.sendScript = async () => true;
   ctx.run('edit_open', { lane: '2', unit: 'a', use: String(SKIN), material: 'PLA', colour: '#fec187' });
   await ctx.run('edit_save', { lane: '2' });
   await new Promise((r) => setTimeout(r, 0));
-  assert.equal(app.print.merges[SKIN], 1);
-  assertOneRootPerBay(app, 'save and use');
+  assert.deepEqual([app.print.choice[SKIN], app.print.merges, app.print.overrides], ['a:2', {}, [SKIN]]);
+  assert.equal(rowKey(app, SKIN), 'a:2');
 });
 
-test('real U1: a colour of no material joins the colour on the bay it picks, and the start warns', () => {
+test('real U1: a colour of no material set to a bay prints from it, and the start warns', () => {
   const app = appOf();
   app.status.ace2k_u1.plan.tools[SKIN].material = null;
   const ctx = live(app);
   ctx.run('pick', { n: String(SKIN), key: 'a:4' });
-  assert.equal(app.print.merges[SKIN], 0);
+  assert.deepEqual([app.print.choice[SKIN], app.print.merges], ['a:4', {}]);
   const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
   const lines = asIsChecks(t, now, asIsChoice(now.plan, now.pick, now.merges), []);
   assert.ok(
@@ -166,13 +194,13 @@ test('real U1: twins share a spool by themselves: re-picking its own bay never m
   ctx.run('pick', { n: '7', key: 'a:4' });
   ctx.run('pick', { n: '0', key: 'a:4' });
   assert.deepEqual([app.print.merges[0], app.print.merges[7]], [undefined, undefined]);
-  assertOneRootPerBay(app, 'twins');
+  assert.deepEqual([rowKey(app, 0), rowKey(app, 7)], ['a:4', 'a:4']);
 });
 
 test('real U1: the picker marks the bay a colour really prints from, also past a merge that no longer joins', () => {
   const app = appOf();
   const ctx = live(app);
-  ctx.run('pick', { n: String(SKIN), key: 'a:3' });
+  ctx.run('merge', { n: String(SKIN), into: '6' });
   const joined = renderHtml(html`<${ColourPicker} app=${app} ctx=${ctx} n=${SKIN} />`);
   assert.match(joined, /class="opt sel"[^>]*>(?:(?!<\/button>).)*a:3/s);
   // Black becomes PETG: the merge no longer joins, so skin prints from its own pick, a:2.
@@ -182,11 +210,11 @@ test('real U1: the picker marks the bay a colour really prints from, also past a
   assert.match(stale, /class="opt sel"[^>]*>(?:(?!<\/button>).)*a:2/s);
 });
 
-test('real U1: a pick joins from the plan shown, also before a file is chosen in the page', () => {
+test('real U1: a pick is a pick from the plan shown, also before a file is chosen in the page', () => {
   const app = appOf();
   app.print = { ...app.print, file: null };
   live(app).run('pick', { n: String(SKIN), key: 'a:4' });
-  assert.equal(app.print.merges[SKIN], 0);
+  assert.deepEqual([app.print.choice[SKIN], app.print.merges], ['a:4', {}]);
 });
 
 test('real U1: eject all leaves a:3, loaded in T1 with no material set for the adapter, and says so', () => {
@@ -328,8 +356,9 @@ test('real U1: Done on a put over a red spool picks that bay for black, and Prin
   app.print = { ...app.print, trail: g.trail, step: g.trail.indexOf('i:a:1') };
   assert.equal(guideOf(app)?.cur?.kind, 'put');
   ctx.run('step_done', {});
-  // Skin then prints from the brown spool (a join), so every colour has a bay.
+  // Skin and brown are then both set to the brown spool, so every colour has a bay.
   ctx.run('pick', { n: '4', key: 'b:1' });
+  ctx.run('pick', { n: '3', key: 'b:1' });
   const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
   assert.equal(asIsChoice(now.plan, now.pick, now.merges)[6], 'a:1');
   // Print sends black from a:1 and the confirm says so.

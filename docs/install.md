@@ -5,7 +5,7 @@ together with the adapter `[ace2k_u1]` (`klippy/extras/ace2k_u1.py`, `config/ace
 the adapter, the U1's own filament handling (load, unload, runout and the rest) drives the unit.
 The guide also explains what the adapter does once it is installed.
 
-You need ace2k `v0.13.0` on the unit and on the printer. The installer installs it. The adapter
+You need ace2k `v0.14.0` on the unit and on the printer. The installer installs it. The adapter
 does not attach to the U1 when ace2k's host interface is older than `API_VERSION` 12. ace2k
 `v0.12.0-rc.1` has version 6 ([Troubleshooting](#troubleshooting)).
 
@@ -292,8 +292,8 @@ same head, through a splitter, are joined by `+`: `a:1+a:2`. A `-` leaves the he
 
 ### Prerequisites
 
-- **The paxx extended firmware `v1.6.0-paxx12-22`**, installed over the U1's stock firmware
-  1.6.0. This guide was tested on it. To install it, follow paxx's own guide,
+- **The paxx extended firmware `v2.0.0-paxx12-24`**, installed over the U1's stock firmware.
+  This guide was tested on it. To install it, follow paxx's own guide,
   [`install.md`](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware/blob/main/docs/install.md).
   In short, you copy its upgrade file to a USB drive formatted as FAT32, and you start the upgrade
   from the printer's screen. Its Klipper is older than the one ace2k is built against. The one
@@ -358,12 +358,12 @@ U1, three things are different:
   needs no change.
 - Klipper is restarted with `/etc/init.d/S60klipper restart` ([Restart](#restart)).
 
-When it is done, `ACEK_STATUS` reports `ace2k 0.13.0` and `ACEK_HEALTH` reports `OK`.
+When it is done, `ACEK_STATUS` reports `ace2k 0.14.0` and `ACEK_HEALTH` reports `OK`.
 
 ### Copy
 
 This step copies the adapter's files and its web page. First get the release on your computer:
-`git clone --branch v0.4.0 https://github.com/tobecwb/ace2k-u1`. Then, from the directory
+`git clone --branch v0.5.0 https://github.com/tobecwb/ace2k-u1`. Then, from the directory
 that holds the `ace2k-u1` tree, run:
 
     scp ace2k-u1/klippy/extras/ace2k_u1*.py root@<printer>:/home/lava/klipper/klippy/extras/
@@ -478,7 +478,7 @@ Run the command above, and Klipper starts with them.
 
 In Klipper's console:
 
-- `ACEK_STATUS`: the firmware version (`0.13.0`), the four lanes (`idle`, with or without a
+- `ACEK_STATUS`: the firmware version (`0.14.0`), the four lanes (`idle`, with or without a
   filament), the temperatures, the mains frequency, and the dryer `idle`.
 - `ACEK_HEALTH`: `OK`.
 - About a second after Klipper is ready, the console line `ace2k_u1: hooked lanes [1, 2, 3, 4]`.
@@ -1445,7 +1445,7 @@ first ([Taking a filament out of its bay](#taking-a-filament-out-of-its-bay)).
     image without it. Flash `v0.11.0` or later.
   - `grip_mm <mm> is outside the unit's 10..45 mm`: `grip_mm` in `[ace2k_u1]` is outside the
     limits the unit's firmware has. Set it within them and restart.
-  - `eject_probe_speed <mm/s> is outside the unit's 9..70 mm/s`, the same for `swap_speed` and
+  - `eject_probe_speed <mm/s> is outside the unit's 9..80 mm/s`, the same for `swap_speed` and
     `probe_speed`, or `probe_mm <mm> is longer than the unit's longest move, <mm> mm` (only on a
     unit whose longest move is under 300 mm): that key in `[ace2k_u1]` is outside the unit's own
     limits for a move
@@ -1492,8 +1492,8 @@ first ([Taking a filament out of its bay](#taking-a-filament-out-of-its-bay)).
   entered a state that turns the follow on (an extrusion, a finished load, the unload's tip
   shaping), and the unit refused it. The U1's flow goes on, with nothing feeding or taking up
   behind the extruder. The usual reasons:
-  - `bounds`: `feed_speed` in `[ace2k_u1]` is outside the unit's speed range, 9–70 mm/s. 70, the
-    default, is the top of the range.
+  - `bounds`: `feed_speed` in `[ace2k_u1]` is outside the unit's speed range, 9–80 mm/s. The default
+    is 70.
   - `in_error`: the lane is in its error state (`ACEK_CLEAR LANE=n`).
   - `no_filament`: the unit sees no filament at the bay's insert sensor.
   - `no_link`: the unit's link is down.

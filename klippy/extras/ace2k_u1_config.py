@@ -26,15 +26,23 @@ except ImportError:
     except ImportError:  # ace2k is not installed, so there is nothing to hook; the hook says so
         ace2k_units = None  # type: ignore[assignment]  # the module, or None without ace2k
 
+try:
+    from .ace2k_u1_common import UNIT_TOP_FALLBACK_MM_S, unit_speed
+except ImportError:  # the host tests put klippy/extras on the path and import by bare name
+    from ace2k_u1_common import (  # type: ignore[import-not-found, no-redef]
+        UNIT_TOP_FALLBACK_MM_S,
+        unit_speed,
+    )
+
 LANES = 4
 # Default of headN_splitter_mm, in mm: 810 from the inlet to the gear, 80 to a splitter at the
 # rear, 70 inside the splitter and 30 as a margin (990), rounded up to 1000.
 SPLITTER_DEFAULT_MM = 1000.0
 SPLITTER_MAX_MM = 2000.0  # the ceiling of headN_splitter_mm
-SWAP_SPEED = 70.0  # mm/s, for the roll back of the old lane and the push of the new lane
-# The ceiling for the speed of a move. It is used when the image of the unit does not give its
-# own (speed_max).
-SWAP_SPEED_MAX_MM_S = 70.0
+SWAP_SPEED = 80.0  # mm/s, for the roll back of the old lane and the push of the new lane
+# The ceiling of the SPEED of the bench G-codes (ACEK_FREE_CHECK and the probes): the top of the
+# unit's range. The move still runs within the unit's own speeds (Adapter.within_speed).
+BENCH_SPEED_MAX_MM_S = 80.0
 # The longest move of a probe or a free check. This is a limit of the adapter, below the longest
 # move of the unit.
 SWAP_LENGTH_MAX_MM = 300.0
@@ -67,6 +75,17 @@ class SwapConfig:
     probe_speed: float
     probe_max_temp: float
     unload_temps: dict[str, float] = field(default_factory=dict)
+    # False when swap_speed is left out (SWAP_SPEED); the hook then checks it against no unit.
+    swap_speed_set: bool = True
+
+    def swap_speed_for(self, api: object) -> float:
+        """Returns the swap speed of a move of the unit whose feed is api (mm/s).
+
+        It is swap_speed (SWAP_SPEED when left out) within the unit's speeds (unit_speed): a
+        unit whose top speed is lower, an older image's 70 or the fallback of an image that
+        gives none, runs its moves at that.
+        """
+        return unit_speed(api, self.swap_speed)
 
 
 def check_forms(config: Config, entries: list[str], declared: list[str | None]) -> None:
@@ -289,10 +308,12 @@ def read_swap_keys(config: Config, counts: dict[int, int]) -> SwapConfig:
             value = SPLITTER_DEFAULT_MM
             default.add(head)
         splitter[head] = value
+    swap_speed = config.getfloat("swap_speed", None, above=0.0)
     return SwapConfig(
-        # The ceiling of the speeds comes from the unit (its speed_max). It is checked at the
-        # hook (bound_problems).
-        swap_speed=config.getfloat("swap_speed", SWAP_SPEED, above=0.0),
+        # The ceiling of the speeds comes from the unit (its speed_max). A value that is set is
+        # checked at the hook (bound_problems); the default follows each unit (swap_speed_for).
+        swap_speed=SWAP_SPEED if swap_speed is None else swap_speed,
+        swap_speed_set=swap_speed is not None,
         splitter_mm=splitter,
         splitter_default=default,
         colour_max_distance=config.getfloat("colour_max_distance", COLOUR_MAX_DISTANCE, above=0.0),
@@ -326,13 +347,13 @@ def bound_problems(
 def _speed_out(feed: object, key: str, value: float) -> str | None:
     """Returns why a speed is outside feed.speed_min .. feed.speed_max, or None.
 
-    An image without these limits uses SWAP_SPEED_MAX_MM_S as the upper limit.
+    An image without these limits uses UNIT_TOP_FALLBACK_MM_S as the upper limit.
     """
     low = getattr(feed, "speed_min", None)
     high = getattr(feed, "speed_max", None)
     if not (isinstance(low, (int, float)) and isinstance(high, (int, float))):
-        if value > SWAP_SPEED_MAX_MM_S:
-            return f"{key} {value:g} is above {SWAP_SPEED_MAX_MM_S:g} mm/s"
+        if value > UNIT_TOP_FALLBACK_MM_S:
+            return f"{key} {value:g} is above {UNIT_TOP_FALLBACK_MM_S:g} mm/s"
         return None
     if low <= value <= high:
         return None

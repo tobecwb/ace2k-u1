@@ -51,13 +51,8 @@ import { built } from './send.js';
 import { appendEvent } from './history.js';
 import {
   normalColour,
-  bayOwner,
-  bayRoots,
   choiceFor,
-  chosen,
-  mergeRoot,
   laneByKey,
-  liveLanes,
   lookOf,
   nextOptions,
   pinOf,
@@ -185,13 +180,14 @@ function dryField(ctx, el) {
 }
 
 // Sets tool n's pick (a lane key or NEW), its merge (the tool it joins) and its pin (the spool picked), each null
-// for none, for the plan shown. The change is stamped with that plan, so a re-plan of the same file carries it
+// for none, for the plan shown. override is true for a pick the user made in the colour picker (print.overrides); a
+// pick of NEW is not one: the planner says where the new spool goes. The change is stamped with that plan, so a re-plan of the same file carries it
 // (carriedChoice). A choice made for an earlier plan is dropped.
 /**
  * @param {AppState} app @param {number} n
- * @param {{ key?: string | null, into?: number | null, pin?: import('./types.js').Pin | null }} set
+ * @param {{ key?: string | null, into?: number | null, pin?: import('./types.js').Pin | null, override?: boolean }} set
  */
-function setTool(app, n, { key = null, into = null, pin = null }) {
+function setTool(app, n, { key = null, into = null, pin = null, override = false }) {
   const plan = shownPlan(app);
   const base = plan ? choiceFor(app.print, plan) : app.print.choice;
   const merges = without(mergesOf(app.print), n);
@@ -205,6 +201,11 @@ function setTool(app, n, { key = null, into = null, pin = null }) {
     pinned,
     // The user's own choice now: no longer one the page settled itself.
     auto: (app.print.auto ?? []).filter((x) => x !== n),
+    // The colours the user set, for the plan of this choice only: one dropped from the choice is dropped here too.
+    overrides: [
+      ...(app.print.overrides ?? []).filter((x) => x !== n && base[x] != null),
+      ...(override && key !== null && key !== NEW ? [n] : []),
+    ],
     // The tools at the time of the choice. A new plan is compared against them.
     ...(plan ? { choiceId: planId(plan), choiceTools: plan.tools } : {}),
     // Another pick makes other steps: the guide starts over. A spool already in hand stays held.
@@ -223,25 +224,12 @@ function setTool(app, n, { key = null, into = null, pin = null }) {
  * @param {{ type: string, color: string } | null} [saved]
  */
 function pickTool(app, n, key, saved = null) {
-  const plan = shownPlan(app);
-  if (plan && key !== NEW) {
-    // The join context of the plan shown: the picks and merges the picker draws.
-    const pick = chosen(plan, choiceFor(app.print, plan));
-    const merges = mergesOf(app.print);
-    const root = mergeRoot(plan, merges, n);
-    // The bay the colour already prints from, through a join: no change.
-    if (root !== n && pick[root] === key) return;
-    // A bay that another colour prints from holds one spool: the pick joins that colour (bayOwner), also after
-    // "Save and use" defined that spool.
-    const owner = bayOwner(plan, bayRoots(plan, pick, merges), merges, n, key);
-    if (owner !== null) {
-      setTool(app, n, { into: owner });
-      return;
-    }
-  }
-  const before = pinOf(plan ? laneByKey(liveLanes(app.status, plan), key) : undefined);
+  // A bay is always a pick, never a join: the colour prints from the spool the user chose, also when another colour
+  // prints from it too. Only "join with another colour" joins. The bay is read as the picker and the planner read it
+  // (planLanes): a spool that eject all holds in hand is the spool of its bay.
+  const before = pinOf(laneByKey(planNow(app)?.planLanes ?? [], key));
   const pin = saved ? { uid: null, look: lookOf(saved.type, saved.color), was: before } : before;
-  setTool(app, n, { key, pin: pin && (pin.uid || pin.look) ? pin : null });
+  setTool(app, n, { key, pin: pin && (pin.uid || pin.look) ? pin : null, override: true });
 }
 
 // Opens bay key's panel with its spool editor already open. extra is what editOpen reads besides the lane: from the

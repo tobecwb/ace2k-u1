@@ -321,6 +321,9 @@ TAIL_MM = 100.0
 class FakeFeedApi:
     API_VERSION = 15
     move_max_mm = 2000.0
+    # the top speed of ace2k's current image; with no speed_min the hook checks against the
+    # fallback, as for an image that gives no limits (the bound tests patch both)
+    speed_max = 80.0
     has_follow = True  # the unit's image carries the follow (read by ace2k at connect)
     follow_default = True  # ace2k's [ace2k] follow_default (API_VERSION 8)
     has_grip = True  # and the grip, with its default and bounds (the dictionary's)
@@ -827,18 +830,20 @@ class U1Moves:
     printing every G1 E adds to the active head's printing_e_pos, capped at 0, and only G92
     resets it: an unload (INNER_FILAMENT_UNLOAD, or the unload flow's doing stage, which runs it)
     adds about -70 mm; a load's extrusion adds 20 mm, then its flush retracts |printing_e_pos|
-    while the print is printing or paused (5 mm otherwise), recorded in flush_retract; the nozzle
-    clean (ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD) extrudes 5 mm; the U1's pre-extrusion
+    while the print is printing or paused (5 mm otherwise), recorded in flush_retract; the U1's
+    nozzle cleans (ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD, and the cut, clean and discard of its
+    pre-extrusion) move no filament, as the U1's macros do not; the U1's pre-extrusion
     (SM_PRINT_PREEXTRUDE_FILAMENT, which sets the tool's record, or INNER_PREEXTRUDE_FILAMENT)
-    extrudes its LENGTH (20 mm by default), retracts 0.5 mm and cleans once on the active head,
+    extrudes its LENGTH (20 mm by default), retracts 0.5 mm and cleans once on the active head
+    (a RETRACT_LENGTH makes it fail, as the U1's macro does),
     its printing_e_pos as it starts recorded in e_pos_at_preextrude. Its SOFT never changes the
     length: the U1's macro sets 10 mm only when SOFT == True, and a G-code parameter is a string.
     T<h> A0 makes head h the active one.
     The unload flow's STAGE=cancel sets the head's channel to unload_fail, then to preload_finish
     or wait_insert as its port reads. An AUTO_FEEDING without EXTRUDER= is ignored. The swap's
     macros as their defaults run: ACEK_SWAP_UNLOAD as INNER_FILAMENT_UNLOAD on the head it names
-    (made active), ACEK_SWAP_LOAD as its two extrusions and its clean (SWAP_GRIP_E + PURGE_E +
-    CLEAN_E; the swap's pre-extrusion cleans again) on the head it names (made active);
+    (made active), ACEK_SWAP_LOAD as its two extrusions and its clean (SWAP_GRIP_E + PURGE_E;
+    the swap's pre-extrusion cleans again) on the head it names (made active);
     swap_macros records each call's parameters, e_pos_at_macro the head's printing_e_pos as each
     starts, active_at_macro the index of the head active as each is called (before the macro
     makes its own head active).
@@ -847,7 +852,6 @@ class U1Moves:
 
     UNLOAD_E = -70.0
     LOAD_E = 20.0  # the U1's own load flow
-    CLEAN_E = 5.0
     SWAP_GRIP_E = 40.0  # the swap's load macro: from the head's sensor through the gear
     PURGE_E = 60.0  # the swap's load macro: its purge
     PREEXTRUDE_E = 20.0  # the U1's pre-extrusion, when no LENGTH is given
@@ -869,6 +873,7 @@ class U1Moves:
         self.e_pos_at_macro = []  # the named head's printing_e_pos as each macro starts
         self.active_at_macro = []  # the active head's index as each macro is called
         self.e_pos_at_preextrude = []  # the active head's printing_e_pos as each pre-extrusion runs
+        self.preextrude_retract = []  # each pre-extrusion's retraction (negative mm)
 
     def _add(self, ext: FakeExtruder, delta: float) -> None:
         if self.print_stats.state == "printing":
@@ -889,10 +894,8 @@ class U1Moves:
             return
         if cmd == "INNER_FILAMENT_UNLOAD":
             self._add(self.active, self.UNLOAD_E)
-        elif cmd == "ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD":
-            self._add(self.active, self.CLEAN_E)
         elif cmd in ("SM_PRINT_PREEXTRUDE_FILAMENT", "INNER_PREEXTRUDE_FILAMENT"):
-            self._preextrude(self._value(words, "INDEX"), self._value(words, "LENGTH"))
+            self._preextrude(cmd, words)
         elif cmd == "AUTO_FEEDING":
             head = self._value(words, "EXTRUDER")
             if head is None or not head.isdigit() or int(head) not in self.extruders:
@@ -930,14 +933,23 @@ class U1Moves:
             self._add(ext, self.UNLOAD_E)
         else:
             self._add(ext, self.SWAP_GRIP_E + self.PURGE_E)
-            self._add(ext, self.CLEAN_E)
 
-    def _preextrude(self, index: str | None, length: str | None = None) -> None:
-        """The U1's pre-extrusion on the active head; with an INDEX, the tool's record set."""
+    def _preextrude(self, cmd: str, words: list[str]) -> None:
+        """The U1's pre-extrusion on the active head; with an INDEX, the tool's record set.
+
+        Its retraction is recorded in preextrude_retract. A RETRACT_LENGTH makes it fail: the
+        U1's macro applies abs to the parameter as a string, with no float first."""
+        if self._value(words, "RETRACT_LENGTH") is not None:
+            raise RuntimeError(
+                f"Error evaluating 'gcode_macro {cmd}:gcode': "
+                "TypeError: bad operand type for abs(): 'str'"
+            )
+        index, length = self._value(words, "INDEX"), self._value(words, "LENGTH")
         self.e_pos_at_preextrude.append(self.active.printing_e_pos)
         self._add(self.active, self.PREEXTRUDE_E if length is None else float(length))
-        self._add(self.active, self.PREEXTRUDE_RETRACT_E)
-        self._add(self.active, self.CLEAN_E)
+        back = self.PREEXTRUDE_RETRACT_E
+        self.preextrude_retract.append(back)
+        self._add(self.active, back)
         if index is not None and index.isdigit():
             self.print_stats._config["print_job"]["preextrude_filament"][int(index)] = True
 

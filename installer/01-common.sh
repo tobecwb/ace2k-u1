@@ -9,7 +9,7 @@ set -u
 
 U1_REPO=tobecwb/ace2k-u1
 ACE2K_REPO=tobecwb/ace2k
-TESTED_PAXX=1.6.0-paxx12-22
+TESTED_PAXX=2.0.0-paxx12-24
 FACTORY_VERSION=1.1.31
 DEBUG_MSG="Created /oem/.debug. No reboot is needed: the files written now survive the next boot, because the U1 wipes its overlay at boot only when this flag is missing."
 

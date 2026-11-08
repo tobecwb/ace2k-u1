@@ -31,7 +31,7 @@ def test_no_paxx_stops(u1: FakeU1) -> None:
 def test_another_paxx_version_warns_and_asks(u1: FakeU1) -> None:
     (u1.root / "etc" / "BUILD_VERSION").write_text("1.7.0-paxx13-1-abc\n")
     p = u1.run("--remove", answers=["n"])
-    assert p.returncode == 1 and "only 1.6.0-paxx12-22 was tested" in p.out
+    assert p.returncode == 1 and "only 2.0.0-paxx12-24 was tested" in p.out
     p = u1.run("--remove", answers=["y"])
     assert p.returncode == 0 and "nothing to remove" in p.out
 

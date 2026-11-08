@@ -20,6 +20,11 @@ import {
   planId,
   refusalAction,
   rekeyPicks,
+  userBays,
+  laneByKey,
+  materialMatch,
+  colourDiffers,
+  laneColourName,
   liveLanes,
 } from './print-plan.js';
 
@@ -269,6 +274,7 @@ export function planFile(ctx, file) {
     merges: {},
     pinned: {},
     auto: [],
+    overrides: [],
     ...FRESH_GUIDE,
   };
   app.printOptions = { ...DEFAULT_OPTIONS }; // The screen starts each file from the default options.
@@ -360,6 +366,7 @@ function afterStart(app, file) {
     merges: {},
     pinned: {},
     auto: [],
+    overrides: [],
   };
 }
 
@@ -368,7 +375,9 @@ function afterStart(app, file) {
 const NO_PINS = Object.freeze({});
 
 // Runs on each status. First the pins follow their spools in the live bays (rekeyPicks): a pick moves with its spool,
-// waits through an empty bay or a status lag, and goes, with a toast, only when its bay holds another known spool.
+// waits through an empty bay or a status lag, and goes, with a toast, only when its bay holds another known spool. A
+// bay the user set in the colour picker stays the colour's whatever it holds (userBays): when it holds another spool of
+// another colour, a toast says so once.
 // Then, when the plan shown was made again for the file of the choice, the choice, the merges and the pins move to
 // the new plan. The lanes that the new plan no longer offers are dropped, and their tools go back to the suggestion.
 // One toast lists them.
@@ -376,12 +385,15 @@ const NO_PINS = Object.freeze({});
 export function keepChoice(ctx) {
   const { app } = ctx;
   const plan = shownPlan(app);
-  if (!carriedChoice(app.print, plan)) return;
+  // The bays the user set, worked out once for the pins and the re-plan.
+  const mine = userBays(app.print.choice, app.print.overrides);
+  if (!carriedChoice(app.print, plan, mine)) return;
   const p = /** @type {import('./types.js').Plan} */ (plan); // carriedChoice is null without a plan.
   const pins = app.print.pinned ?? NO_PINS;
-  const moved = rekeyPicks(app.print.choice, pins, liveLanes(app.status, p));
+  const lanes = liveLanes(app.status, p);
+  const moved = rekeyPicks(app.print.choice, pins, lanes, mine);
   const carried = /** @type {NonNullable<ReturnType<typeof carriedChoice>>} */ (
-    carriedChoice({ ...app.print, choice: moved.choice, pinned: moved.pinned }, p)
+    carriedChoice({ ...app.print, choice: moved.choice, pinned: moved.pinned }, p, mine)
   );
   // The same plan and no spool moved: nothing changes.
   if (app.print.choiceId !== planId(p) || carried.choice !== app.print.choice || carried.pinned !== pins)
@@ -392,16 +404,32 @@ export function keepChoice(ctx) {
       merges: carried.merges,
       // The page's own settled picks go with the picks they settled.
       auto: (app.print.auto ?? []).filter((n) => carried.choice[n] != null),
+      overrides: (app.print.overrides ?? []).filter((n) => carried.choice[n] != null),
       choiceId: planId(p),
       choiceTools: p.tools,
     };
   for (const n of moved.lost) ctx.toast(ctx.t('print.pin_lost', { n: n + 1 }));
+  for (const n of moved.refilled) refillToast(ctx, p.tools[n], n, laneByKey(lanes, moved.choice[n]));
   if (carried.dropped.length)
     ctx.toast(
       ctx.t('print.choice_dropped', {
         choices: carried.dropped.map(({ n, key }) => `${ctx.t('print.colour_n', { n: n + 1 })}: ${key}`).join(', '),
       }),
     );
+}
+
+// The toast for a bay the user set whose spool is new (rekeyPicks's refilled: another spool, the first one in a bay
+// picked empty, or one whose colour became known): when that spool's colour is clearly not the file colour's, it still
+// prints from that bay, so the page says so once for that spool. A spool of no known material says nothing here: Print's
+// "define first" covers it. Another material says nothing either: Print is blocked with its reason.
+/**
+ * @param {Ctx} ctx @param {import('./types.js').Tool} tool @param {number} n
+ * @param {import('./types.js').PlanLane | undefined} lane
+ */
+function refillToast(ctx, tool, n, lane) {
+  if (!lane?.material || materialMatch(tool.material, lane.material) === 'other') return;
+  if (!colourDiffers(lane.colour, tool.colour)) return;
+  ctx.toast(ctx.t('print.bay_now_holds', { key: lane.key, colour: laneColourName(lane), n: n + 1 }));
 }
 
 // How often eject all reads the live bays while an eject runs, and how long it waits for one eject at most: a
