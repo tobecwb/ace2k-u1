@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .ace2k_u1_wraps import Wraps
 
 try:
+    from . import ace2k_u1_in_use as in_use_module
     from . import ace2k_u1_plan
     from .ace2k_u1_adapter import PRINT_ON
     from .ace2k_u1_common import own_spool_came, tag_state
@@ -34,6 +35,7 @@ try:
     from .ace2k_u1_swap import NoSpoolLine
     from .ace2k_u1_tracker import Plan
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
+    import ace2k_u1_in_use as in_use_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_plan  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_adapter import PRINT_ON  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_common import (  # type: ignore[import-not-found, no-redef]
@@ -129,6 +131,7 @@ class PageCommands:
         except OSError as err:
             raise gcmd.error(f"ace2k_u1: spool not saved: {err}") from None
         self._spool_set_on(unit, lane)
+        in_use_module.tell_by_hand(unit, lane)
         gcmd.respond_info(f"ace2k_u1: lane {text} spool: {kind} #{color}")
 
     @staticmethod
@@ -154,8 +157,8 @@ class PageCommands:
         h = adapter.hooked_lane(unit, lane) if adapter is not None and adapter.hooked else None
         if adapter is None or h is None:
             return
-        h.drop_due = False  # a record set on an empty bay waits until the bay fills and empties
-        h.end_eject_drop()  # and a new record is not the one an earlier eject took out
+        # A record set on an empty bay waits until the bay fills and empties.
+        h.drop_due = h.drop_wait = False
         # A newer word than the head's setting: the record speaks for the lane of a head that it
         # feeds alone until the head is written for it (the page's Edit spool writes the same).
         own_spool_came(h)
@@ -171,9 +174,9 @@ class PageCommands:
         bay. The tag policy writes nothing from the lane, and the spool of the lane is its
         ACEK_SPOOL record, which can be edited.
 
-        The mark lives in memory only. It goes when the spool is taken out by hand, as its record
-        does. READ=1 undoes the forget instead. The mark goes, and the unit reads the tag again on
-        the next move of the lane.
+        The mark lives in memory only. It goes when the bay empties, as its record does. READ=1
+        undoes the forget instead. The mark goes, and the unit reads the tag again on the next
+        move of the lane.
 
         A lane with no tag read is refused, and nothing is marked.
         """

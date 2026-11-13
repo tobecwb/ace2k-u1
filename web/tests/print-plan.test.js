@@ -7,7 +7,7 @@ import {
   flowHeadsOf,
   printScript,
   planScript,
-  swaps,
+  swapKinds,
   chosen,
   choiceFor,
   carriedChoice,
@@ -15,7 +15,7 @@ import {
   blockReason,
   blocked,
   printGate,
-  sentSwaps,
+  sentKinds,
   noFitWords,
   MAX_GROUPS,
   COLOUR_NAMES,
@@ -80,8 +80,13 @@ test("the swap count is the plan module's rule", () => {
   const choice = { 0: 'a:1', 1: 'a:2', 2: 'b:1' };
   const head = { 'a:1': 0, 'a:2': 0, 'b:1': 1 };
   assert.deepEqual(
-    swaps([0, 2, 1, 2, 0, 1], choice, (k) => head[k]),
-    { 0: 3, 1: 0 },
+    swapKinds([0, 2, 1, 2, 0, 1], choice, (k) => head[k]),
+    { stops: 3, free: 0 },
+  );
+  // With head 0 in the background, its two swaps right after a T of head 1 are free; the last one is a stop.
+  assert.deepEqual(
+    swapKinds([0, 2, 1, 2, 0, 1], choice, (k) => head[k], [0]),
+    { stops: 1, free: 2 },
   );
 });
 
@@ -685,9 +690,9 @@ test('printGate as it is: every colour on a bay of a head with its material set 
     blockReason(two, { 0: 'a:1', 1: 'a:1', 2: 'a:2' }, headless),
     t('print.choose_first', { tools: 'color 3' }),
   );
-  // sentSwaps counts on the live heads, and is null while a colour has no bay on a head.
-  assert.equal(sentSwaps(two, { 0: 'a:1', 1: 'a:1', 2: 'a:2' }, at), 0);
-  assert.equal(sentSwaps(two, { 0: 'a:1', 1: 'a:1', 2: 'a:2' }, headless), null);
+  // sentKinds counts on the live heads, and is null while a colour has no bay on a head.
+  assert.deepEqual(sentKinds(two, { 0: 'a:1', 1: 'a:1', 2: 'a:2' }, at), { stops: 0, free: 0 });
+  assert.equal(sentKinds(two, { 0: 'a:1', 1: 'a:1', 2: 'a:2' }, headless), null);
 });
 
 test("the page's colour names are the host's COLOUR_NAMES, in the same order", () => {

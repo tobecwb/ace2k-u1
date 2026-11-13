@@ -1,0 +1,17 @@
+{
+  "inline": 94,
+  "ready": 15,
+  "dock": 65,
+  "resume": 15,
+  "steps": {
+    "heat": 0,
+    "unload": 27,
+    "free": 1,
+    "roll back": 11,
+    "hand over": 0,
+    "push": 12,
+    "grip": 14,
+    "loaded": 0
+  },
+  "max_s": 600
+}

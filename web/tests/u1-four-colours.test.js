@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { html } from '../js/ui/html.js';
 import { ColourRows } from '../js/ui/ColourChips.js';
 import { ColourPicker, costWords } from '../js/ui/ColourPicker.js';
-import { pickCost, placement, userPick } from '../js/planner.js';
+import { pickCosts, placement, userPick } from '../js/planner.js';
 import { runAction } from '../js/actions.js';
 import { NEW, asIsChoice, liveLanes, printGate } from '../js/print-plan.js';
 import { planNow } from '../js/state.js';
@@ -210,7 +210,7 @@ test('a colour with no spool loaded ("too_far") set to any loaded spool prints f
 /** @param {any} app @param {any} ctx @param {number} n @param {string} key */
 const shownAndReal = (app, ctx, n, key) => {
   const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
-  const shown = pickCost(now.plan, now.raw, now.planLanes, now.merges, n, key, now.fixed);
+  const shown = pickCosts(now.plan, now.raw, now.planLanes, now.merges, n, key, now.fixed).d;
   const html1 = textOf(renderHtml(html`<${ColourPicker} app=${app} ctx=${ctx} n=${n} />`));
   const before = now.place?.best ?? 0;
   set(app, ctx, n, key);
@@ -281,7 +281,7 @@ test('the cost the picker shows counts a spool held in hand in its bay, as the p
   app.print = { ...app.print, held: [white] };
   const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
   const picker = textOf(renderHtml(html`<${ColourPicker} app=${app} ctx=${ctx} n=${1} />`));
-  const d = pickCost(now.plan, now.raw, now.planLanes, now.merges, 1, 'a:3', now.fixed);
+  const d = pickCosts(now.plan, now.raw, now.planLanes, now.merges, 1, 'a:3', now.fixed).d;
   assert.ok(picker.includes(`a:3 PLA ${costWords(t, d, now.place?.fits ?? true).text}`), picker);
 });
 
@@ -292,7 +292,7 @@ test('a choice that changes nothing costs nothing', () => {
   for (const l of now.place?.lines ?? [])
     if (l.act === 'there')
       for (const n of l.tools)
-        assert.equal(pickCost(now.plan, now.raw, now.planLanes, now.merges, n, l.key, now.fixed), 0, l.key);
+        assert.equal(pickCosts(now.plan, now.raw, now.planLanes, now.merges, n, l.key, now.fixed).d, 0, l.key);
 });
 
 // Two colours that look the same (white PLA) and a third, on one head of two lanes and one head of one.

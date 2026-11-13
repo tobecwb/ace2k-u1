@@ -48,6 +48,7 @@ const PLAN_SHOTS = [
     widths: [1440, 375],
     height: 900,
   },
+  { scenario: 'plan-times', file: 'benchy-5col.gcode', wait: '.tl', widths: [1440, 375], height: 900 },
   { scenario: 'plan-eject', file: 'phone-stand.gcode', wait: '.mbox', click: '.btn.ej', widths: [1360] },
   {
     scenario: 'plan-opts',

@@ -321,6 +321,19 @@ def test_the_active_head_is_the_one_of_the_active_extruder(tmp_path: Path) -> No
     assert warnings(rig) == ["ace2k_u1: head 3: 260 °C is above PLA's 190–230 °C (lane a:3)"]
 
 
+def test_an_unread_active_extruder_warns_nothing_and_the_call_runs(tmp_path: Path) -> None:
+    """With no index and the active extruder unread, the head cannot be told: no line."""
+
+    class Unread(fakes.FakeToolhead):
+        def get_extruder(self) -> object:
+            raise RuntimeError("no extruder")
+
+    rig = one_per_head(tmp_path)
+    rig.printer.objects["toolhead"] = Unread("extruder2")
+    assert temp(rig, "M104", {"S": "260"}) == [{"S": "260"}]
+    assert warnings(rig) == []
+
+
 def test_fluidd_set_heater_temperature_warns_and_still_heats(tmp_path: Path) -> None:
     rig = one_per_head(tmp_path)
     params = {"HEATER": "extruder1", "TARGET": "260"}

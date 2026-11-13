@@ -32,6 +32,8 @@ PRINTING_BELOW_C = 40.0
 PRINTING_FLOOR_C = 150.0
 # How far an M109 may be from the swap's temperature to skip its wait: the U1's settle delta.
 WAIT_SKIP_DELTA = 1.5
+# A head's target this close to the file's cool-down is still that cool-down (printing_before).
+TARGET_SAME_C = 0.5
 # The longest retraction a swap copies from the slicer. The slicer's own retraction before a T is
 # 10 mm in the files seen. A value past this is not a retraction, so it counts as unknown.
 RETRACT_MAX_MM = 15.0
@@ -65,6 +67,7 @@ class TrackerAdapter(Protocol):
     def say(self, msg: str) -> None: ...
     def slot_of(self, h: Hooked) -> Slot | None: ...
     def head_of_extruder(self, name: str) -> int | None: ...
+    def active_head(self, u1: U1Printer) -> int | None: ...
 
 
 class TrackerSwapper(Protocol):
@@ -177,6 +180,11 @@ class PrintTracker:
         # as much. A swap records it (record_retract) and spends it at its return step. It is
         # dropped at the start or end of a print.
         self.retract_owed: dict[int, float] = {}
+        # head -> (the target it printed at, the cool-down): the file's cool-down of the tool
+        # the active head prints, as it was applied (note_cool_down). A head that waits for a
+        # background swap at the cleaning area is kept at the first meanwhile (printing_before).
+        # It is dropped at the start or end of a print.
+        self.cooled_from: dict[int, tuple[float, float]] = {}
 
     def read_plan(self, path: str) -> ace2k_u1_plan.ParsedPlan:
         """Runs ace2k_u1_plan.read_file(path) in a thread of its own.
@@ -249,6 +257,7 @@ class PrintTracker:
             if self.keep_cool_down(n, value):
                 return TempCall(True)
             self._owe_pre_heat(n, value)
+            self.note_cool_down(n, value)
             return TempCall(False)
         slot = swap[0]
         plan = self._known_plan()
@@ -271,6 +280,44 @@ class PrintTracker:
                 return TempCall(False, cap if value > cap else None)
         self._say_kept(plan, n, slot)
         return TempCall(True)
+
+    def note_cool_down(self, n: int, value: float) -> None:
+        """Records the file's cool-down of T<n> on the active head, just before it is applied.
+
+        Recorded only while a plan runs, for a tool whose lane is in the active head, and when
+        the head's target before it is a printing temperature of the tool. A printing
+        temperature for the tool forgets what an earlier cool-down recorded.
+        """
+        h = self.tool_lane(n)
+        if h is None:
+            return
+        if value > 0.0 and self.printing_temp(n, value):
+            self.cooled_from.pop(h.head, None)
+            return
+        target = self._active_target(h.head)
+        if target is not None and self.printing_temp(n, target):
+            self.cooled_from[h.head] = (target, value)
+
+    def printing_before(self, head: int, target: float) -> float | None:
+        """Returns the temperature the head printed at before the file's cool-down, or None.
+
+        Only while target is still that cool-down: a head whose target changed since is left as
+        it is.
+        """
+        cooled = self.cooled_from.get(head)
+        if cooled is None or abs(target - cooled[1]) > TARGET_SAME_C:
+            return None
+        return cooled[0]
+
+    def _active_target(self, head: int) -> float | None:
+        """Returns the target of the head when it is the active one, else None (or unread)."""
+        name = self.host.u1.active_extruder_name()
+        if name is None or self._adapter().head_of_extruder(name) != head:
+            return None
+        ext = self.host.u1.extruder(name)
+        if ext is None:
+            return None
+        return ext.get_heater().get_temp(self.host.reactor.monotonic())[1]
 
     def _owe_pre_heat(self, n: int, value: float) -> None:
         """Records the pre-heat that the head of T<n> owes once it docks, if any (_pre_heat_for).
@@ -340,6 +387,7 @@ class PrintTracker:
         self.drop_owed_heat()
         self.clear_wait_skip()
         self.retract_owed = {}
+        self.cooled_from = {}
 
     def after_swap(self, head: int, tool: int | None, temp: float | None) -> None:
         """Marks a swap's end: the file's pre-extrusion and its first M109 are skipped."""
@@ -437,10 +485,7 @@ class PrintTracker:
 
         An active extruder that cannot be read counts as not docked, so the call is kept.
         """
-        name = self.host.u1.active_extruder_name()
-        if name is None:
-            return False
-        active = self._adapter().head_of_extruder(name)
+        active = self._adapter().active_head(self.host.u1)
         return active is not None and active != head
 
     def _say_kept(self, plan: Plan, n: int, slot: Slot) -> None:

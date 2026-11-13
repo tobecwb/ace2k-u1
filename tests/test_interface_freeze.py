@@ -42,6 +42,7 @@ STUBBED = {
     "ACEK_LANE_ACTIVE",
     "M104",
     "M109",
+    "MOVE_TO_XY_IDLE_POSITION_EXTRUDER",
     "RESUME",
     "SDCARD_PRINT_FILE",
     "SDCARD_PRINT_FILE_WITH_PARAMETERS",
@@ -152,6 +153,10 @@ def shapes(tmp_path: Path) -> dict[str, Any]:
         "setting_for_entry": keys(next(e for e in status["setting_for"] if e)),
         "lanes_entry_push_end": keys(status["lanes"]["a:3"]),
         "push_end": status["lanes"]["a:3"]["push_end"],
+        "swap_times": keys(status["swap_times"]),
+        "print_stops": keys(status["print_stops"]),
+        "swap_times_entry": keys(status["swap_times"]["inline"]),
+        "swap_times_steps": keys(status["swap_times"]["steps"]),
     }
 
 
@@ -196,6 +201,8 @@ def pause_reasons(tmp_path: Path) -> dict[str, Any]:
 def live(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     u1, reactor, _, _, gcode = test_eject.hooked_u1()
     unhooked = u1.get_status()
+    assert "swap_times" not in unhooked  # only while hooked
+    assert "print_stops" not in unhooked
     u1._hook(reactor.now)
     status = u1.get_status()
     wrapped, helps = wrapped_commands()

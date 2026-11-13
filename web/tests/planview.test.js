@@ -17,7 +17,8 @@ import { ColourRows, LaneChip, swatch } from '../js/ui/ColourChips.js';
 import { ColourPicker, costWords, joinable, unitHeading, toolWords } from '../js/ui/ColourPicker.js';
 import { runAction } from '../js/actions.js';
 import { keepChoice } from '../js/printflow.js';
-import { pickCost, SWAP_S } from '../js/planner.js';
+import { pickCosts } from '../js/planner.js';
+import { SEEDS } from '../js/swap-time.js';
 import {
   NEW,
   carriedChoice,
@@ -156,7 +157,7 @@ test('the header: name, slicer time, thumbnail, and the swaps as it is and with 
   assert.ok(text.includes(t('print.slicer_time', { time: '1:36' })));
   assert.match(out, /<img src="\/t.png" alt="Preview of five.gcode"/);
   assert.ok(text.includes(`${t('print.as_is')} ${DASH} ${t('print.missing_n', { n: 2 })}`));
-  const best = `${swapsWords(t, p.best)} ${t('print.stopped', { time: fmtHM(p.best * SWAP_S) })}`;
+  const best = `${swapsWords(t, p.best)} ${t('print.stopped', { time: fmtHM(p.bestS) })}`;
   assert.ok(text.includes(`${t('print.with_suggestion')} ${best}`), text);
   button(nodes, t('print.back')).props.onClick();
   assert.deepEqual(runs[0], ['print_back', {}]);
@@ -300,7 +301,7 @@ test('the similar hint names the first pair; Join merges them, Keep apart hides 
   assert.ok(!textOf(view(app).out).includes(t('print.similar_note')));
 });
 
-test('the picker: costs equal pickCost for two bays; another material, an empty bay and an unknown spool', () => {
+test('the picker: costs equal pickCosts for two bays; another material, an empty bay and an unknown spool', () => {
   const app = appOf(shared());
   const now = planNow(app);
   const { out, nodes, runs } = picker(app, 0);
@@ -310,7 +311,7 @@ test('the picker: costs equal pickCost for two bays; another material, an empty 
     [0, '1'],
     [3, '4'],
   ]) {
-    const d = pickCost(now.plan, now.pick, now.lanes, now.merges, 0, key);
+    const d = pickCosts(now.plan, now.pick, now.lanes, now.merges, 0, key).d;
     assert.ok(textIn(bays[i]).includes(costWords(t, d).text), `${key}: ${textIn(bays[i])}`);
     assert.ok(!bays[i].props.disabled);
   }
@@ -338,7 +339,7 @@ test('the picker: an empty bay is picked like any other; a new spool and a join 
   assert.equal(runs.at(-1)?.[0], 'pick');
   const fresh = button(
     nodes,
-    `${t('print.put_new', { what: 'PLA #FFFFFF' })}${costWords(t, pickCost(now.plan, now.pick, now.lanes, now.merges, 0, NEW)).text}`,
+    `${t('print.put_new', { what: 'PLA #FFFFFF' })}${costWords(t, pickCosts(now.plan, now.pick, now.lanes, now.merges, 0, NEW).d).text}`,
   );
   assert.ok(fresh);
   fresh.props.onClick();
@@ -347,7 +348,7 @@ test('the picker: an empty bay is picked like any other; a new spool and a join 
   assert.deepEqual(joinable(now, 0), [1, 6]);
   const join = buttons(nodes).find((b) => textIn(b).includes(t('print.join_with', { m: 2, what: 'PLA #D32C34' })));
   assert.ok(
-    textIn(join).includes(costWords(t, pickCost(now.plan, now.pick, now.lanes, now.merges, 0, { merge: 1 })).text),
+    textIn(join).includes(costWords(t, pickCosts(now.plan, now.pick, now.lanes, now.merges, 0, { merge: 1 }).d).text),
   );
   join.props.onClick();
   assert.deepEqual(runs.at(-1), ['merge', { n: '0', into: '1' }]);
@@ -471,7 +472,7 @@ test('while the plan does not fit, a choice that makes it fit reads "fits · n s
   assert.equal(now.place.fits, false);
   const { nodes } = picker(app, 0);
   const join = buttons(nodes).find((b) => textIn(b).includes('join with color 2'));
-  const d = pickCost(now.plan, now.pick, now.lanes, now.merges, 0, { merge: 1 });
+  const d = pickCosts(now.plan, now.pick, now.lanes, now.merges, 0, { merge: 1 }).d;
   assert.notEqual(d, null);
   assert.ok(textIn(join).includes(costWords(t, d, false).text));
 });
@@ -820,8 +821,14 @@ test('back to the files forgets the scroll and closes the options sheet', () => 
 });
 
 test('cmpLine: the comparison in one line, with the time stopped, or why the suggestion does not fit', () => {
-  assert.equal(cmpLine(t, null, 1, 'x'), t('print.cmp_line', { as_is: DASH, best: '1 swap', time: fmtHM(SWAP_S) }));
-  assert.equal(cmpLine(t, 3, 2, 'x'), `As it is 3 swaps · with the suggestion 2 swaps, ≈ ${fmtHM(2 * SWAP_S)} stopped`);
+  assert.equal(
+    cmpLine(t, null, 1, 'x', null, null, SEEDS.inline),
+    t('print.cmp_line', { as_is: DASH, best: '1 swap', time: fmtHM(SEEDS.inline) }),
+  );
+  assert.equal(
+    cmpLine(t, 3, 2, 'x', null, null, 2 * SEEDS.inline),
+    `As it is 3 swaps · with the suggestion 2 swaps, ≈ ${fmtHM(2 * SEEDS.inline)} stopped`,
+  );
   assert.equal(cmpLine(t, 0, null, 'why'), 'As it is 0 swaps · with the suggestion: why');
 });
 

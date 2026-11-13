@@ -26,6 +26,7 @@ from test_tools import (
 from test_units import Gcmd
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import SimpleNamespace
 
     from ace2k_u1_common import Hooked
@@ -1118,7 +1119,12 @@ def test_a_refill_with_no_plan_ends_with_its_print(tmp_path: Path, end: str) -> 
     assert not [ln for ln in rig.gcode.lines if "refused" in ln]
 
 
-def test_the_refill_line_with_no_plan_names_the_head(tmp_path: Path) -> None:
+def refilled_with_no_plan(
+    tmp_path: Path, before_resume: Callable[[SimpleNamespace], None] | None = None
+) -> SimpleNamespace:
+    """Head 1's lane runs out in a print with no plan; a new spool goes in and RESUME refills.
+
+    before_resume(rig) runs just before the RESUME."""
     rig, a = refill_rig(tmp_path)
     no_plan(rig)
     tail(rig)
@@ -1128,7 +1134,14 @@ def test_the_refill_line_with_no_plan_names_the_head(tmp_path: Path) -> None:
     new_spool(rig)  # the new spool set (its record dropped with the run-out one)
     a.feed.on_start = ends("done")
     a.feed.on_push = lambda: setattr(rig.head_sensor, "detected", True)
+    if before_resume is not None:
+        before_resume(rig)
     resume(rig)
+    return rig
+
+
+def test_the_refill_line_with_no_plan_names_the_head(tmp_path: Path) -> None:
+    rig = refilled_with_no_plan(tmp_path)
     said = [ln for ln in rig.gcode.lines if "no printing temperature" in ln]
     assert said == [
         "ace2k_u1: head 1: no printing temperature known for head 1: the load temperature, 230 °C,"

@@ -4534,6 +4534,13 @@ def test_the_swaps_spool_step_records_only_the_lane_in_the_head(tmp_path: Path) 
     assert slot.setting_for is a1
 
 
+def watch_empty(rig: SimpleNamespace) -> None:
+    """Run the bay watch now and 2 s later: an empty bay of a lane at rest drops its record."""
+    rig.adapter.watch(rig.reactor.now)
+    rig.reactor.now += 2.0
+    rig.adapter.watch(rig.reactor.now)
+
+
 def test_a_spool_record_is_dropped_when_its_bay_empties(tmp_path: Path) -> None:
     rig, by_name = tools_rig(tmp_path)
     spools(rig, {"a:2": "ffffff", "a:3": "000000"})
@@ -4543,7 +4550,7 @@ def test_a_spool_record_is_dropped_when_its_bay_empties(tmp_path: Path) -> None:
     rig.adapter.watch(rig.reactor.now)
     assert sorted(rig.module.spool_store.records) == ["a:2", "a:3"]
     lanes[1]["insert"] = False  # the spool taken out of its bay
-    rig.adapter.watch(rig.reactor.now)
+    watch_empty(rig)
     assert sorted(rig.module.spool_store.records) == ["a:3"]
     saved = json.loads((tmp_path / "ace2k_u1_spools.json").read_text())
     assert sorted(saved) == ["a:3"]
@@ -4622,6 +4629,7 @@ def test_a_spool_record_not_dropped_for_a_write_failure_is_logged_once(
         raise OSError("disk full")
 
     monkeypatch.setattr(rig.module.spool_store, "write", fails)
+    watch_empty(rig)
     for _ in range(3):
         rig.adapter.watch(rig.reactor.now)
     assert "a:2" in rig.module.spool_store.records  # kept for the next tick
@@ -4647,11 +4655,11 @@ def test_a_spool_record_set_on_an_empty_bay_is_kept_until_the_bay_fills_and_empt
     lanes[1]["insert"] = True
     rig.adapter.watch(rig.reactor.now)
     lanes[1]["insert"] = False
-    rig.adapter.watch(rig.reactor.now)
+    watch_empty(rig)
     assert "a:2" not in rig.module.spool_store.records
 
 
-def test_a_swap_roll_back_that_runs_out_of_the_bay_keeps_the_spool_record(tmp_path: Path) -> None:
+def test_a_swap_roll_back_that_runs_out_of_the_bay_drops_the_spool_record(tmp_path: Path) -> None:
     rig, a = swap_rig(tmp_path)
     a.lanes[0]["insert"] = True
     rig.adapter.watch(rig.reactor.now)
@@ -4659,27 +4667,24 @@ def test_a_swap_roll_back_that_runs_out_of_the_bay_keeps_the_spool_record(tmp_pa
     a.feed.on_start = ends("runout", motor_mm=90.0, filament_mm=-80.0)
     a.feed.on_push = lambda: setattr(rig.head_sensor, "detected", True)
     tool(rig, 2)
+    back = [mv for ln, m, _l, _s, mv in a.feed.started if ln == 0 and m == "rollback"][-1]
+    rig.adapter.on_feed_event(0, dict(back.event, mode="rolling_back", unit="a"))  # its end
     a.lanes[0].update(insert=False, mode="idle")  # the roll back took it out of its bay
     rig.reactor.now += 1.0
-    rig.adapter.watch(rig.reactor.now)
-    assert "a:1" in rig.module.spool_store.records
-    rig.reactor.now += 10.0
-    rig.adapter.watch(rig.reactor.now)  # still empty, never emptied by hand
-    assert "a:1" in rig.module.spool_store.records
+    watch_empty(rig)
+    assert "a:1" not in rig.module.spool_store.records
 
 
 @pytest.mark.parametrize(
-    "event, later, kept",
+    "event",
     [
-        ({"kind": "runout", "mode": "following"}, 2.0, True),  # a tail lane ran out
-        ({"kind": "unloaded", "mode": "unloading"}, 2.0, True),
-        ({"kind": "done", "mode": "rolling_back"}, 4.0, True),
-        ({"kind": "done", "mode": "feeding"}, 2.0, False),
-        ({"kind": "runout", "mode": "rolling_back"}, 6.0, False),  # long before: by hand
+        {"kind": "runout", "mode": "following"},  # a tail lane ran out
+        {"kind": "unloaded", "mode": "unloading"},
+        {"kind": "done", "mode": "rolling_back"},
     ],
 )
-def test_a_bay_emptied_by_a_move_of_its_lane_keeps_the_spool_record(
-    tmp_path: Path, event: dict[str, str], later: float, kept: bool
+def test_a_bay_emptied_by_a_move_of_its_lane_drops_the_spool_record(
+    tmp_path: Path, event: dict[str, str]
 ) -> None:
     rig, by_name = tools_rig(tmp_path)
     spools(rig, {"a:3": "ffffff"})
@@ -4687,24 +4692,26 @@ def test_a_bay_emptied_by_a_move_of_its_lane_keeps_the_spool_record(
     lanes[2]["insert"] = True
     rig.adapter.watch(rig.reactor.now)
     rig.adapter.on_feed_event(2, dict(event, seq=7, unit="a"))
-    rig.reactor.now += later
+    rig.reactor.now += 2.0
     lanes[2].update(insert=False, mode="idle")
-    rig.adapter.watch(rig.reactor.now)
-    assert ("a:3" in rig.module.spool_store.records) is kept
+    watch_empty(rig)
+    assert "a:3" not in rig.module.spool_store.records
 
 
-def test_a_bay_emptied_while_its_lane_moves_keeps_the_spool_record(tmp_path: Path) -> None:
+def test_a_bay_emptied_while_its_lane_moves_drops_the_spool_record_once_it_rests(
+    tmp_path: Path,
+) -> None:
     rig, by_name = tools_rig(tmp_path)
     spools(rig, {"a:3": "ffffff"})
     lanes = by_name["a"].lanes
     lanes[2]["insert"] = True
     rig.adapter.watch(rig.reactor.now)
     lanes[2].update(insert=False, mode="rolling_back")
-    rig.adapter.watch(rig.reactor.now)
+    watch_empty(rig)
+    assert "a:3" in rig.module.spool_store.records  # the lane still moves
     lanes[2]["mode"] = "idle"
-    rig.reactor.now += 10.0
-    rig.adapter.watch(rig.reactor.now)
-    assert "a:3" in rig.module.spool_store.records
+    watch_empty(rig)
+    assert "a:3" not in rig.module.spool_store.records
 
 
 @pytest.mark.parametrize("held", [True, False])
@@ -4918,29 +4925,36 @@ def test_the_forgotten_mark_goes_when_the_spool_is_taken_out_by_hand(tmp_path: P
     tick(rig)
     assert h.tag_forgotten is True  # a tick with the bay still full keeps it
     by_name["a"].lanes[2]["insert"] = False
+    tick(rig, 2.0)
     tick(rig)
     assert h.tag_forgotten is False
     assert rig.module.get_status()["lanes"]["a:3"]["tag_forgotten"] is False
 
 
-def test_the_forgotten_mark_stays_when_the_adapters_own_move_empties_the_bay(
+def test_the_forgotten_mark_goes_when_the_adapters_own_move_empties_the_bay(
     tmp_path: Path,
 ) -> None:
     rig, by_name, h = forget_rig(tmp_path)
     tick(rig)  # the bay has been seen full
     run(rig, "ACEK_TAG_FORGET", {"UNIT": "a", "LANE": "3"})
     tick(rig)
-    rig.adapter.moved_out(h)  # an eject or a roll back of the adapter's
-    by_name["a"].lanes[2]["insert"] = False
+    move = h.api.start_move(h.lane, "rollback", 500.0, 30.0)
+    rig.adapter.started(h, move)
+    by_name["a"].lanes[2].update(insert=False, mode="rolling_back")
     tick(rig)
-    assert h.tag_forgotten is True
-    # a filament inserted into the empty bay is another spool: the mark goes and its tag applies
+    assert h.tag_forgotten is True  # the lane still moves
+    by_name["a"].lanes[2]["mode"] = "idle"
+    event = {"kind": "done", "mode": "rolling_back", "seq": move.seq, "unit": "a"}
+    rig.adapter.on_feed_event(h.lane, dict(event, motor_mm=-500.0, filament_mm=-500.0))
+    tick(rig, 2.0)
+    tick(rig)
+    assert h.tag_forgotten is False  # the filament left the unit
+    # a filament inserted into the empty bay is another spool: its tag applies
     before = len(writes(rig))
-    by_name["a"].lanes[2]["insert"] = True
+    by_name["a"].lanes[2].update(insert=True, mode="idle")
     set_tag(by_name, "read", dict(BAMBU, uid="00000002"))
     for _ in range(3):
         tick(rig)
-    assert h.tag_forgotten is False
     assert len(writes(rig)) == before + 1
 
 

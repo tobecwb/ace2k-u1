@@ -174,6 +174,8 @@ class HooksAdapter(Protocol):
     @property
     def swapping(self) -> set[int]: ...  # the heads that a swap is on
     @property
+    def on_u1_load(self) -> Callable[[Hooked], object] | None: ...  # the U1 loads h's head
+    @property
     def retry_push_mm(self) -> float: ...
     @property
     def feed_speed_mm_s(self) -> float: ...
@@ -290,6 +292,12 @@ EXTRUDER_ATTRIBUTES = {  # of a PrinterExtruder
 PAUSE_FLAGS = {"paused": "is_paused", "sent": "pause_command_sent"}  # of pause_resume
 PRINT_STATS_LAYER = ("info", "current_layer")  # print_stats.get_status()
 TOOLHEAD_HOMED = "homed_axes"  # in the status of the toolhead
+# The tangle check of a head (filament_entangle_detect), by the head's index, as filament_feed
+# finds it; the method that turns it off and on again, and the flag that tells it is off.
+TANGLE_CHECK = "filament_entangle_detect e%d_filament"
+TANGLE_SKIP = ("skip_entangle_check", "skip_check_flag")
+# Its start-of-print grace: the length still to pass with no judgement, and its full length.
+TANGLE_GRACE = ("skip_length_remained", "skip_length")
 # The resume macro of the U1, whose variables the pause records.
 INNER_RESUME = "INNER_RESUME"
 INNER_RESUME_VARIABLES = ("last_extruder_index", "last_extruder_temp", "extruder%d_temp")
@@ -527,7 +535,11 @@ def _push_into_drive(adapter: HooksAdapter, ff: FilamentFeed, channel: int, h: H
     """The U1's load into the drive of lane h's head: the unit pushes the lane to the head.
 
     A failed push, or a lane whose material refuses the load, fails the channel: it raises.
+    First the adapter is told that the U1 loads the head (on_u1_load): a background swap kept
+    for it before its hand over no longer counts its tip.
     """
+    if adapter.on_u1_load is not None:
+        adapter.on_u1_load(h)
     at_head = adapter.head_holds(h)
     if at_head:
         if h.waits_behind:
@@ -642,8 +654,6 @@ def hook_states(adapter: HooksAdapter, ff: FilamentFeed, by_ch: Route) -> None:
         if h.cold_unload and _cold_state(h, state, m):
             return
         _track_loaded(slot, h, prev, state, m)
-        if _load_starts(prev, state, m):
-            h.end_eject_drop()  # a load of the head ends the drop that an eject armed
         if state == m.FEED_STA_LOAD_FINISH:
             adapter.grip_watch.end_hold(h)
         if state == m.FEED_STA_LOAD_FINISH or state in pull:
@@ -666,18 +676,6 @@ def hook_states(adapter: HooksAdapter, ff: FilamentFeed, by_ch: Route) -> None:
             _left_load_finish(adapter, h, prev, state)
 
     ff._set_channel_state = set_channel_state
-
-
-def _load_starts(prev: str, state: str, m: FeedModule) -> bool:
-    """True when the channel goes from prev into a load of the U1 (its load or its manual feed).
-
-    That is a step of a load (U1_LOAD_STEPS, load_finish aside) entered from outside a load under
-    way: from a state that is no load step, or from load_finish (a new load of a loaded head).
-    The steps of one load, and a load_finish set again or re-derived, are not a new load.
-    """
-    if state == m.FEED_STA_LOAD_FINISH or not state.startswith(U1_LOAD_STEPS):
-        return False
-    return prev == m.FEED_STA_LOAD_FINISH or not prev.startswith(U1_LOAD_STEPS)
 
 
 def _track_loaded(slot: Slot, h: Hooked, prev: str, state: str, m: FeedModule) -> None:

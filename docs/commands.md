@@ -125,20 +125,15 @@ exception ends. An unload run again is not started while the U1 loads or unloads
 console says
 `ace2k_u1: lane n eject not started — the U1 is loading/unloading this head — ACEK_CLEAR …`.
 
-**The spool record.** An eject that ends with the bay empty drops the lane's
-[`ACEK_SPOOL`](#acek_spool) record and its forgotten tag ([`ACEK_TAG_FORGET`](#acek_tag_forget)),
-as when you take the spool out by hand: you eject to take the spool out. This holds on every path,
-with the head empty or held, on a shared head or on a head the lane feeds alone. An eject that
-leaves its tail at the bay drops them once you pull the tail out. So does an eject whose unit
-unload ends in any error (`unload_incomplete`, `stuck` or any other), once the bay reads empty:
-you pull the tip out by hand, seconds or minutes later. The drop waits, however long that takes,
-until a real move of the lane: a move the adapter starts (the follow among them), the lane's mode
-out of idle and error in its status (a move of the unit), or a load of the head that the U1
-starts. A push or a pull by hand never ends it. A filament put into the empty bay, or a new record
-from Edit spool, ends it too. These keep both: a failed eject
-whose bay stays full, an eject that ends before the unit's unload (it does not start, the U1's
-unload of the head fails, no material set), an unload failure while the U1 runs a flow on the
-head or a print runs, and an eject that a new pull of the lane cancels.
+**The spool record.** When the bay has read empty for 2 s with the lane at rest, the lane's
+[`ACEK_SPOOL`](#acek_spool) record and its forgotten tag ([`ACEK_TAG_FORGET`](#acek_tag_forget))
+are dropped: the filament left the unit. This holds for an eject, the Unload of the U1's screen, an automatic eject or unload, a
+runout, a roll back of the adapter's, and a pull by hand. An eject that leaves its tail at the bay,
+or that fails with the tip on the bay's sensor, drops them once you pull the tail out. A failed
+eject whose bay stays full keeps both. So does a bay that reads empty only for a moment while the
+lane moves, or a roll back that pushes the filament back within those 2 s. A run-out lane in a
+shared head whose setting was written for another lane has no material left to tell its rest once
+its record goes.
 
 The steps and their console lines are under [Taking a filament out of its bay](install.md#taking-a-filament-out-of-its-bay).
 
@@ -330,6 +325,110 @@ stays the head's lane, because its filament may still be in the shared tube:
 
     ace2k_u1: head 1: the measure failed; a:1 stays the head's lane
 
+### `ACEK_BG_STATUS`, `ACEK_BG_SWAP`, `ACEK_BG_STOP`, `ACEK_BG_MOVE`: the background swap
+
+**Not recommended as it is.** Use it only on a head whose dock has been modified for it: an adapted
+nozzle wiper with an opening under the parked nozzle, and a larger waste bin. Even then, the chance
+that oozed plastic or a strand soils the print, or that colours mix in it, is high.
+
+A head listed in `background_heads` ([configuration](configuration.md)) changes its lane in its
+dock, while another head prints. The adapter starts it the moment the head is docked (after any
+T, the U1's own pick inside another head's swap too, and on its watch tick), when the head's next
+tool in the file needs another lane whose bay holds filament. Several heads may swap at once, with
+at most one of them heating at a time. In the dock it heats the head, forms the U1's tip with moves
+of the parked extruder, rolls
+the old lane back, pushes the new one, takes it 40 mm through the gear and purges it
+(`background_purge_mm`, 10 mm by default), in one move. It runs no G-code. The purge comes out of
+the nozzle in the dock and falls through its opening, so the head arrives ready to print.
+When the head's T comes, the swap goes on from the step the dock reached: after a finished one,
+the head is picked, goes to the cleaning area and waits there for its printing temperature
+(`M109 ... A0`), then only the spool, the loaded check and the U1's pre-extrusion (it cuts and
+cleans) are left. With `background_purge_mm: 0` the load's purge and clean
+(`ACEK_SWAP_LOAD GRIP=0`) run at the cleaning area before the loaded check. A T that waits over a second (expected or so far)
+first takes the active head to the cleaning area. There it is kept at the temperature it printed
+at, even when the file just cooled it for the T, is cleaned, and gets the file's cool-down back
+before it docks. No T picks a head whose parked moves have not
+ended or whose background swap still runs: a T of the U1 itself (`A0`) waits for it and leaves
+the state to the head's own T. A failure in the dock never pauses the print: the T goes on from
+that step. A pause stops every one and keeps its state: once the print prints again it goes on in the dock,
+if its bay still holds filament
+(`ace2k_u1: head 1: background swap goes on in its dock from free (to a:1)`), or the head's T
+takes it. An inline swap, a pending swap or a refill of another head does not stop it; one of its
+own head does. The end of the print drops it (a head that the dock moved then has its lane unknown, and its next swap probes it).
+
+    ACEK_BG_STATUS
+
+One line per listed head:
+
+    ace2k_u1: head 1: background swap idle
+    ace2k_u1: head 1: background swap running at roll back, to a:2
+    ace2k_u1: head 1: background swap stopped, to a:2: its T goes on from push
+    ace2k_u1: head 1: background swap finished, a:2 gripped and purged 10 mm: it is ready at its T
+    ace2k_u1: head 1: background swap finished, a:2 gripped: it purges at its T
+    ace2k_u1: head 1: background swap finished, to a:2, not gripped: it grips at its T
+
+The same is in the printer object's status as `background`: per head, `null` for a head that is
+not listed, else `{state, step, lane}`. `state` is `idle`, `running`, `stopped` or `finished`.
+`step` is the dock's step while it runs, else the swap's step the T goes on from.
+`swapping` lists the heads (0-3) whose lane changes now: a swap at its T (the end of a background
+swap included), a refill's clearing, or a background swap that runs or waits for its T.
+
+`swap_times` holds the long-term average of each swap time, measured on this printer: `inline`
+(the stop of a swap at its T), `ready` (the stop of a head that arrives ready from its dock),
+`dock` (a whole swap in the dock), `resume` (the extra stop of a swap that goes on at its T from
+the middle of its dock work) and `steps` (each step in the dock). Each is `{s, n}`: the average
+in seconds and the number of swaps it was measured on. With `n` 0 it is the value measured on the
+bench. A new swap moves an average a fifth of the way to it. The averages are kept in
+`swap-times.json`, in the folder of the page's history; delete it with Klipper stopped to start
+again from the bench's values. The Print panel prices each swap with them.
+
+`print_stops` holds the swap stops of the print that runs, measured: `s` (their seconds), `n`
+(the swaps in them) and `since` (the print's `print_duration` when the stop that runs now began,
+else `null`). A stop is a T that swaps: it runs from the moment the T reaches the adapter, the wait
+for a background swap included, to the moment the whole T ends and the print goes on, the U1's own
+T included. Two swaps in one T are one stop's time and 2 in `n`. A swap with no T around it (typed
+as a command at the console, for example) is a stop of its own. Every swap that ends well counts:
+an inline swap, an arrival, a swap typed at the console, and the ones the averages leave out. A
+stop does not count when a swap in it failed, when the print is paused during it, when it runs
+while the print is paused (a refill, a swap that `RESUME` finishes), or before the print's clock
+starts (`print_duration` stays 0 until the first extrusion): Klipper's `print_duration` leaves all
+of these out too. `since` goes back to `null` as soon as the stop is known not to count. The
+print's start clears them: the print start command does, and so does the U1's own start of the
+print (its `print_stats:new_task_start`, sent once the start command returned and before the
+file's first line). The Print panel uses them for the time left of the print.
+
+    ACEK_BG_SWAP HEAD=<1-4> LANE=<lane>
+
+A bench tool: runs a background swap by hand, outside a print. `HEAD` must be listed and not the
+active head; `LANE` is a lane of that head, as `a:2`, with filament in its bay. The head's next T
+takes the state, or `ACEK_BG_STOP` drops it.
+
+    ACEK_BG_STOP HEAD=<1-4>
+
+Stops a running background swap at its next safe point and keeps its state for the head's T. A
+heat wait ends at once; the tip, the grip and a move of the unit end first. On a state that is
+kept (stopped or finished), it drops the state. When the steps moved anything, the head may be
+half swapped: its lane is then unknown, and its next swap probes it first.
+
+    ACEK_BG_MOVE HEAD=<1-4> DISTANCE=<mm> [VELOCITY=<mm/s>]
+
+A bench tool: one move of a parked head's extruder, outside a print, at `VELOCITY` (default 5).
+`HEAD` must be listed in `background_heads`, not the active head, with no background swap kept
+or running. It is refused below the extruder's `min_extrude_temp`, for a distance over 200 mm,
+for a speed over 60 mm/s, and when the extruder's own last moves still have steps to be made
+10 s after it is sent (right after its T). It runs as every parked move of the background swap
+does: the U1's tangle check of the head is held off while it runs, and the command answers once
+the move has ended.
+
+**Refusals.** A G-code error, nothing moved: `ace2k_u1: ACEK_BG_SWAP refused: <reason>`, and the
+same for `ACEK_BG_MOVE`. The reasons:
+
+- `a print is printing or paused`, or `head n is the active head`;
+- `head n is not in background_heads`, or `head n's lane is not known`;
+- `'<lane>' is not a lane of head n`, `<lane> is already in head n`, or `<lane>'s bay is empty`;
+- `a background swap is kept or running`, or `the ace2k host has no note_move`;
+- for `ACEK_BG_MOVE`, the parked move's own reason.
+
 ### `ACEK_SPOOL`
 
     ACEK_SPOOL [UNIT=<name>] LANE=<1-4> TYPE=<material> COLOR=<rrggbb> [VENDOR=<name>]
@@ -348,10 +447,10 @@ sends it.
 The console says `ace2k_u1: lane a:2 spool: PLA #ff8800`.
 
 The record is saved in `ace2k_u1_spools.json`, beside `printer.cfg`, so it stays after a restart.
-It is dropped when you take the spool out of its bay by hand, when an
-[`ACEK_EJECT`](#acek_eject) ends with the bay empty or the bay empties after it (a failed eject
-included), and when the spool runs out in a shared head.
-The adapter's own roll backs (a swap, a refill, the probe, a load that is refused) keep it.
+It is dropped when the lane's bay has read empty for 2 s with the lane at rest, whatever emptied
+it: a pull by hand, [`ACEK_EJECT`](#acek_eject), the Unload of the U1's screen, an automatic eject
+or unload, a runout, or a roll back of the adapter's (a swap, a refill, the probe, a load that is
+refused). A record set while the bay is empty is kept until a spool goes in and comes out again.
 
 Who reads it:
 
@@ -398,9 +497,8 @@ The console says `ace2k_u1: lane a:2 tag forgotten: set its spool with Edit spoo
 
 The forget is kept in memory only: a Klipper restart drops it. The unit's forget also drops the
 read it keeps for the lane across a restart, so after a restart the lane has no tag until the
-unit reads it again. The forget also ends when you take the spool
-out of its bay by hand, when an `ACEK_EJECT` ends with the bay empty, or when you put a filament
-into the empty bay. It does not end when the adapter's own roll back empties the bay.
+unit reads it again. The forget also ends when the bay reads empty, whatever emptied it, and when
+you put a filament into the empty bay.
 
 **`READ=1`** undoes it. The unit reads the tag again on the lane's next move, the same tag included.
 The console says `ace2k_u1: lane a:2 will read its tag again`.
@@ -684,7 +782,9 @@ head's lane. Then the U1's own `T<n>` runs. The swap goes through these steps:
    (`SM_PRINT_PREEXTRUDE_FILAMENT INDEX=<tool> FORCE=1 LENGTH=0`). The load macro has purged and
    cleaned once, so this cleans the nozzle the second time, with no purge, and leaves the head at
    the U1's idle position. A refill with no tool of the plan runs the U1's
-   `INNER_PREEXTRUDE_FILAMENT … LENGTH=0` instead. The next print move takes the head to the part.
+   `INNER_PREEXTRUDE_FILAMENT … LENGTH=0` instead. With `arrival_wipe` (on by default) the
+   U1's wipe on the pads (`INNER_ROUGHLY_CLEAN_NOZZLE_BASE_DISCARD ACTION=4`) runs once more
+   after the drop in the bin, just before the pre-extrusion's idle exit. The next print move takes the head to the part.
    The pre-extrusion's retraction matches the slicer's. The slicer retracts a tool before its `T`
    (10 mm in the files seen) and pushes that much back when the same tool returns. So when the
    tool returns to the head, the step first retracts the rest at 30 mm/s, at the cleaning area
@@ -768,6 +868,24 @@ the lane from the /ace2k page`. While printing (the print's end) the unload goes
 **While a swap waits for its `RESUME`**, a `T` of another head is refused, and the print pauses
 again: `ace2k_u1: T3 refused: head 1: a:1 → a:2 (T1) is pending at push — RESUME it first`.
 `RESUME` then runs that `T` after the swap.
+
+**A head in `background_heads` that leaves its dock with no swap.** Its dock has an opening, so the
+parked head may ooze. When a `T` of the file takes such a head from its dock and its lane is in it
+already, the U1's `T` runs, then, with `arrival_wipe` (on by default), the head is wiped once:
+`SAVE_GCODE_STATE NAME=ACEK_DOCK_WIPE`, `MOVE_TO_DISCARD_FILAMENT_POSITION`,
+`INNER_ROUGHLY_CLEAN_NOZZLE_BASE_DISCARD ACTION=4`, `MOVE_TO_XY_IDLE_POSITION_EXTRUDER`,
+`RESTORE_GCODE_STATE NAME=ACEK_DOCK_WIPE MOVE=0`. The console says `ace2k_u1: head 1: leaves its
+dock: one wipe`. The next print move takes the head to the part. It runs only while printing, with X
+and Y homed, and not in the print's start (layer 0): the start picks heads for its own checks and
+cleans the nozzle itself. A `T` with a swap gets no such wipe (its return cleans the head), nor a
+`T` of the head already active, a `T` of a head not listed, a `T` with `A0`, or a `T` typed at the
+console. When a listed head leaves its dock but the active head could not be read before the `T`,
+nothing is wiped and the log says `ace2k_u1: head 1: no dock wipe: the active head was unread before
+the U1's T`. It does not look ahead for the file's `SM_PRINT_PREEXTRUDE_FILAMENT`: when the slicer
+sends one after the `T`, that pre-extrusion cleans the head again. A wipe that fails is said
+(`ace2k_u1: head 1: its wipe after the dock failed — …`), and the print goes on. The saved state is
+restored even then; a restore that fails is said next, on its own line (`… the G-code state after
+its wipe was not restored — …`). After either failure the wipe is not said done.
 
 **What does not change.** These reach the U1's `T` unchanged:
 
@@ -1114,8 +1232,7 @@ The actions shown depend on the lane's state:
   **Feed-forward on / off** (`ACEK_FEED_FORWARD`), and **Forget tag** for a lane whose tag was read
   (`ACEK_TAG_FORGET`): the tag is forgotten and not read again for the adapter until that spool
   leaves its bay, so Edit spool can set the color and the type without the tag putting them
-  back. The forget goes when that spool is taken out by hand or ejected (not when the adapter's
-  own roll back empties the bay). **Read tag again** is the other way, and stays offered on a
+  back. The forget goes when that spool leaves its bay, whatever took it out. **Read tag again** is the other way, and stays offered on a
   forgotten lane: it undoes the forget and the unit reads the tag on the lane's next move.
 - **Shared heads.** Under the bays, a head that several lanes feed has its own line, with the
   merge icon. It says which lane is in the head, for example "Head 1: lane a:2". After a restart

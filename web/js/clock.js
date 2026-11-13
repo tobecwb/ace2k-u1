@@ -6,12 +6,24 @@ import { isNum } from './format.js';
 /** @typedef {import('./timeline.js').Frame} Frame */
 /**
  * The clock. p is the share of the G-code printed (0..1), or null while it is not known (no progress reported
- * yet). done is the time printed. left is the time left in seconds, null while it is not known.
- * phase: 'running' (left may be known), 'finishing' (the last bytes: no time is given), 'complete' (nothing left),
- * 'stopped' (cancelled or in error: nothing is extrapolated) or 'unknown' (no progress yet).
+ * yet). done is the time printed. left is the time left in seconds, null while it is not known: the print's own
+ * time left plus the swap stops ahead. phase: 'running' (left may be known), 'finishing' (the last bytes: no time is
+ * given), 'complete' (nothing left), 'stopped' (cancelled or in error: nothing is extrapolated) or 'unknown' (no
+ * progress yet). A running clock also has print, the time left without the stops (null with left), and ahead, the
+ * stops still to come.
  * @typedef {{ p: number | null, done: number, left: number | null,
- *   phase: 'running' | 'finishing' | 'complete' | 'stopped' | 'unknown' }} Clock
+ *   phase: 'running' | 'finishing' | 'complete' | 'stopped' | 'unknown',
+ *   print?: number | null, ahead?: StopAt[] }} Clock
  */
+/**
+ * The swap stops of a running print (swap-time.js runStops). passedS is the time the print stopped for swaps so far
+ * (part of the time printed); ahead are the stops to come, each at its share x with its estimated seconds s.
+ * @typedef {{ x: number, s: number }} StopAt
+ * @typedef {{ passedS: number, ahead: StopAt[] }} Stops
+ */
+// A print with no swap stops known.
+/** @type {Stops} */
+export const NO_STOPS = Object.freeze({ passedS: 0, ahead: [] });
 
 // From this share on, the time printed over the share printed gives the file's own rate.
 export const FILE_FLOOR = 0.02;
@@ -67,36 +79,49 @@ export function leftOf(done, p, slicerS) {
   return file ?? slicer;
 }
 
-// The clock from the print's state, the time printed, the share printed and the slicer's time.
+// The clock from the print's state, the time printed, the share printed, the slicer's time and the swap stops. The
+// file's rate counts the time printed less the stops passed, so a stop is not spread over the rest of the print; the
+// stops ahead are added once.
 /**
  * @param {string | null | undefined} state @param {number} done @param {number | null} p
- * @param {number | null | undefined} slicerS @returns {Clock}
+ * @param {number | null | undefined} slicerS @param {Stops} [stops] @returns {Clock}
  */
-export function clockOf(state, done, p, slicerS) {
+export function clockOf(state, done, p, slicerS, stops = NO_STOPS) {
   if (state === 'complete') return { p: p ?? 1, done, left: 0, phase: 'complete' };
   if (state === 'cancelled' || state === 'error') return { p, done, left: null, phase: 'stopped' };
   if (p === null) return { p, done, left: null, phase: 'unknown' };
   if (p >= END_SHARE) return { p, done, left: null, phase: 'finishing' };
-  const left = leftOf(done, p, slicerS);
-  return { p, done, left: left === null ? null : Math.round(left), phase: 'running' };
+  const print = leftOf(Math.max(0, done - stops.passedS), p, slicerS);
+  const aheadS = stops.ahead.reduce((sum, a) => sum + a.s, 0);
+  const left = print === null ? null : Math.round(print + aheadS);
+  return { p, done, left, phase: 'running', print, ahead: stops.ahead };
 }
 
 // The print's total time, done + left, or null while left is not known.
 /** @param {Clock} c */
 export const totalOf = (c) => (c.left === null ? null : c.done + c.left);
 
-// Seconds until the print reaches share x, on the clock: (x − p) / (1 − p) × left, never under a minute. null while
-// the clock gives no time, and once the print is complete or stopped.
+// The print's own time left on the clock, without the stops (print), else left.
+/** @param {Clock} c */
+const printLeft = (c) => c.print ?? c.left;
+
+// Seconds until the print reaches share x, on the clock: (x − p) / (1 − p) of the print's own time left, plus the
+// stops ahead before x; never under a minute. null while the clock gives no time, and once the print is complete or
+// stopped.
 /** @param {Clock} c @param {number} x @returns {number | null} */
 export function etaTo(c, x) {
   if (c.phase === 'complete' || c.phase === 'stopped') return null;
-  if (c.left === null || c.p === null || c.p >= 1) return null;
-  return Math.max(60, Math.round(((x - c.p) / (1 - c.p)) * c.left));
+  const own = printLeft(c);
+  if (own === null || c.p === null || c.p >= 1) return null;
+  const stopS = (c.ahead ?? []).reduce((sum, a) => (a.x < x ? sum + a.s : sum), 0);
+  return Math.max(60, Math.round(((x - c.p) / (1 - c.p)) * own + stopS));
 }
 
-// The share of the print covered in swapS seconds, at the clock's rate ((1 − p) / left), or null while it gives none.
+// The share of the print covered in swapS seconds of printing, at the print's own rate ((1 − p) / its time left
+// without the stops), or null while the clock gives none.
 /** @param {Clock} c @param {number} swapS @returns {number | null} */
 export function swapShareOf(c, swapS) {
-  if (!c.left || c.p === null) return null;
-  return (swapS * (1 - c.p)) / c.left;
+  const own = printLeft(c);
+  if (!own || c.p === null) return null;
+  return (swapS * (1 - c.p)) / own;
 }

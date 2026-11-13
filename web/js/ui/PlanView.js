@@ -5,10 +5,10 @@ import { Diagram } from './Diagram.js';
 import { GuidedStep, overlayOf } from './GuidedStep.js';
 import { PrintBar } from './PrintBar.js';
 import { DASH, fmtHM } from '../format.js';
-import { headOfIn, noFitWords, printGate, sentSwaps, similarPairs, usedTest } from '../print-plan.js';
+import { headOfIn, noFitWords, printGate, sentKinds, similarPairs, usedTest } from '../print-plan.js';
 import { editAction, printing, printingNow, reasonKey } from '../model.js';
 import { laneAt } from '../lane-state.js';
-import { SWAP_S } from '../planner.js';
+import { swapStops, timeKnown } from '../swap-time.js';
 import { fileFrame, hintKept, planNow, ready } from '../state.js';
 import { guideOf, stepId } from '../steps.js';
 
@@ -24,12 +24,39 @@ export const swapsWords = (t, n) => (n === 1 ? t('print.swap_one') : t('print.sw
 
 // The print bar's summary in large type: the swaps of the bays Print sends (gate.choice), counted on the live lanes,
 // and the time they stop the print; a dash while a colour has no bay on a head, or with no T order read (no
-// placement): then the swaps are not known.
+// placement): then the swaps are not known. With heads that swap in the background (now.bg), the swaps are the stops,
+// and the swaps in the background follow when there are any. The swaps and the time both read now.changes (the
+// changes the file's frame keeps), so they agree.
 /** @param {UiCtx['t']} t @param {PlanNow} now @param {Gate} gate */
-function barSummary(t, now, gate) {
-  const best = now.place ? sentSwaps(now.plan, gate.choice, now.lanes) : null;
-  if (best === null) return DASH;
-  return t('print.bar', { swaps: swapsWords(t, best), time: fmtHM(best * SWAP_S) });
+export function barSummary(t, now, gate) {
+  const sent = sentStops(now, gate);
+  if (sent === null) return DASH;
+  const { kinds, seconds } = sent;
+  const words = { swaps: swapsWords(t, kinds.stops), time: fmtHM(seconds), n: kinds.free };
+  return kinds.free ? t('print.bar_bg', words) : t('print.bar', words);
+}
+
+// The swaps of the bays Print sends (gate.choice) and the seconds they stop the print, or null while they are not
+// known (no placement, or a colour with no bay on a head).
+/** @param {PlanNow} now @param {Gate} gate */
+function sentStops(now, gate) {
+  const order = now.changes.map((c) => c.tool);
+  const kinds = now.place ? sentKinds(now.plan, gate.choice, now.lanes, now.bg, order) : null;
+  if (kinds === null) return null;
+  return { kinds, seconds: swapStops(now.changes, gate.choice, headOfIn(now.lanes), now.bg, now.times).total };
+}
+
+// The file's time in the header: the slicer's time plus the stops of the swaps Print sends, with the slicer's time
+// beside it ("≈ 0:52 with the swaps (0:35 in the slicer)"). The slicer's time alone while the swaps are not known or
+// stop the print for no time, or when the time is not one the estimates can use (0, not a number); nothing with no
+// card.
+/** @param {UiCtx['t']} t @param {PlanNow} now @param {Gate} gate @returns {string | null} */
+export function planTimeWords(t, now, gate) {
+  if (now.timeS === null) return null;
+  const slicer = fmtHM(now.timeS);
+  const sent = timeKnown(now.timeS) ? sentStops(now, gate) : null;
+  if (sent === null || !(sent.seconds > 0)) return t('print.slicer_time', { time: slicer });
+  return t('print.time_with_swaps', { total: fmtHM(now.timeS + sent.seconds), slicer });
 }
 
 // The colours the file prints whose pick has no bay on a head: "As it is" cannot count its swaps while there are any.
@@ -41,56 +68,76 @@ export function missingColours(now) {
 }
 
 /**
- * One side of the comparison: a caption, the swaps in large type and what they cost, or a dash and why not.
- * @param {{ ctx: UiCtx, cap: string, swaps: number | null, why: string, good?: boolean }} props
+ * One side of the comparison: a caption, the swaps in large type and what they cost, or a dash and why not. free is
+ * the swaps in the background (none when absent or 0): a line of their own, under the cost.
+ * @param {{ ctx: UiCtx, cap: string, swaps: number | null, seconds: number | null, why: string, good?: boolean,
+ *   free?: number | null }} props
  */
-function Side({ ctx, cap, swaps, why, good = false }) {
+function Side({ ctx, cap, swaps, seconds, why, good = false, free = null }) {
   const { t } = ctx;
   return html`<div class=${good ? 'cmp-side good' : 'cmp-side'}>
     <small>${cap}</small>
     <b>${swaps === null ? DASH : swapsWords(t, swaps)}</b>
-    <small>${swaps === null ? why : t('print.stopped', { time: fmtHM(swaps * SWAP_S) })}</small>
+    <small>${swaps === null || seconds === null ? why : t('print.stopped', { time: fmtHM(seconds) })}</small>
+    ${swaps !== null && free ? html`<small>${t('print.background_n', { n: free })}</small>` : null}
   </div>`;
 }
 
-// The header: back to the files, the thumbnail, the name, the slicer's time, and the comparison of the swaps
+// The header: back to the files, the thumbnail, the name, the file's time (planTimeWords), and the comparison of the swaps
 // "As it is" (the current pick) with the swaps "With the suggestion" (the best placement): two boxes, or one line on
-// a phone.
-/** @param {{ app: AppState, ctx: UiCtx, now: PlanNow }} props */
-function Header({ app, ctx, now }) {
+// a phone. With heads that swap in the background, the swaps are the stops, and each side adds its swaps in the
+// background.
+/** @param {{ app: AppState, ctx: UiCtx, now: PlanNow, gate: Gate }} props */
+function Header({ app, ctx, now, gate }) {
   const { t } = ctx;
   const file = now.plan.file;
   const card = app.print.cards?.[file]?.card ?? null;
   const thumb = card?.thumb ?? (app.print.thumb?.file === file ? app.print.thumb.url : null);
-  const p = now.place;
-  const best = p?.fits ? p.best : null;
-  const noFit = p ? noFitWords(p, now.plan, now.merges) : DASH;
+  const time = planTimeWords(t, now, gate);
   return html`<div class="plan-head">
     <button type="button" class="btn" onClick=${() => ctx.run('print_back', {})}>${t('print.back')}</button>
     <span class="plan-thumb">${thumb ? html`<img src=${thumb} alt=${t('print.thumb', { file })} />` : null}</span>
     <div class="plan-name">
       <b>${file.replace(/\.gcode$/i, '')}</b>
-      ${card?.time != null ? html`<span class="note">${t('print.slicer_time', { time: fmtHM(card.time) })}</span>` : null}
+      ${time ? html`<span class="note">${time}</span>` : null}
+      ${now.bg.length && !timeKnown(now.timeS) ? html`<p class="note">${t('print.no_time')}</p>` : null}
     </div>
-    ${
-      app.ui.narrow
-        ? html`<p class="cmp line">${cmpLine(t, p?.now ?? null, best, noFit)}</p>`
-        : html`<div class="cmp">
-          <${Side} ctx=${ctx} cap=${t('print.as_is')} swaps=${p?.now ?? null}
-            why=${t('print.missing_n', { n: missingColours(now) })} />
-          <${Side} ctx=${ctx} cap=${t('print.with_suggestion')} swaps=${best} why=${noFit} good=${true} />
-        </div>`
-    }
+    <${Compare} ctx=${ctx} now=${now} narrow=${Boolean(app.ui.narrow)} />
+  </div>`;
+}
+
+// The comparison itself: two boxes, or one line on a phone.
+/** @param {{ ctx: UiCtx, now: PlanNow, narrow: boolean }} props */
+function Compare({ ctx, now, narrow }) {
+  const { t } = ctx;
+  const p = now.place;
+  const best = p?.fits ? p.best : null;
+  const free = p?.fits ? p.free : null;
+  const bestS = p?.fits ? p.bestS : null;
+  const noFit = p ? noFitWords(p, now.plan, now.merges) : DASH;
+  if (narrow) return html`<p class="cmp line">${cmpLine(t, p?.now ?? null, best, noFit, free, p?.nowFree, bestS)}</p>`;
+  return html`<div class="cmp">
+    <${Side} ctx=${ctx} cap=${t('print.as_is')} swaps=${p?.now ?? null} seconds=${p?.nowS ?? null}
+      why=${t('print.missing_n', { n: missingColours(now) })} free=${p?.nowFree} />
+    <${Side} ctx=${ctx} cap=${t('print.with_suggestion')} swaps=${best} seconds=${bestS} why=${noFit} good=${true}
+      free=${free} />
   </div>`;
 }
 
 // The comparison on a phone, in one line: the swaps as it is (a dash while they cannot be counted), and with the
-// suggestion, with the time they stop the print, or why the suggestion does not fit.
-/** @param {UiCtx['t']} t @param {number | null} asIs @param {number | null} best @param {string} noFit */
-export function cmpLine(t, asIs, best, noFit) {
-  const as_is = asIs === null ? DASH : swapsWords(t, asIs);
-  if (best === null) return t('print.cmp_line_nofit', { as_is, why: noFit });
-  return t('print.cmp_line', { as_is, best: swapsWords(t, best), time: fmtHM(best * SWAP_S) });
+// suggestion, with the seconds they stop the print (bestS), or why the suggestion does not fit. Each side adds its
+// swaps in the background (asIsFree, free) when there are any, as the two boxes do. Without bestS the line says why
+// the suggestion does not fit.
+/**
+ * @param {UiCtx['t']} t @param {number | null} asIs @param {number | null} best @param {string} noFit
+ * @param {number | null} [free] @param {number | null} [asIsFree] @param {number | null} [bestS]
+ */
+export function cmpLine(t, asIs, best, noFit, free = null, asIsFree = null, bestS = null) {
+  let as_is = asIs === null ? DASH : swapsWords(t, asIs);
+  if (asIs !== null && asIsFree) as_is = t('print.as_is_bg', { swaps: as_is, n: asIsFree });
+  if (best === null || bestS === null) return t('print.cmp_line_nofit', { as_is, why: noFit });
+  const words = { as_is, best: swapsWords(t, best), time: fmtHM(bestS), n: free };
+  return free ? t('print.cmp_line_bg', words) : t('print.cmp_line', words);
 }
 
 // One amber line for each bay whose spool has no material: the planner leaves it out until it is defined. A bay that
@@ -214,7 +261,7 @@ export function PlanView({ app, ctx }) {
   const gate = printGate(now, printing(app.status));
   const left = gate.asIs ? 0 : (g?.steps.length ?? 0);
   return html`<section class="plan" ref=${root}>
-    <${Header} app=${app} ctx=${ctx} now=${now} />
+    <${Header} app=${app} ctx=${ctx} now=${now} gate=${gate} />
     <div class="plan-left">
       <${UnknownLines} app=${app} ctx=${ctx} now=${now} gate=${gate} />
       <${ColourRows} app=${app} ctx=${ctx} now=${now} />
@@ -222,8 +269,8 @@ export function PlanView({ app, ctx }) {
       ${g ? html`<${GuidedStep} app=${app} ctx=${ctx} g=${g} />` : null}
     </div>
     ${app.ui.narrow ? null : html`<div class="plan-dia"><${Diagram} app=${app} ctx=${ctx} overlay=${g ? overlayOf(app, g) : {}} /></div>`}
-    <${Timeline} key=${now.plan.file} timeS=${app.print.cards?.[now.plan.file]?.card?.time ?? null} plan=${now.plan} choice=${gate.choice} headOf=${headOfIn(now.lanes)}
-      frame=${fileFrame(app, now.plan.file)} t=${ctx.t} />
+    <${Timeline} key=${now.plan.file} timeS=${app.print.cards?.[now.plan.file]?.card?.time ?? null} plan=${now.plan} choice=${gate.choice} headOf=${headOfIn(now.lanes)} bg=${now.bg}
+      times=${now.times} frame=${fileFrame(app, now.plan.file)} t=${ctx.t} />
     <${PrintBar} app=${app} ctx=${ctx} now=${now} gate=${gate} summary=${barSummary(ctx.t, now, gate)} left=${left}
       note=${asIsNote(ctx.t, now, gate, g?.steps.length ?? 0)} />
   </section>`;

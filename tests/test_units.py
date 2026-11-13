@@ -127,6 +127,7 @@ def make_rig(
     gcode.stub("RESUME")
     gcode.stub("SM_PRINT_END_AUTO_UNLOAD_FILAMENT")  # the U1's end-of-print unload
     gcode.stub("SM_PRINT_PREEXTRUDE_FILAMENT")  # the U1's pre-extrusion after a file's T
+    gcode.stub("MOVE_TO_XY_IDLE_POSITION_EXTRUDER")  # the U1's idle exit (registered per extruder)
     gcode.stub("M104")
     gcode.stub("M109")
     gcode.stub("SET_HEATER_TEMPERATURE")  # Klipper's, as Fluidd sets a heater

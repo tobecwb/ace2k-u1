@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.6.0 — 2026-11-13 — beta
+
+For ace2k `v0.15.0`.
+
+**This release is a beta.** A print with a shared head (several lanes on one head, through a
+splitter) needs a prime tower. The lane swap in a shared head is experimental: stay near the
+printer during such a print.
+
+### Breaking
+
+- **A unit may move a lane that feeds no head on its own.** The adapter now tells each unit which
+  lanes are in use. With ace2k `v0.15.0`, the unit moves a lane that is not in use a little when
+  it cannot tell which of two neighbour lanes a tag belongs to. It never moves a lane that feeds a
+  head that prints or is paused, or a lane loaded in its head.
+
+### Changed
+
+- **A tag goes to the lane it follows.** The adapter tells each unit which lanes are in use and
+  which were named by hand. `ACEK_SPOOL` names a lane by hand: the reader then never changes that
+  lane's material until its filament leaves the bay. On a shared head whose lane is not known
+  (after a restart), every lane with filament counts as in use until the head's lane is known.
+  This needs ace2k `v0.15.0`. With an older image, nothing changes.
+- **Read tag on a lane named by hand reads it again.** It also clears the lane's by-hand mark.
+- **A lane set by hand gets no read with motion after its load.** Its tag is never taken, so the
+  move was for nothing.
+- **The read with motion after a load waits while another lane of the unit moves.** Before, the
+  unit refused it and the screen showed errors.
+- **A lane's Edit spool record goes whenever its filament leaves the unit.** When the bay has
+  read empty for 2 s with the lane at rest, the record and its forgotten tag are dropped, however
+  the bay was emptied: `ACEK_EJECT`, Unload on the U1's screen, a runout, a roll back or a pull by
+  hand. Before, only `ACEK_EJECT` dropped them, so the tag of the next spool was never taken
+  ([`commands.md`](docs/commands.md#acek_spool), "`ACEK_SPOOL`").
+- **The swap purges 10 mm, not 30 mm.** The U1's unload forms the tip and takes the filament out,
+  so little old filament is left in the nozzle. A few specks of the old color may show where the
+  new one starts. If they matter, set the purge higher in `ACEK_SWAP_LOAD` and in
+  `background_purge_mm`.
+- **`arrival_wipe`** (on by default) wipes the nozzle on the pads once more at the end of every
+  swap and refill, just before the head goes to its idle position. `arrival_wipe: False` turns it
+  off.
+- **The Print tab's times count the stops for swaps.** The plan uses the swap times measured on
+  your printer, kept in `swap-times.json`, not a fixed 90 s. The time left, the total and the time
+  to the next swap count the stops still to come.
+- **A parked head's tip no longer trips the U1's tangle check.** The adapter holds that head's
+  check off while the moves of a parked head run, and turns it on again after them.
+- **The background swap** (off by default, **not recommended as it is**). `background_heads:`
+  lists heads that swap their lane while parked in the dock, while another head prints. Use it
+  only on a head whose dock has an adapted nozzle wiper with an opening under the nozzle, and a
+  larger waste bin. Even then, the chance that oozed plastic or a strand soils the print, or that
+  colors mix in it, is high. New commands: `ACEK_BG_STATUS`, `ACEK_BG_SWAP`, `ACEK_BG_STOP`,
+  `ACEK_BG_MOVE`
+  ([`commands.md`](docs/commands.md#acek_bg_status-acek_bg_swap-acek_bg_stop-acek_bg_move-the-background-swap)).
+
 ## v0.5.0 — 2026-11-08 — beta
 
 For ace2k `v0.14.0`.

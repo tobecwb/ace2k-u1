@@ -6,7 +6,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+import ace2k_u1_common
 import ace2k_u1_probe
+import ace2k_u1_push
 import fakes
 import pytest
 from fakes import NOT_PASSED
@@ -2248,3 +2250,55 @@ def test_on_a_host_watch_a_short_ease_still_counts_its_time(tmp_path: Path) -> N
     rig.reactor.on_pause.append(rests)
     rested, eased = rig.module.probe.ease_to_rest(slot.lanes[0])
     assert rested and eased > 0.3  # the host's stop carries "stopped" at 0.3 mm: its time counts
+
+
+def test_a_blocked_push_is_read_from_the_pushs_own_end(tmp_path: Path, no_insist: None) -> None:
+    """The bay watch clears push_end once the lane moves again (its roll back): the search for
+    the lane in the way still runs, from push_last_end."""
+    rig, a, slot = search_rig(tmp_path)
+    pushes = {"a1": 0}
+
+    def on_start(move: FakeMove) -> None:
+        if move.lane == 0 and move.mode == "feed":
+            pushes["a1"] += 1
+            if pushes["a1"] == 1:
+                move.event = {"kind": "blocked", "seq": move.seq, "filament_mm": 480.0}
+            else:
+                rig.head_sensor.detected = True
+        elif move.lane == 1 and move.mode == "feed":
+            rig.head_sensor.detected = True
+        elif move.mode == "rollback":
+            if move.lane == 1:
+                rig.head_sensor.detected = False
+            move.event = {"kind": "done", "seq": move.seq}
+
+    a.feed.on_start = on_start
+    probe = rig.module.probe
+    real = probe._push_insisting
+
+    def cleared(*args: object, **kw: object) -> tuple[str | None, float, bool]:
+        result = real(*args, **kw)
+        for h in slot.lanes:
+            h.push_end = None  # the next tick saw the lane move
+        return result
+
+    probe._push_insisting = cleared
+    assert probe.push_in(slot, slot.lanes[0], speed=70.0) is None
+    assert pushes["a1"] == 2
+    assert "ace2k_u1: head 1: a:2 was past the splitter: rolled back" in rig.gcode.lines
+
+
+@pytest.mark.parametrize(
+    ("kind", "stopped"),
+    [("stopped", True), ("stopped_link", True), ("stuck", False), ("stopped_sensors", False)],
+)
+def test_a_probe_move_stopped_from_outside_is_a_stopped_error(kind: str, stopped: bool) -> None:
+    err = ace2k_u1_probe.ended("x ended " + kind, kind)
+    assert isinstance(err, ace2k_u1_probe.ProbeError)
+    assert isinstance(err, ace2k_u1_common.StoppedError) is stopped
+
+
+def test_the_pushs_stopped_errors_are_the_stopped_kinds() -> None:
+    timeouts = {k for k, v in ace2k_u1_push.EVENT_ERRORS.items() if k.startswith("stopped")}
+    assert timeouts == set(ace2k_u1_common.STOPPED_KINDS)
+    assert all(ace2k_u1_push.EVENT_ERRORS[k] == "FEED_ERR_TIMEOUT" for k in timeouts)

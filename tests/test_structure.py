@@ -30,6 +30,7 @@ from pathlib import Path
 
 import ace2k_u1_hooks as hooks
 import ace2k_u1_pause
+import ace2k_u1_swap
 import ace2k_u1_tags
 import pytest
 
@@ -637,6 +638,33 @@ def test_the_extruder_position_is_read_as_the_u1s_tangle_check_reads_it() -> Non
     assert "lookup_object('mcu').estimated_print_time" in entangle
 
 
+@pytest.mark.skipif(not ENTANGLE.exists(), reason=f"{ENTANGLE} absent (setup-u1.sh)")
+def test_the_tangle_check_is_found_and_turned_off_as_filament_feed_does() -> None:
+    """filament_feed finds a head's check by the head's index and turns it off around its tip;
+    skip_entangle_check takes the flag, sets skip_check_flag, and printer.cfg names one per head."""
+    method, flag = hooks.TANGLE_SKIP
+    _, _, skip = module_def(ENTANGLE, "FilamentEntangleDetect", method)
+    assert [a.arg for a in skip.args.args] == ["self", "skip"]
+    assert flag in self_assigned(skip)
+    _, _, init = module_def(ENTANGLE, "FilamentEntangleDetect", "__init__")
+    assert flag in self_assigned(init)
+    # the grace a check that could not be turned on restarts with (U1Printer.tangle_check_off):
+    # set in full at a print's start, and judged nothing while it lasts
+    remained, length = hooks.TANGLE_GRACE
+    assert {remained, length} <= self_assigned(init)
+    _, _, start = module_def(ENTANGLE, "FilamentEntangleDetect", "_handle_start_print_job")
+    assert remained in self_assigned(start)
+    entangle = ENTANGLE.read_text(encoding="utf-8")
+    assert f"self.{remained} = self.{length}" in entangle
+    assert f"if self.{remained} >= 0:" in entangle
+    feed = REAL.read_text(encoding="utf-8")
+    assert "f'filament_entangle_detect e{self.filament_ch[channel]}_filament'" in feed
+    assert f"filament_entangle_detect.{method}(True)" in feed
+    cfg = (LAVA / "printer.cfg").read_text(encoding="utf-8")
+    for head in range(4):
+        assert f"[{hooks.TANGLE_CHECK % head}]" in cfg, head
+
+
 def test_register_command_with_none_hands_back_the_old_handler() -> None:
     # the ACEK_CLEAR escape replaces ace2k's handler the Klipper way: register_command(name,
     # None) removes it and returns it; the help text and the not-ready table read as named
@@ -798,6 +826,32 @@ def test_inner_resume_is_a_macro_with_the_variables_the_swap_sets() -> None:
     for name in hooks.INNER_RESUME_VARIABLES:
         for variable in [name % n for n in range(4)] if "%d" in name else [name]:
             assert f"variable_{variable}:" in section, variable
+
+
+def macro_lines(name: str) -> list[str]:
+    """The G-code lines of a [gcode_macro NAME] of the U1's fluidd.cfg, without its Jinja."""
+    body = macro_section(name).split("gcode:", 1)[1].splitlines()
+    return [ln.strip() for ln in body if ln.strip() and not ln.strip().startswith("{%")]
+
+
+def test_the_arrival_wipe_runs_where_the_u1s_pre_extrusion_has_its_own() -> None:
+    """Swapper.idle_exit_wipe runs ARRIVAL_WIPE before the bare idle exit of the U1's
+    pre-extrusion: that macro ends cut, its own wipe (ARRIVAL_WIPE), bin drop, then its only
+    bare idle exit; its move to the cleaning area always calls the idle exit with offsets."""
+    lines = macro_lines(hooks.INNER_PREEXTRUDE)
+    exits = [ln for ln in lines if ln.split()[0] == hooks.IDLE_EXIT]
+    assert exits == [hooks.IDLE_EXIT]  # one idle exit, with no parameter
+    at = lines.index(hooks.IDLE_EXIT)
+    assert lines[at - 3 : at] == [
+        "INNER_CUTOFF_BASE_DISCARD",
+        ace2k_u1_swap.ARRIVAL_WIPE,
+        "INNER_DISCARD_FILAMENT_BASE_DISCARD",
+    ]
+    discard = [ln for ln in macro_lines(ace2k_u1_swap.DISCARD_POSITION) if ln.split()]
+    calls = [ln for ln in discard if ln.split()[0] == hooks.IDLE_EXIT]
+    assert calls  # it goes to the cleaning area through the idle exit
+    for line in calls:
+        assert all(f"{key}=" in line for key in ace2k_u1_swap.IDLE_EXIT_OFFSETS), line
 
 
 def test_the_idle_exit_is_registered_per_extruder_by_name() -> None:

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { esc } from '../js/esc.js';
 import { setCatalog, t } from '../js/i18n.js';
-import { planScript, planId, swaps, nextOptions, chosen, blocked } from '../js/print-plan.js';
+import { planScript, planId, swapKinds, nextOptions, chosen, blocked } from '../js/print-plan.js';
 import { startPrint } from '../js/printflow.js';
 import { send, sendScript } from '../js/send.js';
 import { loadEnglish } from './helpers.js';
@@ -32,11 +32,12 @@ test('planScript refuses a missing name; planId of no plan is null', () => {
   assert.equal(planId({ file: 'a.gcode', mtime: 3 }), 'a.gcode\n3');
 });
 
-test('swaps: a tool with no lane, or a lane with no head, counts for nothing', () => {
+test('swapKinds: a tool with no lane, or a lane with no head, counts for nothing', () => {
   const headOf = (key) => ({ 'a:1': 0, 'a:2': 0 })[key] ?? null;
-  assert.deepEqual(swaps([0, 1, 2, 0], { 0: 'a:1', 1: 'a:2', 3: 'a:9' }, headOf), { 0: 2 });
-  assert.deepEqual(swaps([5], {}, headOf), {});
-  assert.deepEqual(swaps([0], { 0: null }, headOf), {});
+  const none = { stops: 0, free: 0 };
+  assert.deepEqual(swapKinds([0, 1, 2, 0], { 0: 'a:1', 1: 'a:2', 3: 'a:9' }, headOf), { stops: 2, free: 0 });
+  assert.deepEqual(swapKinds([5], {}, headOf), none);
+  assert.deepEqual(swapKinds([0], { 0: null }, headOf), none);
 });
 
 test('nextOptions: a head ticked on joins the heads, unticked leaves; the last one off turns flow off', () => {

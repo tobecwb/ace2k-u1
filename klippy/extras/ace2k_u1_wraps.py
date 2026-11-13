@@ -14,11 +14,13 @@ import logging
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:
     from .ace2k_klipper_types import Printer
     from .ace2k_u1_adapter import Adapter
+    from .ace2k_u1_background import Background
     from .ace2k_u1_common import Hooked, Slot
     from .ace2k_u1_material import MaterialGate
     from .ace2k_u1_printer import U1Printer
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
     from .ace2k_u1_refill import Refiller
     from .ace2k_u1_spools import LaneSpools
     from .ace2k_u1_swap import OwedTool, Swapper, SwapState
+    from .ace2k_u1_swap_times import SwapTimes
     from .ace2k_u1_temps import TempCheck
     from .ace2k_u1_tracker import Plan, PrintTracker
 
@@ -35,7 +38,7 @@ try:
     from .ace2k_u1_adapter import PRINT_ON
     from .ace2k_u1_common import STILL_MODES, error_line, finite
     from .ace2k_u1_config import LANES
-    from .ace2k_u1_hooks import END_UNLOAD, FILAMENT_PARAMETERS
+    from .ace2k_u1_hooks import END_UNLOAD, FILAMENT_PARAMETERS, IDLE_EXIT
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
     import ace2k_u1_plan  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_probe  # type: ignore[import-not-found, no-redef]
@@ -49,7 +52,20 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
     from ace2k_u1_hooks import (  # type: ignore[import-not-found, no-redef]
         END_UNLOAD,
         FILAMENT_PARAMETERS,
+        IDLE_EXIT,
     )
+
+
+@dataclass(frozen=True)
+class DockWatch:
+    """A T that may take a head from its dock (Wraps._dock_watch).
+
+    before is the active head read just before the U1's T, None when it could not be read. A T
+    that cannot lead to a dock wipe has no DockWatch at all.
+    """
+
+    before: int | None
+
 
 TOOLS = 32  # the logical tools of the U1 (T0-T31), each mapped to a head by its extruder_map_table
 MAP_PAIR = re.compile(r"\[\s*(\d+)\s*,\s*(\d+)\s*\]")  # one [tool,head] of a MAP_TABLE=
@@ -96,6 +112,10 @@ class WrapsHost(Protocol):
     def refiller(self) -> Refiller: ...
     @property
     def temps(self) -> TempCheck: ...
+    @property
+    def background(self) -> Background: ...
+    @property
+    def swap_times(self) -> SwapTimes: ...
     def units(self) -> Coordinator | None: ...
     def head_set_or(
         self, h: Hooked, default: bool, unread: str | Callable[[], str] | None = None
@@ -420,6 +440,12 @@ class Wraps:
             self.host.tracker.plan_started = self._check_start(gcmd)
             self.host.tracker.plan_seen_on = False
             self.host.tracker.reset_print()
+            stops = self.host.swap_times.stops
+            kept = (stops.s, stops.n)
+            # The print's start clears its swap stops. Klipper's print_stats:new_task_start does it
+            # too (ace2k_u1._print_started), from the U1's work timer once this command returned
+            # and before the file's first line; whichever comes first clears, the other is a no-op.
+            stops.reset()
             try:
                 old(gcmd)
             except Exception:
@@ -430,6 +456,8 @@ class Wraps:
                     self.host.tracker.t_index,
                     self.host.tracker.t_raw,
                 ) = before
+                stops.s, stops.n = kept
+                stops.published = None
                 raise
             # This is a new print. What the print before it (paused) left pending does not belong
             # to it. That is the swap, the owed T commands, the stopped runouts and the taken ends
@@ -846,17 +874,11 @@ class Wraps:
                 self.tool_handlers[n] = old  # run by the RESUME of a swap that this T paused
 
                 def tool(gcmd: GCodeCommand) -> None:
-                    # A failed swap pauses the print plainly, and the T of the U1 is not run. The
-                    # print goes on from the next line, so the RESUME of the adapter runs the T once
-                    # the swap is done (_run_tool).
-                    if gcmd.get_int("A", 1) != 0:  # a T of the file, so what came before is past
-                        self.host.tracker.preextrude_after = None
-                        self.host.tracker.clear_wait_skip()
-                    self.host.tracker.count_tool(gcmd, n)
-                    owed = self.host.tracker.take_owed_heat(gcmd, n)
-                    if self._tool_swap(gcmd, n):
-                        old(gcmd)
-                        self._heat_docked(owed)
+                    # The whole T is the stop of the print when it swaps (PrintStops.of_t).
+                    stops = self.host.swap_times.stops
+                    u1_t = gcmd.get_int("A", 1) == 0  # the U1's own T: the stop around it
+                    with stops.of_t(self.host.reactor, self.host.swapper.printing_on, u1_t):
+                        self._tool(gcmd, n, old)
 
                 return tool
 
@@ -864,6 +886,69 @@ class Wraps:
                 missing.append(f"T{n}")
         if missing:
             logging.info("ace2k_u1: no %s to wrap", ", ".join(missing))
+
+    def _tool(self, gcmd: GCodeCommand, n: int, old: Handler) -> None:
+        """Runs T<n> of the file around the U1's T (old).
+
+        A failed swap pauses the print plainly, and the T of the U1 is not run. The print goes on
+        from the next line, so the RESUME of the adapter runs the T once the swap is done
+        (_run_tool).
+        """
+        if gcmd.get_int("A", 1) != 0:  # a T of the file, so what came before is past
+            self.host.tracker.preextrude_after = None
+            self.host.tracker.clear_wait_skip()
+        self.host.tracker.count_tool(gcmd, n)
+        owed = self.host.tracker.take_owed_heat(gcmd, n)
+        with self.host.background.picking(gcmd, n):  # an A0 T picks head n
+            if self._tool_swap(gcmd, n):
+                before = self._dock_watch(gcmd)
+                old(gcmd)
+                self._heat_docked(owed)
+                self.host.background.after_tool(gcmd)  # the head that left is docked
+                self._left_dock(before)
+
+    def _dock_watch(self, gcmd: GCodeCommand) -> DockWatch | None:
+        """Reads the active head before the U1's T, when that T may take a head from its dock.
+
+        Returns None when no dock wipe can follow: a T of the U1 itself (A0), no head in
+        background_heads, a print not printing (or a pause taken or asked), or a T typed at the
+        console. This is the one place that gates the dock wipe on the print. The checks that read
+        nothing come first.
+        """
+        if gcmd.get_int("A", 1) == 0 or not self.host.background.heads:
+            return None
+        if not self.host.swapper.printing_on() or not self.host.u1.from_file():
+            return None
+        return DockWatch(self._adapter().active_head(self.host.u1))
+
+    def _left_dock(self, watch: DockWatch | None) -> None:
+        """Wipes a head of background_heads that the U1's T just took from its dock (no swap).
+
+        watch is what _dock_watch read. A T with a swap picked its head in the return already
+        (T<head> A0), so the U1's T finds it active and picks nothing: it was cleaned there. A T
+        to the active head and a head not listed get nothing. When the head after the T is
+        listed and the head before it could not be read, the pick cannot be told: no wipe, and
+        the log says so. An active head unread after the T cannot be told to be listed: no wipe,
+        logged at debug level. The wipe itself is the Swapper's (dock_exit_wipe). Never raises.
+        """
+        if watch is None:
+            return
+        try:
+            head = self._adapter().active_head(self.host.u1)
+            if head is None:
+                logging.debug("ace2k_u1: no dock wipe: the active head is unread after the U1's T")
+                return
+            if head not in self.host.background.heads or head == watch.before:
+                return
+            if watch.before is None:
+                logging.info(
+                    "ace2k_u1: head %d: no dock wipe: the active head was unread before the U1's T",
+                    head + 1,
+                )
+                return
+            self.host.swapper.dock_exit_wipe(head)
+        except Exception:
+            logging.exception("ace2k_u1: the wipe of a head that left its dock")
 
     def wrap_end_unload(self, gcode: GCode) -> None:
         """Wraps the U1's end-of-print unload so every head it unloads heats first.
@@ -921,6 +1006,25 @@ class Wraps:
         if not self._wrap(gcode, "SM_PRINT_PREEXTRUDE_FILAMENT", handler):
             logging.info("ace2k_u1: no SM_PRINT_PREEXTRUDE_FILAMENT to wrap")
 
+    def wrap_idle_exit(self, gcode: GCode) -> None:
+        """Wraps MOVE_TO_XY_IDLE_POSITION_EXTRUDER, the U1's idle exit.
+
+        At the end of a swap's return with arrival_wipe, the U1's wipe on the pads runs once more
+        just before it (Swapper.idle_exit_wipe); every call reaches the U1's handler. The wrap is
+        installed only with a + group or runout_source unit. Without the command, nothing is
+        wrapped and the return runs as without arrival_wipe.
+        """
+
+        def handler(old: Handler) -> Handler:
+            def idle_exit(gcmd: GCodeCommand) -> None:
+                self.host.swapper.idle_exit_wipe(gcmd)
+                old(gcmd)
+
+            return idle_exit
+
+        if not self._wrap(gcode, IDLE_EXIT, handler):
+            logging.info("ace2k_u1: no %s to wrap", IDLE_EXIT)
+
     def _skip_after_swap(self, gcmd: GCodeCommand) -> bool:
         """Tells whether the file's pre-extrusion is the one right after a swap of its head.
 
@@ -964,6 +1068,8 @@ class Wraps:
                     return
                 if call.s is not None:  # a docked head's pre-heat, capped
                     gcmd = self._with_s(gcmd, call.s)
+                if self.host.background.held(gcmd, call.s):
+                    return  # a background swap owns the head's heater: recorded for its end
                 m104 = olds.get("M104")
                 if name == "M109" and m104 is not None and self.host.tracker.skip_wait(gcmd):
                     logging.info(
@@ -1001,9 +1107,13 @@ class Wraps:
 
         It runs after the U1's T, so the head is docked for certain and nothing in the T sets
         its temperature after this. It is an M104 with A0 for the head itself, so nothing waits.
-        A failure is logged, and the next head is still sent.
+        A head whose heater a background swap owns gets nothing: the value is recorded for its
+        end, as a call of the file is (Background.hold). A failure is logged, and the next head is
+        still sent.
         """
         for head, s, line in owed:
+            if self.host.background.hold(head, s, f"{line}: M104 S{s:g}"):
+                continue
             try:
                 self.host.u1.script(f"M104 S{s:g} T{head} A0")
             except Exception:
@@ -1017,10 +1127,14 @@ class Wraps:
         With a swap pending (a failure paused it), a T of its head goes on with it. Any other T is
         refused with a plain pause. A new swap never starts over a pending one. Otherwise the swap
         that swap_for asks for runs, if there is one. Returns False when the swap or the refusal
-        paused the print.
+        paused the print. Every T first waits for a background swap or a parked move of its head,
+        and a T whose head has a background swap goes on with it first (Background.before_tool).
         """
+        took = self.host.background.before_tool(gcmd, n)  # the head of a background swap
         if gcmd.get_int("A", 1) == 0:
             return True  # the T calls of the U1 itself (its unload and load among them)
+        if took is not None:
+            return took
         pending = self.host.swapper.swap_pending
         if pending is not None:  # swap refuses a T of another head
             h = self.host.tracker.tool_lane(n)
@@ -1090,10 +1204,15 @@ class Wraps:
         lane is put in its head, when another lane is in it. That happens when a T typed while
         paused swapped the lane, or after a T of another shared head. Then the T of the U1 runs
         (_run_tool). Returns False while the print is paused. A swap that fails is pending, and
-        its T is this owed one.
+        its T is this owed one. A head with a background swap goes on with it first, as at its T.
         """
         n = state.tool
-        swap = self.host.tracker.swap_for(n) if n is not None else None
+        took = None if n is None else self.host.background.before_tool(gcmd, n, owed=state)
+        if took is False:
+            if self.host.swapper.swap_pending is not None:
+                self.host.swapper.swap_pending.owed = True  # its T is this one, owed already
+            return False
+        swap = self.host.tracker.swap_for(n) if n is not None and not took else None
         if (
             swap is not None
             and n is not None

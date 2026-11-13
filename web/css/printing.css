@@ -182,13 +182,18 @@
 }
 .tlr {
   display: grid;
-  grid-template-columns: 60px 1fr;
+  grid-template-columns: 7.5rem 1fr;
   align-items: center;
   gap: 8px;
   min-height: 34px;
 }
 .tlr .lb b {
   display: block;
+}
+.tlr .lb small {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
 }
 .tlr .lb span {
   font-size: var(--fs-xs);
@@ -217,17 +222,39 @@
   opacity: 0.55;
   background: var(--fil, var(--unknown));
 }
-/* A spool swap: a yellow ▼ above the band. */
+/* A swap mark: the element is a 10 x 10 px box that carries the title, from 10 px above the band down to its top edge,
+   so it never reaches the bar. The shape (8 px high, at the top of the box) is drawn on its ::before, so the hollow
+   ▽'s clip-path never cuts the hit area. */
 .band .sw-mark {
   top: -10px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+}
+.band .sw-mark::before {
+  content: "";
+  display: block;
   width: 0;
   height: 0;
-  margin-left: -5px;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
   border-top: 8px solid var(--warn);
 }
+/* A swap in the background: a hollow green ▽, so it never reads as a stop. */
+.band .sw-mark.free::before {
+  width: 10px;
+  height: 8px;
+  border: 0;
+  background: var(--ok);
+  clip-path: polygon(evenodd, 0 0, 100% 0, 50% 100%, 0 0, 24% 20%, 50% 70%, 76% 20%, 24% 20%);
+}
+
+/* A background swap called back before its dock work ends: the hollow mark in the warning colour. */
+.band .sw-mark.free.late::before {
+  background: var(--warn);
+}
 .band .past {
+  pointer-events: none;
   top: -4px;
   height: 24px;
   background: var(--bg);
@@ -240,6 +267,7 @@
   width: 2px;
   background: var(--accent);
   z-index: 2;
+  pointer-events: none;
 }
 /* The zoom strip: the whole print in miniature and the window on the stretch the bars show. */
 .tl .zrow {
@@ -328,6 +356,12 @@
 .leg .lg-mark {
   color: var(--warn);
 }
+.leg .lg-mark.free {
+  color: var(--ok);
+}
+.leg .lg-mark.free.late {
+  color: var(--warn);
+}
 
 @media (max-width: 700px) {
   .pr-head {
@@ -348,7 +382,7 @@
     grid-template-columns: 1fr;
   }
   .tlr {
-    grid-template-columns: 44px 1fr;
+    grid-template-columns: 5.5rem 1fr;
   }
   .tl .zrow {
     grid-template-columns: 1fr auto;

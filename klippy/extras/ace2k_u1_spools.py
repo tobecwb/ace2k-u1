@@ -36,8 +36,10 @@ except ImportError:  # same as above, for the host tests
         setting_written,
     )
 try:
+    from . import ace2k_u1_in_use as in_use_module
     from . import ace2k_u1_tags as tags_module
 except ImportError:  # same as above, for the host tests
+    import ace2k_u1_in_use as in_use_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_tags as tags_module  # type: ignore[import-not-found, no-redef]
 
 # The statuses of the units, as Adapter.read_units gives them: {id(unit): its lanes}.
@@ -63,6 +65,10 @@ class SpoolsAdapter(Protocol):
     @property
     def tag_writer(self) -> TagsOn: ...
     def lane_text(self, h: Hooked) -> str: ...
+    def in_print(self) -> bool: ...
+
+    own_writes: int
+
     def lane_status(self, h: Hooked, eventtime: float | None = None) -> LaneView: ...
     def read_units(self, eventtime: float) -> dict[int, list[LaneView]]: ...
     def slot_of(self, h: Hooked) -> Slot | None: ...
@@ -190,7 +196,7 @@ class SpoolStore:
             raise
 
     def drop(self, key: str, name: str) -> bool:
-        """Drops the record of a lane whose spool was taken out of its bay by hand.
+        """Drops the record of a lane whose bay emptied.
 
         GripWatch.bay_watch calls it. The ACEK_SPOOL record is dropped and the file is saved.
         If the write fails, the record is kept and False is returned, so the next tick tries
@@ -388,8 +394,23 @@ class LaneSpools:
                 continue
             if real:
                 setting_written(h)
+                self._by_hand(h)
             elif h.setting_seen is not None:
                 h.setting_seen = self.host.u1.head_setting(head) or h.setting_seen
+
+    def _by_hand(self, h: Hooked) -> None:
+        """Tell the unit that the user named the material of lane h, when this write is theirs.
+
+        A write of the adapter's own is not (in_use.own_write): the tag write, the spool step of a
+        swap, the page's Edit spool step and the check at a load. A write while a print runs is not
+        either: the print's start and the slicer write the setting, and the lane that prints is in
+        use anyway. A head that several lanes feed gets no mark here (setting_set skips it): its
+        lanes are marked through ACEK_SPOOL only.
+        """
+        adapter = self._adapter()
+        if adapter.own_writes or adapter.in_print():
+            return
+        in_use_module.tell_by_hand(h.unit, h.lane)
 
     def lone_setting(self, h: Hooked, settings: HeadSettings | None = None) -> HeadSetting:
         """Returns head_setting of the head of lane h while it speaks for the spool in the bay.

@@ -231,8 +231,9 @@ except ImportError:  # the host tests put klippy/extras and a fake filament_feed
     import filament_feed as feed_module
 try:
     from . import ace2k_u1_config as config_module
-    from . import ace2k_u1_probe
+    from . import ace2k_u1_in_use, ace2k_u1_probe
     from .ace2k_u1_adapter import PRINT_ON, Adapter, AdapterSetup
+    from .ace2k_u1_background import Background
     from .ace2k_u1_bench import Bench
     from .ace2k_u1_common import (
         API_MIN,
@@ -244,6 +245,7 @@ try:
     )
     from .ace2k_u1_config import LANES, SPLITTER_DEFAULT_MM
     from .ace2k_u1_eject import EJECT_PROBE_MIN_MM, EJECT_PROBE_MM, EjectRefused
+    from .ace2k_u1_history import DEFAULT_PATH as HISTORY_PATH
     from .ace2k_u1_material import MaterialGate
     from .ace2k_u1_page import PageCommands
     from .ace2k_u1_pause import PauseObjects
@@ -253,17 +255,20 @@ try:
     from .ace2k_u1_spools import LaneSpools, SpoolStore
     from .ace2k_u1_status import Status
     from .ace2k_u1_swap import Swapper
+    from .ace2k_u1_swap_times import SwapTimes
     from .ace2k_u1_temps import TEMP_ENDPOINT, TempCheck
     from .ace2k_u1_tracker import PrintTracker
     from .ace2k_u1_wraps import Wraps
 except ImportError:  # same as above, for the host tests
     import ace2k_u1_config as config_module  # type: ignore[import-not-found, no-redef]
+    import ace2k_u1_in_use  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_probe  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_adapter import (  # type: ignore[import-not-found, no-redef]
         PRINT_ON,
         Adapter,
         AdapterSetup,
     )
+    from ace2k_u1_background import Background  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_bench import Bench  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_common import (  # type: ignore[import-not-found, no-redef]
         API_MIN,
@@ -282,6 +287,9 @@ except ImportError:  # same as above, for the host tests
         EJECT_PROBE_MM,
         EjectRefused,
     )
+    from ace2k_u1_history import (  # type: ignore[import-not-found, no-redef]
+        DEFAULT_PATH as HISTORY_PATH,
+    )
     from ace2k_u1_material import MaterialGate  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_page import PageCommands  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_pause import PauseObjects  # type: ignore[import-not-found, no-redef]
@@ -294,6 +302,7 @@ except ImportError:  # same as above, for the host tests
     )
     from ace2k_u1_status import Status  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_swap import Swapper  # type: ignore[import-not-found, no-redef]
+    from ace2k_u1_swap_times import SwapTimes  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_temps import (  # type: ignore[import-not-found, no-redef]
         TEMP_ENDPOINT,
         TempCheck,
@@ -400,8 +409,7 @@ class ACE2kU1:
         self.problems: list[str] | None = None
         # Whether "ace2k:feed_event" is registered. It is registered once and routed to the adapter.
         self.feed_events: bool = False
-        self.printer.register_event_handler("klippy:connect", self._on_connect)
-        self.printer.register_event_handler("klippy:ready", self._on_ready)
+        self._register_events()
         gcode: GCode = self.printer.lookup_object("gcode")
         self._register_commands(gcode)
         # The status of the printer object, for the web page. Its copies are built again after a
@@ -421,6 +429,10 @@ class ACE2kU1:
         # The warning for a temperature outside the range of the material of the lane.
         self.temps: TempCheck = TempCheck(self)
         self.bench: Bench = Bench(self)  # ACEK_HEAD_PROBE and ACEK_FREE_CHECK
+        # The long-term average of each swap time, for the web page.
+        self.swap_times: SwapTimes = SwapTimes()
+        # The background swap of the heads in background_heads, and its commands.
+        self.background: Background = Background(self)
         self.splitter: SplitterCommand = SplitterCommand(self, self.bench, config.get_name())
         # The commands ACEK_SPOOL, ACEK_TAG_FORGET, ACEK_PLAN and ACEK_PLAN_SET.
         self.page: PageCommands = PageCommands(self)
@@ -428,6 +440,7 @@ class ACE2kU1:
         # it left pending.
         self.print_seen_on: bool = False
         self._register_page_commands(gcode)
+        self._register_background_commands(gcode)
 
     def _read_eject_probe(self, config: Config) -> None:
         """Reads the probe settings of ACEK_EJECT.
@@ -491,6 +504,35 @@ class ACE2kU1:
             desc="Run a swap's free check on LANE (of UNIT) alone: roll it back up to LENGTH at"
             " SPEED, watching its plunger; says free or held",
         )
+
+    def _register_background_commands(self, gcode: GCode) -> None:
+        """Registers the commands of the background swap (Background).
+
+        With a head in background_heads, an inline swap also lets the background swap give way.
+        """
+        bg = self.background
+        if bg.heads:
+            self.swapper.before_swap = bg.before_inline
+            self.swapper.yield_ended = bg.yield_ended
+        for name, handler, desc in (
+            ("ACEK_BG_STATUS", bg.cmd_ACEK_BG_STATUS, "Report the background swap of each head"),
+            (
+                "ACEK_BG_SWAP",
+                bg.cmd_ACEK_BG_SWAP,
+                "Swap parked HEAD to LANE in its dock, outside a print (bench); its T loads it",
+            ),
+            (
+                "ACEK_BG_STOP",
+                bg.cmd_ACEK_BG_STOP,
+                "Stop HEAD's background swap at its next step, or drop the state it kept",
+            ),
+            (
+                "ACEK_BG_MOVE",
+                bg.cmd_ACEK_BG_MOVE,
+                "Move parked HEAD's extruder DISTANCE mm at VELOCITY mm/s, outside a print (bench)",
+            ),
+        ):
+            gcode.register_command(name, handler, desc=desc)
 
     def _spool_path(self) -> str | None:
         """Returns the path of SPOOL_FILE, beside printer.cfg.
@@ -669,7 +711,29 @@ class ACE2kU1:
                 f"ace2k_u1: lane {text} feeds no head (not in lanes:): its follow stopped"
             )
 
+    def _register_events(self) -> None:
+        """Klipper's connect and ready; and for the swap stops of the print (status print_stops),
+        the print's start, which clears them, and a pause, which drops the stop it comes into."""
+        self.printer.register_event_handler("klippy:connect", self._on_connect)
+        self.printer.register_event_handler("klippy:ready", self._on_ready)
+        self.printer.register_event_handler("print_stats:new_task_start", self._print_started)
+        self.printer.register_event_handler("print_stats:paused", self._print_paused)
+
+    def _print_started(self) -> None:
+        self.swap_times.stops.reset()
+
+    def _print_paused(self) -> None:
+        self.swap_times.stops.note_pause()
+
+    def _history_folder(self) -> str:
+        """The folder of the history ([ace2k_u1_history] path), where swap-times.json lives."""
+        history = self.printer.lookup_object("ace2k_u1_history", None)
+        path = getattr(getattr(history, "writer", None), "path", None)
+        return path if isinstance(path, str) else HISTORY_PATH
+
     def _on_ready(self) -> None:
+        self.swap_times.open(self._history_folder())
+        self.printer.register_event_handler("klippy:disconnect", self.swap_times.stop)
         self.reactor.register_timer(self._hook, self.reactor.monotonic() + HOOK_DELAY_S)
 
     def _hook(self, _eventtime: float) -> float:
@@ -686,6 +750,11 @@ class ACE2kU1:
         problems = self.adapter.hook_all()
         if problems:
             return self._not_hooked(gcode, problems)
+        # the read with motion skips a lane set by hand
+        self.adapter.spool_store = self.spool_store
+        # Klipper started again: the host modules of the units forgot the lanes named by hand, the
+        # spool file did not.
+        ace2k_u1_in_use.tell_saved_by_hand(self.adapter)
         # The probe of a shared head. It is built only when several lanes feed a head.
         self.probe = None
         if self.adapter.groups():
@@ -693,6 +762,7 @@ class ACE2kU1:
                 self.adapter, self.reactor, self.u1.script, self.swap_cfg
             )
         self.adapter.probe = self.probe
+        self.adapter.on_u1_load = self.background.u1_loads  # a kept run's tip no longer counts
         self._feed_dryer_materials(self.adapter)
         # The load into a head that one lane feeds pushes again with the same rules.
         self.adapter.insister = self.probe or ace2k_u1_probe.HeadProbe(
@@ -927,6 +997,7 @@ class ACE2kU1:
             self.wraps.wrap_print_start(gcode)
             self.wraps.wrap_tools(gcode)
             self.wraps.wrap_preextrude(gcode)
+            self.wraps.wrap_idle_exit(gcode)  # the swap's arrival_wipe
             self.wraps.wrap_temperatures(gcode)
             self.wraps.wrap_resume(gcode)
             self.wraps.wrap_lane_active(gcode)
@@ -1044,8 +1115,14 @@ class ACE2kU1:
             self.adapter.on_feed_event(lane, event)
 
     def get_status(self, eventtime: float | None = None) -> dict[str, object]:
-        """Returns the status of the printer object, for the web page (Status.get_status)."""
-        return self.status.get_status(eventtime)
+        """Returns the status of the printer object, for the web page (Status.get_status).
+
+        With a head in background_heads, it also has the background swap of each head.
+        """
+        status = self.status.get_status(eventtime)
+        if self.background.heads and self.adapter is not None:
+            status = dict(status, background=self.background.status())
+        return status
 
     def changed(self) -> None:
         """Tells the status that the spools or the plan changed in place.
@@ -1116,6 +1193,10 @@ class ACE2kU1:
         if state in PRINT_ON:
             self.print_seen_on = True
             self.refiller.watch_stopped()
+            if state == "paused":
+                self.background.on_pause()
+            else:
+                self.background.check()  # a head docked, or a swap ended: its run starts now
         elif self.print_seen_on and ended:
             self.print_seen_on = False
             self.print_over()
@@ -1147,6 +1228,7 @@ class ACE2kU1:
         """
         self.swapper.swap_pending = None
         self.swapper.tools_owed = []
+        self.background.print_over()
         self.tracker.reset_print()
         self.refiller.runout_stopped = {}
         if self.adapter is not None:
@@ -1284,7 +1366,7 @@ class ACE2kU1:
         if h is not None and why is not None:
             raise gcmd.error(f"ace2k_u1: lane {adapter.lane_text(h)} eject refused: {why}")
         try:
-            job = adapter.ejector.start_eject(lane - 1, unit, asked=True)
+            job = adapter.ejector.start_eject(lane - 1, unit)
         except EjectRefused as err:
             raise gcmd.error(str(err)) from None
         if wait:

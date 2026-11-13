@@ -34,6 +34,7 @@ try:
         PUSH_POLL_S,
         SEATED_MM,
         SPEED_API,
+        STOPPED_KINDS,
         Hooked,
         api_at_least,
         carried,
@@ -55,6 +56,7 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
         PUSH_POLL_S,
         SEATED_MM,
         SPEED_API,
+        STOPPED_KINDS,
         Hooked,
         api_at_least,
         carried,
@@ -116,9 +118,7 @@ EVENT_ERRORS = {
     "runout": "FEED_ERR_NO_FILAMENT",
     "unload_incomplete": "FEED_ERR_WHEEL_SPEED",
     "timeout": "FEED_ERR_TIMEOUT",
-    "stopped": "FEED_ERR_TIMEOUT",
-    "stopped_link": "FEED_ERR_TIMEOUT",
-    "stopped_shutdown": "FEED_ERR_TIMEOUT",
+    **dict.fromkeys(STOPPED_KINDS, "FEED_ERR_TIMEOUT"),  # stopped from outside: no U1 error fits
     "done": "FEED_ERR_DISTANCE",
     "blocked": "FEED_ERR_DISTANCE",  # the push met what cannot move, so the head was not reached
 }
@@ -368,12 +368,13 @@ class PushRunner:
         head_budget_mm). It returns None on success, else the error name of the U1 (motor_speed,
         wheel_speed, no_filament, timeout, distance).
 
-        A push that ended by a final event leaves that kind in h.push_end. It leaves in h.push_mm
-        how far it went, which is the sum of the moves that ended. (At the sensor the last move has
-        no final event, so it is not counted. A seat to the head is the exception: its travel is
-        counted, from the encoder, see _seat_to_head.) h.push_known is False when the last move
-        ran and ended, or raised, with no distance. Then the tip is past h.push_mm by up to that
-        move, and h.push_max_mm holds that farthest point. h.push_moves is how many moves it tried.
+        A push that ended by a final event leaves that kind in h.push_end and h.push_last_end. It
+        leaves in h.push_mm how far it went, which is the sum of the moves that ended. (At the
+        sensor the last move has no final event, so it is not counted. A seat to the head is the
+        exception: its travel is counted, from the encoder, see _seat_to_head.) h.push_known is
+        False when the last move ran and ended, or raised, with no distance. Then the tip is past
+        h.push_mm by up to that move, and h.push_max_mm holds that farthest point. h.push_moves
+        is how many moves it tried.
 
         A budget over the longest move of the unit runs in moves of at most that length. (The bay
         can be over 2 000 mm from the head through two splitters.) A move that ends "done" short of
@@ -383,7 +384,7 @@ class PushRunner:
         the budget once and never more.
         """
         speed = speed or self.adapter.feed_speed_mm_s
-        h.push_end = None
+        h.push_end = h.push_last_end = None
         h.push_mm = 0.0
         h.push_known = True
         h.push_moves = 0
@@ -455,7 +456,7 @@ class PushRunner:
         end = self._seat_to_head(h, seat, SeatRun(length, speed, base))
         if self.adapter.head_set(h):
             # The filament reached the head as the seat ended, whatever its end said.
-            h.push_end = None
+            h.push_end = h.push_last_end = None
             return Begin(done=True)
         if end.result is not None:
             return Begin(done=True, error=end.result.error)
@@ -732,7 +733,7 @@ class PushRunner:
         the two agree.
         """
         h.push_moves += 1
-        h.push_end = result.end
+        h.push_end = h.push_last_end = result.end
         if result.end is not None:
             h.push_end_seq = result.end_seq
         h.push_mm, h.push_known, h.push_max_mm = low, low == high, high
@@ -900,7 +901,7 @@ class PushRunner:
         # A move that ran and ended without a distance (no final event, or none in it): its tip
         # is past push_mm by up to the whole move.
         known = result.error is None or not result.started or result.mm > 0.0
-        h.push_end = result.end
+        h.push_end = h.push_last_end = result.end
         if result.end is not None:
             h.push_end_seq = result.end_seq
         h.push_moves += 1
@@ -917,7 +918,10 @@ class PushRunner:
         (see carried). h.push_mm is the travel of the push so far.
         """
         cap = move_max_mm(h)
-        if result.error != self.adapter.feed_error("FEED_ERR_DISTANCE") or h.push_end != "done":
+        if (
+            result.error != self.adapter.feed_error("FEED_ERR_DISTANCE")
+            or h.push_last_end != "done"
+        ):
             return False
         if budget <= cap or step < cap or budget - h.push_mm < INSIST_MIN_MM:
             return False  # the last (or only) move of the budget: its end is the end of the push
@@ -974,7 +978,7 @@ class PushRunner:
         except ace2k_u1_probe.ProbeError as err:
             # A push that ended blocked before the probe failed is the failure. It is not a block
             # that the filament waits at. The caller reports it (a BLOCKED preload is quiet).
-            h.push_end = None
+            h.push_end = h.push_last_end = None
             self.adapter.say(f"ace2k_u1: {err}")
             return self.adapter.feed_error("FEED_ERR")
 

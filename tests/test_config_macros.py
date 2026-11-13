@@ -79,6 +79,16 @@ def test_the_swaps_load_ends_with_the_u1s_clean() -> None:
 
 def test_the_swaps_load_runs_at_one_temperature() -> None:
     load = section("ACEK_SWAP_LOAD")
-    assert "G1 E40 F360" in load and "G1 E30 F360" in load
+    assert "G1 E40 F360" in load and "G1 E10 F360" in load
     # The swap passes PRINT_TEMP = LOAD_TEMP, so there is no fan step to cool the head.
-    assert "M106" not in load and "{% if" not in load
+    assert "M106" not in load
+    # The only branch is the grip, which a background swap skips (GRIP=0).
+    assert load.count("{% if") == 1 and "{% if params.GRIP|default(1)|int %}" in load
+
+
+def test_the_swaps_load_skips_only_the_grip_with_grip_0() -> None:
+    load = section("ACEK_SWAP_LOAD")
+    lines = [ln.split(";")[0].strip() for ln in load.splitlines()]
+    branch = lines.index("{% if params.GRIP|default(1)|int %}")
+    assert lines[branch + 1 : branch + 3] == ["G1 E40 F360", "{% endif %}"]
+    assert lines[branch + 3] == "G1 E10 F360"

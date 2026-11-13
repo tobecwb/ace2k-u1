@@ -123,6 +123,16 @@ def heater_off(gcode: GCode | None, head: int) -> None:
 # The top speed of a unit whose image gives no speed limits (mm/s): the ceiling ace2k had then.
 UNIT_TOP_FALLBACK_MM_S = 70.0
 
+# The final events of a move that was stopped from outside (a stop request, a cancelled print,
+# the unit's link, a shutdown), not ended by the unit on its own. The U1's error for each is a
+# timeout (ace2k_u1_push.EVENT_ERRORS takes them from here), which it was not. stopped_sensors
+# is the unit's own fault (stale sensors), not a stop.
+STOPPED_KINDS = ("stopped", "stopped_link", "stopped_shutdown")
+
+
+class StoppedError(RuntimeError):
+    """A step whose move was stopped from outside (STOPPED_KINDS)."""
+
 
 def unit_speed(api: object, speed: float) -> float:
     """Return speed (mm/s) within the speeds of the unit whose feed is api.
@@ -522,6 +532,8 @@ class Hooked:
     rise_at: float | None = field(init=False, default=None)
     # The console was told that the load of this lane ended in error.
     error_said: bool = field(init=False, default=False)
+    # The bay could not be read for the in-use mask, and the log said so (ace2k_u1_in_use).
+    bay_unreadable: bool = field(init=False, default=False)
     # This adapter armed the follow of the lane since then, or adopted the follow of ace2k.
     armed: bool = field(init=False, default=False)
     # An arm by this adapter is in flight. Another trigger is dropped.
@@ -573,8 +585,13 @@ class Hooked:
     # preload against a loaded head fails.) Outside a print it is told once the head clears. In a
     # print it is dropped.
     rise_held: bool = field(init=False, default=False)
-    # The kind of the final event that ended the last push short of the head.
+    # The kind of the final event that ended the last push short of the head, for the status:
+    # the bay watch clears it once the lane moves again. Decisions read push_last_end.
     push_end: str | None = field(init=False, default=None)
+    # The kind of the final event that ended the last move of the last push (None: none came, or
+    # it reached the head). Only the next push clears it, so every decision on how a push ended
+    # (blocked, done, stopped) reads it, never push_end.
+    push_last_end: str | None = field(init=False, default=None)
     # The seq of that final event. FeedEvents._on_final keeps push_end.
     push_end_seq: int | None = field(init=False, default=None)
     # How far that push went, from its final events. 0 means that none came.
@@ -627,23 +644,16 @@ class Hooked:
     ended_at: float | None = field(init=False, default=None)
     # The seq of the last motion that this adapter started on the lane.
     motion_seq: int | None = field(init=False, default=None)
-    # The bay and its spool record (see bay_watch). bay_full: the bay last read full. drop_due:
-    # the record is due to be dropped, because the bay was emptied by hand and the write has not
-    # yet succeeded. out_at: when a move of the lane that takes the filament out of the bay last
-    # ran (a roll back, an unload, or a move that ran out of the bay). A bay emptied by such a move
-    # is not a spool taken out.
+    # The bay and its spool record (see bay_watch). bay_full: the bay last read full. drop_wait:
+    # the bay emptied and the drop waits for it to read empty, the lane at rest, for BAY_EMPTY_S
+    # (empty_since: from when). drop_due: the record is due to be dropped and the write has not
+    # yet succeeded.
     bay_full: bool = field(init=False, default=False)
+    drop_wait: bool = field(init=False, default=False)
+    empty_since: float | None = field(init=False, default=None)
     drop_due: bool = field(init=False, default=False)
     # When the bay last went from full to empty (the tail of a refill).
     bay_emptied_at: float = field(init=False, default=0.0)
-    out_at: float | None = field(init=False, default=None)
-    # eject_by_user: an eject that the user asked for (ACEK_EJECT) runs on the lane, so the user
-    # takes the spool out.
-    # eject_drop: the unit's unload of such an eject ended (see Ejector._arm_spool_drop). The
-    # spool record goes once the bay reads empty, unless a filament goes in or the lane really
-    # moves first (end_eject_drop).
-    eject_by_user: bool = field(init=False, default=False)
-    eject_drop: bool = field(init=False, default=False)
     # The final event of the motion is still to come.
     motion_open: bool = field(init=False, default=False)
     # Earlier motions of this adapter that were replaced before their end came.
@@ -737,11 +747,6 @@ class Hooked:
     def seat_due(self) -> bool:
         """The filament waited and is still at the bay, so a push starts with the seat."""
         return self.waited and not self.seated
-
-    def end_eject_drop(self) -> None:
-        """End the drop of the spool record that an eject armed (eject_drop): the lane moved, a
-        filament went into its empty bay, a new record came, or the drop was done."""
-        self.eject_drop = False
 
     def clear_wait(self) -> None:
         """Forget the lane's wait and its seat: the filament left the bay, or the head was reset."""

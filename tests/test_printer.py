@@ -136,3 +136,162 @@ def test_a_printing_e_pos_that_is_no_finite_number_is_unread(value: object) -> N
 def test_a_finite_printing_e_pos_is_read_as_a_float() -> None:
     extruder = types.SimpleNamespace(printing_e_pos=E_POS)
     assert ace2k_u1_printer.U1Printer.e_pos(extruder) == float(E_POS)
+
+
+# --- the tangle check of a head ----------------------------------------------------------------
+
+
+class TangleCheck:
+    """filament_entangle_detect of the U1: skip_entangle_check takes a new start (the head's
+    position and wheel counts, which raise when fail is set) and sets its flag last, as the U1's
+    does. skip_length and skip_length_remained are its start-of-print grace."""
+
+    def __init__(self, flag: bool = False) -> None:
+        self.skip_check_flag = flag
+        self.calls: list[bool] = []
+        self.fail: set[bool] = set()
+        self.skip_length = 20.0
+        self.skip_length_remained = -1.0  # the grace was used up
+
+    def skip_entangle_check(self, skip: bool = False) -> None:
+        self.calls.append(skip)
+        if skip in self.fail:
+            raise RuntimeError("no wheel")
+        self.skip_check_flag = skip
+
+
+def checked(check: TangleCheck) -> ace2k_u1_printer.U1Printer:
+    return facade(**{"filament_entangle_detect e1_filament": check})
+
+
+def test_the_tangle_check_of_the_head_is_off_in_the_block_and_on_after_it() -> None:
+    check = TangleCheck()
+    other = TangleCheck()
+    u1 = facade(
+        **{
+            "filament_entangle_detect e1_filament": check,
+            "filament_entangle_detect e0_filament": other,
+        }
+    )
+    with u1.tangle_check_off(1):
+        assert check.skip_check_flag is True
+    assert check.calls == [True, False] and check.skip_check_flag is False
+    assert other.calls == []
+    assert "skip_entangle_check" not in vars(check)  # the U1's own method is back
+
+
+def test_the_tangle_check_is_on_again_when_the_block_raises() -> None:
+    check = TangleCheck()
+    with pytest.raises(ValueError, match="refused"), checked(check).tangle_check_off(1):
+        raise ValueError("refused")
+    assert check.calls == [True, False] and check.skip_check_flag is False
+    assert "skip_entangle_check" not in vars(check)
+
+
+def test_the_u1_turning_the_check_on_inside_the_block_waits_for_its_end() -> None:
+    # the U1's load or unload of the same head, run while the block's parked moves are queued
+    check = TangleCheck()
+    with checked(check).tangle_check_off(1):
+        check.skip_entangle_check(True)  # as filament_feed calls it
+        check.skip_entangle_check(False)
+        assert check.skip_check_flag is True  # the parked moves still run
+    assert check.calls == [True, True, False] and check.skip_check_flag is False
+
+
+def test_a_block_inside_the_u1s_own_skip_turns_the_check_on_once_both_have_ended() -> None:
+    check = TangleCheck(flag=True)  # the U1's own load or unload turned it off before the block
+    with checked(check).tangle_check_off(1):
+        check.skip_entangle_check(False)  # the U1's ends inside the block
+        assert check.skip_check_flag is True
+    assert check.calls == [False] and check.skip_check_flag is False
+
+
+def test_a_u1_skip_that_outlasts_the_block_is_left_to_the_u1() -> None:
+    check = TangleCheck()
+    with checked(check).tangle_check_off(1):
+        check.skip_entangle_check(True)  # the U1's load starts inside the block
+    assert check.calls == [True, True] and check.skip_check_flag is True
+    check.skip_entangle_check(False)  # and turns it on itself, with its own method
+    assert check.calls == [True, True, False] and check.skip_check_flag is False
+
+
+def test_a_tangle_check_that_was_off_is_left_off() -> None:
+    check = TangleCheck(flag=True)  # the U1's own load or unload of the head turned it off
+    with checked(check).tangle_check_off(1):
+        pass
+    assert check.calls == [] and check.skip_check_flag is True
+    assert "skip_entangle_check" not in vars(check)
+
+
+def test_nested_blocks_turn_the_check_on_once_the_outer_one_ends() -> None:
+    check = TangleCheck()
+    u1 = checked(check)
+    with u1.tangle_check_off(1):
+        with u1.tangle_check_off(1):
+            pass
+        assert check.skip_check_flag is True
+    assert check.calls == [True, False] and check.skip_check_flag is False
+
+
+def test_a_tangle_check_that_does_not_turn_off_raises_and_the_block_does_not_run() -> None:
+    check = TangleCheck()
+    check.fail = {True}
+    ran = []
+    with (
+        pytest.raises(ace2k_u1_printer.TangleOffError, match="head 2.*turned off"),
+        checked(check).tangle_check_off(1),
+    ):
+        ran.append(True)
+    assert ran == [] and check.calls == [True] and check.skip_check_flag is False
+    assert "skip_entangle_check" not in vars(check)
+
+
+def test_a_tangle_check_that_does_not_turn_on_restarts_with_the_u1s_grace(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # its start is stale: the grace (the U1's own at the start of a print) takes a new one
+    check = TangleCheck()
+    check.fail = {False}
+    with caplog.at_level("ERROR"), checked(check).tangle_check_off(1):
+        pass
+    assert check.skip_check_flag is False
+    assert check.skip_length_remained == check.skip_length
+    assert any("grace" in r.getMessage() for r in caplog.records)
+
+
+def test_a_tangle_check_with_no_grace_that_does_not_turn_on_is_on_all_the_same(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    check = TangleCheck()
+    check.fail = {False}
+    del check.skip_length
+    with caplog.at_level("ERROR"), checked(check).tangle_check_off(1):
+        pass
+    assert check.skip_check_flag is False  # never left off: a later hold reads it as the U1's
+    assert any("may be stale" in r.getMessage() for r in caplog.records)
+
+
+def test_a_method_set_on_the_check_itself_is_given_back() -> None:
+    check = TangleCheck()
+    calls: list[bool] = []
+
+    def own(skip: bool = False) -> None:
+        calls.append(skip)
+        check.skip_check_flag = skip
+
+    check.skip_entangle_check = own  # type: ignore[method-assign]
+    with checked(check).tangle_check_off(1):
+        pass
+    assert check.skip_entangle_check is own
+    assert calls == [True, False]
+
+
+def test_with_no_tangle_check_the_block_runs(caplog: pytest.LogCaptureFixture) -> None:
+    ran = []
+    with caplog.at_level("DEBUG"), facade().tangle_check_off(2):
+        ran.append(True)
+    assert ran == [True]
+    assert [r.getMessage() for r in caplog.records] == [
+        "ace2k_u1: no filament_entangle_detect e2_filament: the parked moves of head 3 run with "
+        "no check"
+    ]

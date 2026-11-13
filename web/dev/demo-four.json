@@ -111,6 +111,72 @@
    "d:2": { "material_set": true },
    "d:3": { "material_set": true },
    "d:4": { "material_set": true }
+  },
+  "background": [
+   {
+    "state": "idle",
+    "step": null,
+    "lane": null
+   },
+   {
+    "state": "idle",
+    "step": null,
+    "lane": null
+   },
+   null,
+   null
+  ],
+  "swap_times": {
+   "inline": {
+    "s": 91.3,
+    "n": 6
+   },
+   "ready": {
+    "s": 16.2,
+    "n": 6
+   },
+   "dock": {
+    "s": 63.8,
+    "n": 6
+   },
+   "resume": {
+    "s": 14.1,
+    "n": 6
+   },
+   "steps": {
+    "heat": {
+     "s": 0.0,
+     "n": 6
+    },
+    "unload": {
+     "s": 26.4,
+     "n": 6
+    },
+    "free": {
+     "s": 1.2,
+     "n": 6
+    },
+    "roll back": {
+     "s": 10.6,
+     "n": 6
+    },
+    "hand over": {
+     "s": 0.0,
+     "n": 6
+    },
+    "push": {
+     "s": 12.5,
+     "n": 6
+    },
+    "grip": {
+     "s": 14.3,
+     "n": 6
+    },
+    "loaded": {
+     "s": 0.0,
+     "n": 6
+    }
+   }
   }
  },
  "ace2k_units": {

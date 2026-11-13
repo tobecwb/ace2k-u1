@@ -10,7 +10,7 @@ U1's own filament flows:
 
 Each of the U1's four heads is fed directly by one lane of the unit.
 
-**Status: beta `v0.5.0`.** Read the beta notice in "Read this first" below. The long-run print
+**Status: beta `v0.6.0`.** Read the beta notice in "Read this first" below. The long-run print
 tests have run many prints since the release candidate, the longest over 40 hours, with all four
 lanes of one unit in use.
 
@@ -274,7 +274,7 @@ a light or a dark theme. The images above show sample data. Setup and details:
 ## Requirements
 
 - A Snapmaker U1 with the paxx extended firmware `v2.0.0-paxx12-24`.
-- ace2k `v0.14.0`, on the unit **and** on the printer (its host side). The installer installs
+- ace2k `v0.15.0`, on the unit **and** on the printer (its host side). The installer installs
   it. The adapter does not attach to an ace2k whose host interface is older than `API_VERSION` 12
   (`v0.12.0-rc.1` has 6).
 - One ACE 2 Pro unit or more, each with its USB cable plugged into the printer.

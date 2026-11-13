@@ -1,6 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { temp, tempWithTarget, readingWithTarget, pct, clock, historyDays, isNum, fmtHM, fmtMS } from '../js/format.js';
+import {
+  temp,
+  tempWithTarget,
+  readingWithTarget,
+  pct,
+  clock,
+  historyDays,
+  isNum,
+  fmtHM,
+  fmtMS,
+  fmtStopped,
+} from '../js/format.js';
 
 test('temp and pct', () => {
   assert.equal(temp(27.12), '27.1 °C');
@@ -61,4 +72,12 @@ test('fmtMS: minutes and seconds, for the reading bar', () => {
   assert.equal(fmtMS(75), '1:15');
   assert.equal(fmtMS(7.9), '0:07');
   for (const bad of [0, -3, Number.NaN]) assert.equal(fmtMS(bad), '0:00');
+});
+
+test('fmtStopped: m:ss under one hour, h:mm from one hour up', () => {
+  assert.equal(fmtStopped(94), '1:34');
+  assert.equal(fmtStopped(3599.4), '59:59');
+  assert.equal(fmtStopped(3599.6), '1:00');
+  assert.equal(fmtStopped(5760), '1:36');
+  for (const bad of [0, -3, Number.NaN]) assert.equal(fmtStopped(bad), '0:00');
 });

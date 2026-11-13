@@ -208,7 +208,7 @@ class TempCheck:
         be told.
         """
         if index is None:
-            return self._active_head()
+            return self._adapter().active_head(self.host.u1)  # None when unread
         if index < 0:
             return None
         if mapped == 0:
@@ -218,14 +218,6 @@ class TempCheck:
         except Exception:  # no tool table: the U1 takes the index as it is
             return index
         return table[index] if index < len(table) else None
-
-    def _active_head(self) -> int | None:
-        """Return the head of the active extruder (as ace2k_u1_tags reads it), or None."""
-        toolhead = self.host.printer.lookup_object("toolhead", None)
-        if toolhead is None:
-            return None
-        name = toolhead.get_extruder().get_name()
-        return self._adapter().head_of_extruder(name)
 
     def _adapter(self) -> Adapter:
         return self.host.adapter  # type: ignore[return-value]  # the check is wired at the hook
