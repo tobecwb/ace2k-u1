@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from .ace2k_u1_probe import HeadProbe
     from .ace2k_u1_spools import LaneSpools, SpoolStore
     from .ace2k_u1_swap import Swapper
+    from .ace2k_u1_swap_times import SwapTimes
     from .ace2k_u1_tracker import Plan, PrintTracker
 
 try:
@@ -82,6 +83,8 @@ class StatusHost(Protocol):
     def tracker(self) -> PrintTracker: ...
     @property
     def probe(self) -> HeadProbe | None: ...
+    @property
+    def swap_times(self) -> SwapTimes: ...
 
 
 class Status:
@@ -124,6 +127,15 @@ class Status:
           enough to probe (HeadProbe.is_cold: heater off and below probe_max_temp). None for any
           other head, and for a head whose temperature cannot be read.
         - probe_max_temp: the probe's limit in °C (probe_max_temp), or None without a probe.
+        - swapping: the heads (0-3, sorted) whose lane changes now: a swap of the head runs (its
+          T, a RESUME, or a refill's clearing), or its background swap runs or waits for its T.
+          Only while hooked.
+        - swap_times: the long-term average of each swap time, measured on the printer
+          (ace2k_u1_swap_times): inline, ready, dock, resume and steps (one per dock step), each
+          {s: seconds, n: samples}; n 0 is the seed. Only while hooked.
+        - print_stops: the swap stops of the print that runs, measured (PrintStops): s, their
+          seconds; n, their count; since, the print_duration at which the stop that runs now
+          began (None when none runs). A print start clears them. Only while hooked.
 
         When the adapter is hooked, heads is the map of the heads that are actually hooked. A
         head whose channel is missing has none. When it is not hooked, heads is the map that
@@ -164,12 +176,15 @@ class Status:
             "setting_for": setting_for,
             "pause_reason": adapter.pause_reason,
             "resuming": self.host.swapper.resuming,
+            "swapping": sorted(adapter.swapping),
             "hooked": True,
             "plan": copies["plan"],
             "spools": spools,
             "lanes": self._lanes_status(adapter),
             "probe_cold": self._probe_cold(adapter),
             "probe_max_temp": None if probe is None else probe.cfg.probe_max_temp,
+            "swap_times": self.host.swap_times.status(),
+            "print_stops": self.host.swap_times.stops.status(),
         }
 
     def _probe_cold(self, adapter: Adapter) -> list[bool | None]:

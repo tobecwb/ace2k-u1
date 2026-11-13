@@ -2,8 +2,10 @@
 // endReading (a status step) is the one that writes app; printClock keeps the shown share in module state.
 // They have no effects, so they run under node.
 import { LANES, unitName, unitsOf, several, sliceFor, laneOf, laneErrs } from './model.js';
-import { planFor, liveLanes, chosen, choiceFor, userBays } from './print-plan.js';
+import { planFor, liveLanes, chosen, choiceFor, headOfIn, userBays } from './print-plan.js';
 import { placement, userPick } from './planner.js';
+import { changesOf, printStopsOf, runStops, swapStops, timeKnown, timesOf } from './swap-time.js';
+import { segmentsOf } from './timeline.js';
 import { dryerView } from './dryer-form.js';
 import { cycleProgress } from './history.js';
 import { clockOf, frameOf, hasBytes, shareOf } from './clock.js';
@@ -142,6 +144,31 @@ export const livePlan = (app) => app.status.ace2k_u1?.plan ?? null;
 /** @param {AppState} app */
 export const shownPlan = (app) => planFor(livePlan(app), app.print.file);
 
+// The heads (0-based) that swap in the background: the heads the adapter's background status lists (a head not in
+// background_heads is null there). None while the adapter publishes no background status.
+/** @param {import('./types.js').Status} status @returns {number[]} */
+export function bgHeads(status) {
+  const list = status.ace2k_u1?.background;
+  return Array.isArray(list) ? list.flatMap((entry, h) => (entry ? [h] : [])) : [];
+}
+
+// What the running print's Now and Next cards read of the swaps. free: the heads of bgHeads whose swap did not stop
+// (a stopped one goes on at its T, and that stops the print). waiting: the heads whose background swap still runs (a T
+// of that head waits for it). swapping: the heads whose lane changes now (the adapter's swapping: a swap at a T, its
+// end after a background swap, or a background swap that runs or waits for its T).
+/** @param {import('./types.js').Status} status @returns {{ free: number[], waiting: number[], swapping: number[] }} */
+export function liveBg(status) {
+  const list = status.ace2k_u1?.background;
+  const entries = Array.isArray(list) ? list : [];
+  /** @param {(state: string) => boolean} test */
+  const where = (test) => entries.flatMap((entry, h) => (entry && test(entry.state) ? [h] : []));
+  return {
+    free: where((state) => state !== 'stopped'),
+    waiting: where((state) => state === 'running'),
+    swapping: Array.isArray(status.ace2k_u1?.swapping) ? status.ace2k_u1.swapping : [],
+  };
+}
+
 // The reading of the chosen file: set by planFile, and over once the live plan names that file. Null otherwise.
 /** @param {AppState} app @returns {import('./types.js').Reading | null} */
 export function readingOf(app) {
@@ -212,8 +239,49 @@ function shownShare(fresh, kept, framed, state) {
   return Math.max(fresh, kept ?? 0);
 }
 
-// The running print's clock (clock.js), one for the whole page (the Print tab, the top bar's %), and its frame.
-// It does not change the page state.
+// How far, in bytes, the file position may be past a change's T line for a stop that runs now to be that change's:
+// the U1 moves the position past a line only once the line has run, so during the T it sits at the T line itself.
+const NEAR_BYTES = 256;
+
+// The last printStops worked out, with what it was worked out from: one status, one share and one time printed give
+// one set of stops, however many readers ask (the top bar, the Print tab).
+/** @type {{ from: unknown[], stops: import('./clock.js').Stops | undefined } | null} */
+let lastStops = null;
+
+// The swap stops of the running print for its clock, or undefined (no stops) without its plan with a choice and
+// changes, without a slicer time, or with no share known: the estimate of each change's stop on the plan's choice
+// (swapStops), with the passed ones measured by the adapter when it publishes them (runStops).
+/**
+ * @param {AppState} app @param {string} file @param {import('./timeline.js').Frame} frame
+ * @param {number | null | undefined} timeS @param {number | null} p @param {number} done
+ * @returns {import('./clock.js').Stops | undefined}
+ */
+function printStops(app, file, frame, timeS, p, done) {
+  const from = [app.status, app.print.cards, file, frame?.start, frame?.end, timeS, p, done];
+  if (lastStops?.from.every((v, i) => v === from[i])) return lastStops.stops;
+  const stops = workStops(app, file, frame, timeS, p, done);
+  lastStops = { from, stops };
+  return stops;
+}
+
+/**
+ * @param {AppState} app @param {string} file @param {import('./timeline.js').Frame} frame
+ * @param {number | null | undefined} timeS @param {number | null} p @param {number} done
+ * @returns {import('./clock.js').Stops | undefined}
+ */
+function workStops(app, file, frame, timeS, p, done) {
+  const plan = livePlan(app);
+  if (!plan || plan.file !== file || !plan.choice || !plan.order?.length || !timeKnown(timeS) || p === null) return;
+  const headOf = headOfIn(liveLanes(app.status, plan));
+  const est = swapStops(changesOf(plan, frame, timeS), plan.choice, headOf, bgHeads(app.status), timesOf(app.status));
+  const xs = segmentsOf(plan, frame).map((g) => g.x);
+  const span = frame ? frame.end - frame.start : (plan.size ?? 0);
+  const near = span > 0 ? NEAR_BYTES / span : 0;
+  return runStops({ xs, stops: est.stops, p, done, near, measured: printStopsOf(app.status) });
+}
+
+// The running print's clock (clock.js), one for the whole page (the Print tab, the top bar's %), and its frame. It
+// counts the swap stops (printStops). It does not change the page state.
 /** @param {AppState} app */
 export function printClock(app) {
   const s = app.status;
@@ -236,7 +304,11 @@ export function printClock(app) {
   // A share counted without the bytes (Klipper's whole-file progress, header included: ~2 % at the start, where
   // Fluidd shows 0) is shown but not kept, so the frame's share replaces it, even a lower one.
   shown = p === null || !framed || ENDED.includes(state ?? '') ? mine : { file, done, p };
-  return { file, card, frame, clock: clockOf(state, done, p, card?.time) };
+  const clock = clockOf(state, done, p, card?.time);
+  // The stops change only a running clock: a complete, stopped or finishing print skips them.
+  if (clock.phase !== 'running') return { file, card, frame, clock };
+  const stops = printStops(app, file, frame, card?.time, p, done);
+  return { file, card, frame, clock: stops ? clockOf(state, done, p, card?.time, stops) : clock };
 }
 
 // The user's merges in the Print panel: a tool to the tool it joins. planFile starts each file with none.
@@ -253,11 +325,15 @@ export const hintKept = (print, file) => (print.dismissed ?? []).includes(file);
  * suggestion), merges the user's merges, and place the placement of them all. planLanes are the lanes as the planner
  * read them (a spool held in hand by eject all counts in its bay). fixed lists the colours whose bay the user set in
  * the colour picker (print.overrides): they print from it, and the suggestion works around them. raw is the pick before
- * userPick gives those bays to them (what placement and pickCost are given); pick is after it.
+ * userPick gives those bays to them (what placement and pickCost are given); pick is after it. bg lists the heads that
+ * swap in the background (bgHeads). changes are the file's changes with their print time, times the four swap
+ * averages, timeS the slicer's time and frame the file's frame (swap-time.js): what the placement was scored with.
  * @typedef {{ plan: import('./types.js').Plan, lanes: import('./types.js').PlanLane[],
  *   user: import('./print-plan.js').Choice, pick: import('./print-plan.js').Choice, merges: Record<number, number>,
  *   place: import('./planner.js').Placement | null, planLanes: import('./types.js').PlanLane[],
- *   fixed: number[], raw: import('./print-plan.js').Choice }} PlanNow
+ *   fixed: number[], raw: import('./print-plan.js').Choice, bg: number[],
+ *   changes: import('./swap-time.js').Change[], times: import('./swap-time.js').SwapTimes, timeS: number | null,
+ *   frame: import('./timeline.js').Frame }} PlanNow
  */
 
 // The last planNow of each status, with the parts of the Print state it was worked out from.
@@ -271,7 +347,7 @@ const nowOf = new WeakMap();
 /** @param {AppState} app @returns {PlanNow | null} */
 export function planNow(app) {
   const p = app.print;
-  const from = [p.file, p.choice, p.choiceId, p.choiceTools, p.merges, p.pinned, p.held, p.overrides];
+  const from = [p.file, p.choice, p.choiceId, p.choiceTools, p.merges, p.pinned, p.held, p.overrides, p.cards];
   const hit = nowOf.get(app.status);
   if (hit?.from.every((v, i) => v === from[i])) return hit.now;
   const now = workPlanNow(app);
@@ -291,6 +367,11 @@ function workPlanNow(app) {
   const merges = mergesOf(app.print);
   // planLanes: the lanes as the planner read them (spools held in hand by eject all count in their bays).
   const planLanes = withHeld(lanes, app.print.held);
+  const bg = bgHeads(app.status);
+  const card = app.print.cards?.[plan.file]?.card ?? null;
+  const frame = fileFrame(app, plan.file);
+  const timeS = typeof card?.time === 'number' ? card.time : null;
+  const times = timesOf(app.status);
   return {
     plan,
     lanes,
@@ -300,7 +381,12 @@ function workPlanNow(app) {
     merges,
     planLanes,
     fixed,
-    place: placement(plan, raw, planLanes, merges, fixed),
+    bg,
+    changes: changesOf(plan, frame, timeS),
+    times,
+    timeS,
+    frame,
+    place: placement(plan, raw, planLanes, merges, fixed, bg, { frame, timeS, times }),
   };
 }
 

@@ -5,7 +5,7 @@ import { html } from '../js/ui/html.js';
 import { PlanView } from '../js/ui/PlanView.js';
 import { Timeline } from '../js/ui/Timeline.js';
 import { runAction } from '../js/actions.js';
-import { asIsChoice, headOfIn, printGate, sentSwaps, swaps } from '../js/print-plan.js';
+import { asIsChoice, headOfIn, printGate, sentKinds, swapKinds } from '../js/print-plan.js';
 import { PrintBar } from '../js/ui/PrintBar.js';
 import { planNow } from '../js/state.js';
 import { asIsChecks, autoAdvance, guideOf, stepNext } from '../js/steps.js';
@@ -184,7 +184,7 @@ test('real U1: the bar, its summary and the Define lines read the bays Print sen
   // No steps: the bays the user set are the bays Print sends, never "N steps left".
   assert.ok(!/steps? left in the bays/.test(out));
   // The summary counts the swaps of those bays on the live lanes.
-  const n = /** @type {number} */ (sentSwaps(now.plan, gate.choice, now.lanes));
+  const n = /** @type {{ stops: number }} */ (sentKinds(now.plan, gate.choice, now.lanes)).stops;
   assert.ok(out.includes(t('print.bar', { swaps: t('print.swaps_n', { n }), time: '' }).split(' · ')[0]));
   // No Define line: every bay Print sends has its material set. b:2 to b:4 are not hooked.
   assert.ok(!out.includes(t('print.define', { key: 'a:3' })));
@@ -215,12 +215,9 @@ test('real U1: the head-use bar shows the bays as they are, and follows the spoo
   const out = renderHtml(html`<${PlanView} app=${app} ctx=${live(app).ctx} />`);
   assert.ok(out.includes(bar));
   // T0 swaps between red (a:2) and peach (a:1), as the user set them: the planner counts the same.
-  const n = swaps(now.plan.order, asIs, headOf)[0];
+  const n = swapKinds(now.plan.order, asIs, (k) => (headOf(k) === 0 ? 0 : null)).stops;
   assert.ok(n > 0);
-  assert.equal(
-    Object.values(swaps(now.plan.order, asIs, headOf)).reduce((a, b) => a + b, 0),
-    now.place?.best,
-  );
+  assert.equal(swapKinds(now.plan.order, asIs, headOf).stops, now.place?.best);
   assert.ok(textOf(bar).includes(`T0 ${t('timeline.count', { n })}`));
   // Peach set to b:1 instead, together with brown, which the user leaves on it: T0 prints only red, and the bar
   // follows. (Brown not set, b:1 would be peach's alone, and the suggestion would place brown elsewhere.)

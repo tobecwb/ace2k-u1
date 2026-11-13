@@ -5,7 +5,7 @@ import { html } from '../js/ui/html.js';
 import { ColourPicker } from '../js/ui/ColourPicker.js';
 import { ColourRows } from '../js/ui/ColourChips.js';
 import { runAction } from '../js/actions.js';
-import { asIsChoice, printGate, sentSwaps } from '../js/print-plan.js';
+import { asIsChoice, printGate, sentKinds } from '../js/print-plan.js';
 import {
   asIsChecks,
   autoAdvance,
@@ -120,7 +120,7 @@ for (const [key, other] of [
     assert.ok(!steps.some((x) => x.tools?.includes(SKIN) || x.tools?.includes(other)), JSON.stringify(steps));
     assert.ok(!steps.some((x) => x.key === key || x.from === key), JSON.stringify(steps));
     const now = /** @type {NonNullable<ReturnType<typeof planNow>>} */ (planNow(app));
-    assert.notEqual(sentSwaps(now.plan, after, now.lanes), null);
+    assert.notEqual(sentKinds(now.plan, after, now.lanes), null);
   });
 }
 

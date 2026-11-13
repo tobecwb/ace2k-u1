@@ -224,7 +224,16 @@ class Config:
         return self.values.get(name, default)
 
     def getboolean(self, name: str, default: bool) -> bool:
-        return default
+        """As Klipper's (configparser's): 1/yes/true/on and 0/no/false/off, any case."""
+        value = self.values.get(name)
+        if value is None or isinstance(value, bool):
+            return default if value is None else value
+        word = str(value).strip().lower()
+        if word in ("1", "yes", "true", "on"):
+            return True
+        if word in ("0", "no", "false", "off"):
+            return False
+        raise self.error(f"Option '{name}' in section 'ace2k_u1' is not a boolean: {value}")
 
 
 def test_a_problem_is_reported_and_status_says_not_hooked() -> None:
@@ -696,13 +705,16 @@ def test_the_default_swap_macros_are_the_documented_ones() -> None:
     order = [
         "MOVE_TO_DISCARD_FILAMENT_POSITION",
         "M109 S{params.LOAD_TEMP} T{params.HEAD} A0",
+        "{% if params.GRIP|default(1)|int %}",  # GRIP=0: a background swap gripped in the dock
         "G1 E40 F360",
-        "G1 E30 F360",
+        "{% endif %}",
+        "G1 E10 F360",
         "ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD",  # the first clean; the pre-extrusion cleans again
     ]
     at = [load.index(line) for line in order]
     assert at == sorted(at)
-    assert "M106" not in load and "{% if" not in load  # no fan step: PRINT_TEMP = LOAD_TEMP
+    assert "M106" not in load  # no fan step: PRINT_TEMP = LOAD_TEMP
+    assert load.count("{% if") == 1  # the grip's only
 
 
 def test_the_config_file_carries_the_runout_source_commented() -> None:
@@ -843,6 +855,10 @@ def test_no_command_keeps_the_old_ace_prefix() -> None:
     u1._hook(reactor.now)
     assert sorted(gcode.commands) == [
         "ACEK_ADAPTER_STATUS",
+        "ACEK_BG_MOVE",
+        "ACEK_BG_STATUS",
+        "ACEK_BG_STOP",
+        "ACEK_BG_SWAP",
         "ACEK_CLEAR",
         "ACEK_EJECT",
         "ACEK_FREE_CHECK",

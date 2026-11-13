@@ -110,8 +110,17 @@
  * @property {Plan | null} [plan]
  * @property {Record<string, SpoolRecord>} [spools]
  * @property {Record<string, { tag_forgotten?: boolean, push_end?: string | null, material_set?: boolean | null, eject_no_material?: boolean }>} [lanes]
+ * @property {number[]} [swapping]  The heads (0-3) whose lane changes now.
  * @property {(boolean | null)[]} [probe_cold]  For each shared head, whether the probe finds it cold; else null.
  * @property {number | null} [probe_max_temp]  The probe's cold limit in °C.
+ * @property {({ state: string, step: string | null, lane: string | null } | null)[]} [background]  The background
+ *   swap of each head: null for a head not in background_heads. Absent with no head listed.
+ * @property {Record<'inline' | 'ready' | 'dock' | 'resume', { s: number, n: number }>
+ *   & { steps?: Record<string, { s: number, n: number }> }} [swap_times]  The long-term average of each swap time,
+ *   measured on the printer (absent from an older adapter).
+ * @property {{ s: number, n: number, since: number | null }} [print_stops]  The swap stops of the print that runs,
+ *   measured: their seconds, their count, and the print_duration at which the stop that runs now began (null when
+ *   none runs). Absent from an older adapter.
  */
 /**
  * @typedef {object} PrintTaskConfig  The U1's filament settings, with one entry per head.

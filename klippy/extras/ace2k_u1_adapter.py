@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .ace2k_klipper_types import FeedEvent, GCode
     from .ace2k_u1_common import ExtruderPosition, LaneKey
     from .ace2k_u1_hooks import EncoderWheel
+    from .ace2k_u1_printer import U1Printer
     from .ace2k_u1_printer_types import (
         Coordinator,
         ExceptionManager,
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
         UnitFeed,
     )
     from .ace2k_u1_probe import HeadProbe
+    from .ace2k_u1_spools import SpoolStore
 
     # A lane as the adapter takes it: (its head, its unit, the lane index in the unit).
     HeadLane = tuple[int, Unit, int]
@@ -48,6 +50,7 @@ try:
     from . import ace2k_u1_grip as grip_module
     from . import ace2k_u1_heads as heads_module
     from . import ace2k_u1_hooks as hooks_module
+    from . import ace2k_u1_in_use as in_use_module
     from . import ace2k_u1_pause as pause_module
     from . import ace2k_u1_push as push_module
     from . import ace2k_u1_screen_unload as screen_module
@@ -67,7 +70,6 @@ try:
         unit_speed,
     )
     from .ace2k_u1_eject import EJECT_PROBE_MM, EJECT_REST_STATES
-    from .ace2k_u1_grip import OUT_START_MODES
     from .ace2k_u1_hooks import PULL_STATES, UNLOAD_STEPS, check_feed
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
     import ace2k_u1_eject as eject_module  # type: ignore[import-not-found, no-redef]
@@ -76,6 +78,7 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
     import ace2k_u1_grip as grip_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_heads as heads_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_hooks as hooks_module  # type: ignore[import-not-found, no-redef]
+    import ace2k_u1_in_use as in_use_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_pause as pause_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_push as push_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_screen_unload as screen_module  # type: ignore[import-not-found, no-redef]
@@ -98,7 +101,6 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
         EJECT_PROBE_MM,
         EJECT_REST_STATES,
     )
-    from ace2k_u1_grip import OUT_START_MODES  # type: ignore[no-redef]
     from ace2k_u1_hooks import (  # type: ignore[no-redef]
         PULL_STATES,
         UNLOAD_STEPS,
@@ -173,6 +175,9 @@ class Adapter:
     It needs no Klipper, so tests can build it from fakes.
     """
 
+    # How many writes of a head's setting the adapter itself is making now (in_use.own_write).
+    own_writes = 0
+
     def __init__(
         self,
         reactor: Reactor,
@@ -244,7 +249,8 @@ class Adapter:
         self.ejector: eject_module.Ejector = eject_module.Ejector(self)
         # The cold path of the Unload of the U1's screen.
         self.screen_unload: screen_module.ScreenUnload = screen_module.ScreenUnload(self)
-        self.events: events_module.FeedEvents = events_module.FeedEvents(self)
+        # The feed events, and the sender of the in-use masks to the units' tag readers.
+        self.events, self.in_use = events_module.FeedEvents(self), in_use_module.InUseSender()
         self.push_runner: push_module.PushRunner = push_module.PushRunner(self)
         self.print_stats: PrintStats | None = None
         self.pause_runner: pause_module.PauseRunner = pause_module.PauseRunner(self)
@@ -274,6 +280,9 @@ class Adapter:
         # Called once per tick after every lane's bay watch (ACE2kU1 notes the heads' settings
         # then, with each bay's full or empty already known). It never raises into the watch.
         self.on_lanes_watched: Callable[[], object] | None = callbacks.on_lanes_watched
+        # Called with the lane as the U1's own load starts pushing it to its head
+        # (Background.u1_loads), if set. Set at the hook.
+        self.on_u1_load: Callable[[Hooked], object] | None = None
         # The probe of a shared head (ace2k_u1_probe.HeadProbe). It needs this adapter, so it is
         # set at the hook with a + group. A load into such a head pushes through it.
         self.probe: HeadProbe | None = callbacks.probe
@@ -281,6 +290,8 @@ class Adapter:
         # PushRunner.push_lane). The hook sets it, whatever the groups: the probe itself when there
         # is one, else one built for this.
         self.insister: HeadProbe | None = callbacks.probe
+        # The ACEK_SPOOL records (ace2k_u1_spools.SpoolStore), set by the host once it is built.
+        self.spool_store: SpoolStore | None = None
         # Called by the pause timer with the lane of a shared head whose spool ran out at its bay
         # (Refiller.shared_runout).
         self.on_shared_runout: Callable[[Hooked], object] | None = callbacks.on_shared_runout
@@ -528,6 +539,11 @@ class Adapter:
         heads = {v: k for k, v in (self.extruders or {}).items()}
         return heads.get(name)
 
+    def active_head(self, u1: U1Printer) -> int | None:
+        """Return the head of the toolhead's active extruder, or None when it cannot be read."""
+        name = u1.active_extruder_name()
+        return None if name is None else self.head_of_extruder(name)
+
     def _head_extruder(self, head: int) -> Extruder | None:
         """Return the U1's extruder object of the head, or None."""
         name = (self.extruders or {}).get(head)
@@ -662,9 +678,8 @@ class Adapter:
         (default busy_retry_s) for ``wait_s``. The move counts as one of this adapter's own moves.
         Any other refusal, or a busy one past that time, is raised.
         """
-        # This is not feed.retry_busy of ace2k. That one is no host interface, and it retries every
-        # 0.25 s. This adapter retries once per report, and each try is a round trip on the link of
-        # the unit.
+        # This is not feed.retry_busy of ace2k, which is no host interface. This adapter retries
+        # once per report, and each try is a round trip on the link of the unit.
         period = self.busy_retry_s if period is None else period
         give_up = self.reactor.monotonic() + wait_s
         while True:
@@ -726,9 +741,6 @@ class Adapter:
         h.motion_open = h.motion_seq is not None
         h.parked_at_sensor = False  # the lane moves: where its tip stops is not known yet
         h.ended_at = None
-        h.end_eject_drop()  # a new move after an eject: the bay it empties is not the eject's
-        if getattr(move, "mode", None) in OUT_START_MODES:
-            self.moved_out(h)
         h.grip_live = False  # a start clears the grip of the lane on the unit
         h.grip_down = False  # and what the bay showed under it
 
@@ -884,10 +896,6 @@ class Adapter:
             self.loaded_states = {getattr(m, name) for name in names}
         return self.loaded_states
 
-    def moved_out(self, h: Hooked) -> None:
-        """Note that a move of h that takes its filament out of the bay ran now (see bay_watch)."""
-        h.out_at = self.reactor.monotonic()
-
     def watch(self, eventtime: float) -> float:
         """Run one tick of the bay watch and return the next waketime.
 
@@ -920,6 +928,7 @@ class Adapter:
             self._guarded(lambda: "ace2k_u1: watch tick", self.on_tick, eventtime)
         if self.tag_writer.tags is not None:
             self._guarded(lambda: "ace2k_u1: tags", self.tag_writer.watch_tags, views, eventtime)
+        self._guarded(lambda: "ace2k_u1: in-use masks", self.in_use.send, self, self.in_print())
         return eventtime + self.poll_s
 
     @staticmethod
@@ -1036,6 +1045,11 @@ class Adapter:
         if resumed:
             self.follow.clear_on_resume(h, lane)
         self.follow.watch_follow(h, lane)
+
+    def set_by_hand(self, h: Hooked) -> bool:
+        """True when lane h's spool was set by hand (an ACEK_SPOOL record is on file)."""
+        store = self.spool_store
+        return store is not None and store.key(h.unit, h.lane) in store.records
 
     def in_print(self) -> bool:
         """True when a print is on: printing or paused."""

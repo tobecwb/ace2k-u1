@@ -203,7 +203,7 @@ def test_a_tag_with_a_material_and_no_colour_counts_as_set(tmp_path: Path) -> No
     assert rig.module.material.defined(h) is True
 
 
-def test_a_long_back_out_runs_in_the_units_longest_moves_and_says_the_bay_emptied(
+def test_a_long_back_out_runs_in_the_units_longest_moves(
     tmp_path: Path,
 ) -> None:
     rig, a = lone(tmp_path)
@@ -211,11 +211,8 @@ def test_a_long_back_out_runs_in_the_units_longest_moves_and_says_the_bay_emptie
     rig.left.runout_sensor[LONE_CH].detected = True
     h = rig.adapter.hooked_lane(rig.units["a"], LONE_LANE)
     h.push_max_mm = 4500.0
-    out = []
-    rig.adapter.moved_out = out.append
     rig.module.material.back_out(h)
     assert rollbacks(a) == [2000.0, 2000.0, 500.0]  # the fake's longest move is 2000 mm
-    assert out.count(h) >= 3  # each roll back tells the bay watch
 
 
 def test_a_back_out_refused_busy_is_retried_and_counts_as_the_adapters_move(
@@ -738,19 +735,26 @@ def test_a_colour_only_spool_write_does_not_make_the_setting_the_spools(tmp_path
     assert h.setting_mark == mark
 
 
-def test_an_empty_bay_still_loaded_in_its_head_keeps_its_record(tmp_path: Path) -> None:
-    # The spool ran out: its rest is in the head, the bay reads empty, the record kept.
+def test_a_run_out_rest_tells_its_material_by_the_heads_setting_once_the_record_went(
+    tmp_path: Path,
+) -> None:
+    # The spool ran out: its rest is in the head, the bay reads empty, so the record goes. The
+    # head's setting, written for that spool, still tells what the rest is.
     rig, a = lone(tmp_path)
     h = rig.adapter.hooked_lane(a, LONE_LANE)
     run(rig, "ACEK_SPOOL", {"UNIT": "a", "LANE": "3", "TYPE": "PLA", "COLOR": "ffffff"})
+    tick(rig)
+    head_type(rig, 1, "PLA")  # the print's start writes the head from the record
+    tick(rig)
     rig.left.runout_sensor[LONE_CH].detected = True
     loaded(rig, LONE_CH)
     a.lanes[LONE_LANE]["insert"] = False
+    tick(rig, 2.0)
+    tick(rig)
+    assert "a:3" not in rig.module.spool_store.records
     assert rig.module.material.defined(h) is True
     lanes = rig.module.get_status()["lanes"]
     assert lanes["a:3"]["material_set"] is True and lanes["a:3"]["eject_no_material"] is False
-    rig.left.channel_state[LONE_CH] = "unload_finish"  # no longer loaded
-    assert rig.module.material.defined(h) is False
 
 
 @pytest.mark.parametrize("read", [False, True])

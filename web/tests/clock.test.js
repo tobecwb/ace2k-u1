@@ -1,7 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { clockOf, END_SHARE, etaTo, FILE_FLOOR, frameOf, leftOf, shareOf, swapShareOf, totalOf } from '../js/clock.js';
+import {
+  clockOf,
+  END_SHARE,
+  etaTo,
+  FILE_FLOOR,
+  frameOf,
+  leftOf,
+  NO_STOPS,
+  shareOf,
+  swapShareOf,
+  totalOf,
+} from '../js/clock.js';
 import { fmtHM } from '../js/format.js';
 
 test("the frame: the card's G-code bytes, else the file's size, else the plan's size, else none", () => {
@@ -76,6 +87,43 @@ test('every estimate on the same clock: the time to a share, and the share a swa
   // Complete or stopped: no time to anything.
   assert.equal(etaTo(clockOf('complete', 5000, 0.5, 5760), 0.7), null);
   assert.equal(etaTo(clockOf('cancelled', 5000, 0.5, 5760), 0.7), null);
+});
+
+test('with swap stops: the file rate leaves the passed stops out, and the stops ahead are added once', () => {
+  // 40 % in 2304 s, of which 304 s were swap stops: the print itself ran 2000 s for its 40 %.
+  const stops = {
+    passedS: 304,
+    ahead: [
+      { x: 0.5, s: 90 },
+      { x: 0.8, s: 60 },
+    ],
+  };
+  const c = clockOf('printing', 2304, 0.4, 5760, stops);
+  const own = /** @type {number} */ (leftOf(2000, 0.4, 5760));
+  assert.equal(c.print, own);
+  assert.equal(c.left, Math.round(own + 150));
+  assert.equal(totalOf(c), 2304 + Math.round(own + 150));
+  // Spread over the rest, the 304 s would have read as a slower print: more left than this.
+  assert.ok(/** @type {number} */ (clockOf('printing', 2304, 0.4, 5760).left) > own);
+  // To 70 %: the print's own time to it, plus the stop at 50 %; the stop at 80 % is after it.
+  assert.equal(etaTo(c, 0.7), Math.round((0.3 / 0.6) * own + 90));
+  // To 50 %, where a stop is: the time to reach it, not its stop.
+  assert.equal(etaTo(c, 0.5), Math.max(60, Math.round((0.1 / 0.6) * own)));
+  // A swap's share of the print, at the print's own rate.
+  assert.equal(swapShareOf(c, 90), (90 * 0.6) / own);
+  // No stops: as before.
+  assert.deepEqual(clockOf('printing', 2304, 0.4, 5760, NO_STOPS), clockOf('printing', 2304, 0.4, 5760));
+});
+
+test('with swap stops: stops passed over the time printed give the slicer rate, never NaN', () => {
+  const c = clockOf('printing', 100, 0.4, 5760, { passedS: 500, ahead: [{ x: 0.9, s: 30 }] });
+  assert.equal(c.left, Math.round(5760 * 0.6 + 30));
+  // No slicer time and no time printed besides the stops: nothing is known, nothing is NaN.
+  const none = clockOf('printing', 100, 0.4, null, { passedS: 500, ahead: [{ x: 0.9, s: 30 }] });
+  assert.deepEqual([none.left, none.print, etaTo(none, 0.9), swapShareOf(none, 90)], [null, null, null, null]);
+  // Finishing, complete or stopped: the stops change nothing.
+  const done = clockOf('complete', 5000, 0.98, 5760, { passedS: 500, ahead: [] });
+  assert.deepEqual(done, { p: 0.98, done: 5000, left: 0, phase: 'complete' });
 });
 
 test('the demo cards carry a G-code byte range, so the demo counts over a frame', () => {

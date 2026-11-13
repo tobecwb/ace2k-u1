@@ -1,7 +1,7 @@
 import { html, useMemo, useRef, useState } from './html.js';
 import { segmentsOf, bands } from '../timeline.js';
-import { floorPct, fmtHM, unit } from '../format.js';
-import { SWAP_S } from '../planner.js';
+import { SEEDS, changesOf, swapStops } from '../swap-time.js';
+import { floorPct, fmtMS, fmtStopped, unit } from '../format.js';
 import { headName } from '../words.js';
 import {
   WHOLE,
@@ -92,9 +92,30 @@ export const zoomActions = (view, set) => ({
   whole: () => set(WHOLE),
 });
 
+// A swap mark at x on the band (class cls: a stop, or a free swap), or nothing where x is out of the stretch shown.
+/** @param {number} x @param {View} view @param {string} cls @param {string} [title] */
+function markAt(x, view, cls, title) {
+  const at = placeAt(x, view);
+  return at === null ? null : html`<u class=${cls} title=${title} aria-hidden="true" style=${`left:${at}%`}></u>`;
+}
+
+// A swap's seconds as m:ss, rounded: the one figure of a mark's title and of the legend.
+/** @param {number} s @returns {string} */
+const swapTime = (s) => fmtMS(Math.round(s));
+
+// The title of a mark: the time that swap stops the print (m:ss) when it is estimated, else what the mark is, so every
+// mark has one. A free swap stops the print as its head arrives, and a late one stops it longer.
+/** @param {UiCtx['t']} t @param {{ kind: string, s: number | null }} m */
+export function titleOf(t, m) {
+  if (m.s !== null) return t('timeline.stop_title', { time: swapTime(m.s) });
+  if (m.kind === 'late') return t('timeline.late_title');
+  return m.kind === 'free' ? t('timeline.free_title') : t('timeline.swap_title');
+}
+
 /**
  * One head's row: its name and the swap count of the whole print, then the band of the stretch shown. The band is
- * thick where the head prints, a thin line in the loaded colour where it waits, a ▼ where it changes spool, and,
+ * thick where the head prints, a thin line in the loaded colour where it waits, a ▼ where it changes spool and the
+ * print stops, a hollow ▽ where a parked head changes it in the background, and,
  * during a print, the printed part dimmed and a "now" line (each only where it falls in the stretch).
  * @param {{ band: ReturnType<typeof bands>[number], plan: Plan, pos: number | null, view: View, t: UiCtx['t'] }} props
  */
@@ -102,7 +123,9 @@ function Row({ band, plan, pos, view, t }) {
   const past = pos === null ? null : place(0, pos, view);
   const cur = pos === null ? null : placeAt(pos, view);
   return html`<div class="tlr">
-    <div class="lb"><b>${headName(t, band.head)}</b><span>${t('timeline.count', { n: band.swaps })}</span></div>
+    <div class="lb"><b>${headName(t, band.head)}</b><span>${t('timeline.count', { n: band.swaps - band.free })}</span>
+      ${band.free ? html`<small>${t('print.background_n', { n: band.free })}</small>` : null}
+      ${band.stopS ? html`<small>${t('timeline.head_stopped', { time: fmtStopped(band.stopS) })}</small>` : null}</div>
     <div class="band">
       ${band.parts.map((p) => {
         const at = place(p.x, p.e, view);
@@ -110,10 +133,7 @@ function Row({ band, plan, pos, view, t }) {
           ? html`<span class=${p.active ? 'act' : 'idle'} style=${partStyleOf(at, plan.tools[p.tool]?.colour)}></span>`
           : null;
       })}
-      ${band.marks.map((x) => {
-        const at = placeAt(x, view);
-        return at === null ? null : html`<u class="sw-mark" aria-hidden="true" style=${`left:${at}%`}></u>`;
-      })}
+      ${band.drawn.map((m) => markAt(m.x, view, m.kind === 'stop' ? 'sw-mark' : `sw-mark free${m.kind === 'late' ? ' late' : ''}`, titleOf(t, m)))}
       ${past ? html`<span class="past" style=${`left:0%;width:${past.width}%`}></span>` : null}
       ${cur === null ? null : html`<span class="cur" style=${`left:${cur}%`}></span>`}
     </div>
@@ -165,37 +185,55 @@ function Strip({ rows, plan, view, set, t }) {
 /** @type {WeakMap<Plan, { key: string, rows: ReturnType<typeof bands> }>} */
 const rowsCache = new WeakMap();
 
-// The heads' rows of plan, built again only when what they show changes: the plan, the frame's bytes, and the head
-// each chosen spool is on. The page hands a fresh choice, head lookup and frame on every render (a pointer move on
-// the strip renders), so they are compared by value, not by identity.
+// The heads' rows of plan, built again only when what they show changes: the plan, the frame's bytes, the head
+// each chosen spool is on, the heads that swap in the background (bg), the slicer's time and the swap averages. The
+// page hands a fresh choice, head lookup and frame on every render (a pointer move on the strip renders), so they are
+// compared by value, not by identity.
 /**
  * @param {Plan} plan @param {Record<number, string>} choice @param {HeadOf} headOf
- * @param {import('../timeline.js').Frame} frame
+ * @param {import('../timeline.js').Frame} frame @param {number[]} [bg] @param {number | null} [timeS]
+ * @param {import('../swap-time.js').SwapTimes} [times]
  * @returns {ReturnType<typeof bands>}
  */
-export function rowsOf(plan, choice, headOf, frame) {
+export function rowsOf(plan, choice, headOf, frame, bg = [], timeS = null, times = SEEDS) {
   const picks = Object.entries(choice).map(([n, key]) => [n, key, headOf(key)]);
-  const key = JSON.stringify([frame?.start, frame?.end, picks]);
+  const key = JSON.stringify([frame?.start, frame?.end, picks, bg, timeS, times]);
   const hit = rowsCache.get(plan);
   if (hit?.key === key) return hit.rows;
-  const rows = bands(segmentsOf(plan, frame), choice, headOf);
+  const segs = segmentsOf(plan, frame);
+  // Segments and changes are one to one, so a stop belongs to the segment at its index.
+  const { stops } = swapStops(changesOf(plan, frame, timeS), choice, headOf, bg, times);
+  const rows = bands(segs, choice, headOf, bg, stops);
   rowsCache.set(plan, { key, rows });
   return rows;
 }
 
 /**
  * "How the print uses each head": a row per head that prints, on one axis showing a stretch of the file (the
- * whole print at first), the strip that picks the stretch, and the legend of the three marks. With pos (the share
- * of the file printed) a blue line marks now and the printed part is dimmed. The count beside a head is always the
- * whole print's. Nothing when no change of the file goes to a head. `view` fixes the stretch (tests); the page
- * leaves it out and the component keeps its own.
+ * whole print at first), the strip that picks the stretch, and the legend of the marks (the background swap's only
+ * when a row has one). With pos (the share of the file printed) a blue line marks now and the printed part is
+ * dimmed. The count beside a head is always the whole print's: the swaps that stop the print, and under it those in
+ * the background, when the head (in bg) has any. Nothing when no change of the file goes to a head. `view` fixes the
+ * stretch (tests); the page leaves it out and the component keeps its own.
  * @param {{ plan: Plan, choice: Record<number, string>, headOf: HeadOf, pos?: number | null,
- *   frame?: import('../timeline.js').Frame, timeS?: number | null, view?: View | null, t: UiCtx['t'] }} props
+ *   frame?: import('../timeline.js').Frame, timeS?: number | null, view?: View | null, bg?: number[],
+ *   times?: import('../swap-time.js').SwapTimes, t: UiCtx['t'] }} props
  */
-export function Timeline({ plan, choice, headOf, pos = null, frame = null, timeS = null, view: fixed = null, t }) {
+export function Timeline({
+  plan,
+  choice,
+  headOf,
+  pos = null,
+  frame = null,
+  timeS = null,
+  view: fixed = null,
+  bg,
+  times = SEEDS,
+  t,
+}) {
   const [own, setOwn] = useState(/** @type {View} */ (WHOLE));
   const view = clampView(fixed ?? own);
-  const rows = rowsOf(plan, choice, headOf, frame);
+  const rows = rowsOf(plan, choice, headOf, frame, bg, timeS, times);
   if (!rows.length) return null;
   const [l0, l1, l2] = axisLabels(t, view, timeS);
   return html`<section class="tl">
@@ -209,7 +247,17 @@ export function Timeline({ plan, choice, headOf, pos = null, frame = null, timeS
     <div class="leg">
       <span><i class="lg act"></i>${t('timeline.legend_active')}</span>
       <span><i class="lg idle"></i>${t('timeline.legend_idle')}</span>
-      <span><b class="lg-mark">${t('timeline.mark')}</b> ${t('timeline.legend_swap', { time: fmtHM(SWAP_S) })}</span>
+      <span><b class="lg-mark">${t('timeline.mark')}</b> ${t('timeline.legend_swap', { time: swapTime(times.inline) })}</span>
+      ${
+        rows.some((b) => b.free)
+          ? html`<span><b class="lg-mark free">${t('timeline.mark_bg')}</b> ${t('timeline.legend_bg', { time: swapTime(times.ready) })}</span>`
+          : null
+      }
+      ${
+        rows.some((b) => b.lateMarks.length)
+          ? html`<span><b class="lg-mark free late">${t('timeline.mark_late')}</b> ${t('timeline.legend_late')}</span>`
+          : null
+      }
     </div>
   </section>`;
 }

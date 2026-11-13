@@ -14,7 +14,7 @@ The adapter keeps the lanes and their motions, and GripWatch runs these steps fo
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:
@@ -62,13 +62,10 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
 PARK_SHORT_MARGIN_MM = 50.0
 # The default of probe_mm, used when no probe is built.
 PROBE_MM_DEFAULT = 100.0
-# A move that takes the filament of the lane out of its bay. It counts when it starts (the start
-# modes) and when it ends (the kind of the event, or its mode). A bay that such a move emptied
-# within BAY_OUT_S is not a spool that was taken out by hand.
-OUT_START_MODES = ("rollback", "unload")
+# The bay must read empty this long, the lane at rest, before the spool record of the lane goes.
+BAY_EMPTY_S = 2.0
+# The modes of a move that takes the filament of the lane back toward its bay.
 OUT_MODES = ("rolling_back", "unloading", "assisting_back")
-OUT_KINDS = ("runout", "unloaded")
-BAY_OUT_S = 5.0
 # The sensor of the head must read clear this long before a waiting lane is released.
 HEAD_CLEAR_S = 1.0
 # After its bay empties, a lane must read out of its head (not known loaded, its channel read) for
@@ -1022,56 +1019,56 @@ class GripWatch:
             h.present = True  # a filament that the U1 just loaded: never raised as an insert
 
     def bay_watch(self, h: Hooked, lane: LaneView, eventtime: float) -> None:
-        """Drop the spool record of the lane when its spool is taken out by hand.
+        """Drop the spool record of the lane when its filament leaves the unit.
 
-        That is the case when the bay empties while the lane is idle, and no move of the lane took
-        the filament out. Such moves are a roll back, an unload, and a move that ran out of the bay,
-        running or ended within BAY_OUT_S. A bay that such a move emptied keeps the record. So does
-        a record that was set on a bay that was already empty, until the bay fills and empties
-        again. The mark of a forgotten tag (ACEK_TAG_FORGET) goes with the record, by the same
-        rule. An eject that the user asked for (ACEK_EJECT) drops both too once the bay reads empty
-        (h.eject_drop, armed by Ejector._arm_spool_drop), although its move emptied the bay, also
-        when its unload failed and the user pulls the tip out by hand, seconds or minutes later.
-        That lasts until a real move of the lane (see Ejector._arm_spool_drop) or a filament goes
-        into the empty bay. If the write of a drop fails, it is tried again on the next tick
-        (on_bay_empty returned False).
+        That is the bay going from full to empty, whatever emptied it: an eject, an unload, a
+        runout, a roll back, or a pull by hand. The record goes once the bay has read empty for
+        BAY_EMPTY_S in a row with the lane at rest, so a single empty reading during a motion, or
+        a roll back of this adapter that pushes the filament back within that time, keeps it.
+        The mark of a forgotten tag (ACEK_TAG_FORGET) goes with the record. A record set on a bay
+        that was already empty stays until the bay fills and empties again. If the write of a
+        drop fails, it is tried again on the next tick (on_bay_empty returned False).
         """
         insert = lane.get("insert")
         was_empty = h.bay_empty
-        self.eject_drop_ends(h, lane)
         self._bay_edge(h, lane)
         self._setting_owner(h, insert, was_empty, eventtime)
         watch_tag_seen(h, lane)
         if insert is True:
-            if not h.bay_full:
+            if not h.bay_full and not h.drop_wait:
                 h.tag_forgotten = False  # a filament put into an empty bay is a new spool
-                h.end_eject_drop()  # and the drop of an eject is for the spool that went out
             h.bay_full = True
-            h.drop_due = False
+            h.drop_due = h.drop_wait = False
+            h.empty_since = None
             return
         if insert is not False:
-            return  # no report of the sensors, so the bay is not known to be empty
+            h.empty_since = None  # no report of the sensors: the bay did not read empty
+            return
         h.push_end = None  # no push of it is left to show
         if h.bay_full:
-            self._bay_emptied(h, lane, eventtime)
-        if h.eject_drop:  # an eject the user asked for is over, so the user takes the spool out
-            h.end_eject_drop()
-            self.spool_taken_out(h)
+            h.bay_full = False
+            h.bay_emptied_at = eventtime  # the old tail of a refill went out
+            h.drop_wait = True
+        if h.drop_wait:
+            self._empty_at_rest(h, lane, eventtime)
         if h.drop_due and self.adapter.on_bay_empty is not None:
             try:
                 h.drop_due = self.adapter.on_bay_empty(h) is False
             except Exception:  # never into the bay watch
                 logging.exception("ace2k_u1: lane %s spool record", self.adapter.lane_text(h))
 
-    def eject_drop_ends(self, h: Hooked, lane: LaneView) -> None:
-        """End the drop that an eject armed (h.eject_drop) once the lane moves in its status.
-
-        That is a motion of the lane (Adapter.motion: its mode out of idle and error, once the
-        report after the eject's end can be believed, or its follow). Its encoder alone is no
-        move: a push or a pull by hand, or a reset of the count, keeps the drop.
-        """
-        if h.eject_drop and self.adapter.motion(h, lane) is not None:
-            h.end_eject_drop()
+    @staticmethod
+    def _empty_at_rest(h: Hooked, lane: LaneView, eventtime: float) -> None:
+        """Make the record of h due to drop once its bay has read empty for BAY_EMPTY_S in a row
+        with the lane at rest (idle or error, no motion of this adapter open)."""
+        if lane.get("mode") not in IDLE_MODES or h.motion_open:
+            h.empty_since = None
+        elif h.empty_since is None:
+            h.empty_since = eventtime
+        elif eventtime - h.empty_since >= BAY_EMPTY_S:
+            h.drop_wait, h.empty_since = False, None
+            h.drop_due = True
+            h.tag_forgotten = False
 
     def _setting_owner(self, h: Hooked, insert: object, was_empty: bool, eventtime: float) -> None:
         """Let the head's setting go with the spool it was written for (spool_left).
@@ -1126,29 +1123,6 @@ class GripWatch:
                 # out and in again reads as that record.
                 h.tag_before = tag_identity(lane.get("tag"))
             h.bay_empty = True
-
-    @staticmethod
-    def _bay_emptied(h: Hooked, lane: Mapping[str, object], eventtime: float) -> None:
-        """Handle a full bay of h that reads empty now.
-
-        It was emptied by hand when the lane is idle and no move of it took the filament out within
-        BAY_OUT_S. Then its spool record (drop_due) and its mark of a forgotten tag go.
-        """
-        h.bay_full = False
-        # Emptied by hand or by a move: the old tail of a refill went out.
-        h.bay_emptied_at = eventtime
-        moved = h.out_at is not None and eventtime < h.out_at + BAY_OUT_S
-        idle = lane.get("mode") in IDLE_MODES and not h.motion_open
-        if idle and not moved:
-            GripWatch.spool_taken_out(h)
-
-    @staticmethod
-    def spool_taken_out(h: Hooked) -> None:
-        """Note that the spool of h was taken out of its bay, by hand or by an eject that the user
-        asked for. Its spool record is due to go (drop_due, written by bay_watch with its retry),
-        and its tag is no longer forgotten."""
-        h.drop_due = True
-        h.tag_forgotten = False
 
     def watch_parked(self, h: Hooked, lane: LaneView, eventtime: float) -> None:
         """Watch the bay of a lane that is parked outside its shared head.

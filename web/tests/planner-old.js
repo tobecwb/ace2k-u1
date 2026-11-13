@@ -8,7 +8,7 @@
 // Tools of the same colour and material share one spool, so the search places groups of tools.
 // The search is exact. It walks the heads in order and keeps each result by (head, groups left).
 // Among the placements with the fewest swaps, it keeps the one that moves the fewest spools.
-import { HEADS, headOfIn, materialMatch, planId, sameTool, swaps, usedTest } from '../js/print-plan.js';
+import { HEADS, headOfIn, materialMatch, planId, sameTool, swapKinds, usedTest } from '../js/print-plan.js';
 
 /** @typedef {import('../js/types.js').Plan} Plan */
 /** @typedef {import('../js/types.js').PlanLane} PlanLane */
@@ -32,11 +32,8 @@ import { HEADS, headOfIn, materialMatch, planId, sameTool, swaps, usedTest } fro
  */
 /** @typedef {{ swaps: number, moved: number, masks: number[] }} Best */
 
-// One swap stops the print for about this long, in seconds. The bench measured 88 to 99 s.
-export const SWAP_S = 90;
-
 // The group of each used tool, by its index in used, and the number of groups.
-// Tools of the same colour and material share one spool, as swaps() already counts them.
+// Tools of the same colour and material share one spool, as swapKinds() already counts them.
 // A tool with no colour is a group of its own. The groups are in the order of their first tool.
 /** @param {Plan} plan @param {number[]} used @returns {{ of: number[], count: number }} */
 function groupsOf(plan, used) {
@@ -62,14 +59,14 @@ function groupOrder(order, used, of) {
     .filter((g, i, a) => i === 0 || a[i - 1] !== g);
 }
 
-// The swaps of a set of groups on one head, with print-plan.js's swaps(). order is the T order
+// The swaps of a set of groups on one head, with print-plan.js's swapKinds(). order is the T order
 // of groups, and mask holds the bits of the set. Each group of the set is a lane of its own.
 /** @param {number[]} order @param {number} mask */
 function headSwaps(order, mask) {
   /** @type {Choice} */
   const choice = {};
   for (const g of order) if ((mask >> g) & 1) choice[g] = String(g);
-  return swaps(order, choice, () => 0)[0] ?? 0;
+  return swapKinds(order, choice, () => 0).stops;
 }
 
 // The lane that each group owns today, or null. A tool owns the lane of its pick when the bay
@@ -234,9 +231,9 @@ function work(plan, used, pick, lanes) {
   const byHead = Array.from({ length: HEADS }, (_, h) => lanes.filter((l) => l.head === h));
   const total = byHead.reduce((a, l) => a + l.length, 0);
   const headOf = headOfIn(lanes);
-  const counts = swaps(plan.order, pick, headOf);
+  const counts = swapKinds(plan.order, pick, headOf);
   // A pick that names no hooked lane on a head has no swaps to count.
-  const now = used.every((n) => headOf(pick[n]) != null) ? Object.values(counts).reduce((a, b) => a + b, 0) : null;
+  const now = used.every((n) => headOf(pick[n]) != null) ? counts.stops : null;
   const groups = groupsOf(plan, used);
   const base = { colours: groups.count, lanes: total, now };
   if (groups.count > total) return { ...base, fits: false, lines: [], takeOut: [], best: null, choice: {} };

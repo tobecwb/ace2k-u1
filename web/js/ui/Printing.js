@@ -7,10 +7,10 @@ import { Timeline, span } from './Timeline.js';
 import { liveAt, segmentsOf } from '../timeline.js';
 import { etaTo, swapShareOf, totalOf } from '../clock.js';
 import { headOfIn, laneByKey, liveLanes } from '../print-plan.js';
-import { livePlan, printClock } from '../state.js';
+import { bgHeads, liveBg, livePlan, printClock } from '../state.js';
 import { resuming } from '../model.js';
 import { DASH, floorPct, fmtHM } from '../format.js';
-import { SWAP_S } from '../planner.js';
+import { timesOf } from '../swap-time.js';
 
 /** @typedef {import('../types.js').AppState} AppState */
 /** @typedef {import('../types.js').UiCtx} UiCtx */
@@ -119,9 +119,9 @@ export const spoolWords = (colour, material, t) => (material ? t('step.what', { 
 /**
  * The Now card: the head, colour and bay that print; orange while a head changes spool; "finished" at the end of
  * the file, and "no colour yet" before its first change.
- * @param {{ job: Job, live: Live, lanes: PlanLane[], t: UiCtx['t'] }} props
+ * @param {{ job: Job, live: Live, lanes: PlanLane[], times: import('../swap-time.js').SwapTimes, t: UiCtx['t'] }} props
  */
-function NowCard({ job, live, lanes, t }) {
+function NowCard({ job, live, lanes, times, t }) {
   const plan = /** @type {Plan} */ (job.plan);
   // No share reported yet: which colour prints is not known.
   if (job.clock.p === null)
@@ -132,7 +132,7 @@ function NowCard({ job, live, lanes, t }) {
     return html`<div class="nowc swap">
       <div class="k">${t('printing.swapping')}</div>
       <div class="v"><${Change} plan=${plan} head=${sw.head} from=${sw.from} to=${sw.to} t=${t} /></div>
-      <div class="sub note">${t('printing.waits', { time: fmtHM(SWAP_S) })}</div>
+      <div class="sub note">${t('printing.waits', { time: fmtHM(times.inline) })}</div>
     </div>`;
   const now = live.now;
   if (!now)
@@ -149,9 +149,19 @@ function NowCard({ job, live, lanes, t }) {
     <div class="v"><span class="sws">${swatch(tool?.colour)}</span><span class="txt">${words}</span></div></div>`;
 }
 
+// Under a next swap in the background: when the print stops next ("next stop in ≈ h:mm"), or that it never stops
+// again. Nothing while the time to that stop is not known.
+/** @param {UiCtx['t']} t @param {Job} job @param {Live['nextStop']} stop */
+function stopWords(t, job, stop) {
+  if (!stop) return t('printing.no_stop');
+  const eta = etaTo(job.clock, stop.x);
+  return eta === null ? null : t('printing.next_stop', { eta: fmtHM(eta) });
+}
+
 /**
  * The next spool swap: "Next spool swap · in ≈ h:mm", the head, the colours and the bays; "none until the end"
- * when no change loads another spool.
+ * when no change loads another spool. A next swap in the background reads "Next swap in the background · in ≈ h:mm",
+ * and a line under it says when the print stops next.
  * @param {{ job: Job, live: Live, t: UiCtx['t'] }} props
  */
 function NextCard({ job, live, t }) {
@@ -164,10 +174,14 @@ function NextCard({ job, live, t }) {
       <div class="v good">${t('printing.no_next')}</div></div>`;
   // The same clock as the header's times.
   const eta = etaTo(job.clock, next.x);
-  const cap = eta === null ? t('printing.next_cap') : t('printing.next', { eta: fmtHM(eta) });
+  const at = eta === null ? null : { eta: fmtHM(eta) };
+  let cap = at ? t('printing.next', at) : t('printing.next_cap');
+  if (next.free) cap = at ? t('printing.next_bg', at) : t('printing.next_bg_cap');
+  const stop = next.free ? stopWords(t, job, live.nextStop) : null;
   return html`<div class="nowc next"><div class="k">${cap}</div>
     <div class="v"><${Change} plan=${plan} head=${next.head} from=${next.from} to=${next.to} t=${t} /></div>
     <div class="sub note">${t('printing.bays', { from: plan.choice[next.from], to: plan.choice[next.to] })}</div>
+    ${stop ? html`<div class="sub note">${stop}</div>` : null}
   </div>`;
 }
 
@@ -187,18 +201,24 @@ export function Printing({ app, ctx }) {
     </section>`;
   const lanes = liveLanes(app.status, plan);
   const headOf = headOfIn(lanes);
+  const times = timesOf(app.status);
   // The orange "swap in progress" lasts about one swap of print time, not a share of the change's part.
-  const swapShare = swapShareOf(job.clock, SWAP_S);
-  const live = liveAt(segmentsOf(plan, job.frame), plan.choice, headOf, job.clock.p ?? 0, swapShare);
+  const swapShare = swapShareOf(job.clock, times.inline);
+  // The timeline shows the plan: a swap of a parked background head is free there. The Now and Next cards follow
+  // the live status: a free swap is in progress while the print really waits for it (liveBg).
+  const bg = bgHeads(app.status);
+  const seen = liveBg(app.status);
+  const live = liveAt(segmentsOf(plan, job.frame), plan.choice, headOf, job.clock.p ?? 0, swapShare, seen.free, seen);
   const marks = marksOf(app, live.now);
   return html`<section class="printing">
     <${Header} app=${app} ctx=${ctx} job=${job} />
     <div class="now2">
-      <${NowCard} job=${job} live=${live} lanes=${lanes} t=${t} />
+      <${NowCard} job=${job} live=${live} lanes=${lanes} times=${times} t=${t} />
       <${NextCard} job=${job} live=${live} t=${t} />
     </div>
     <${app.ui.narrow ? MobileLists : Diagram} app=${app} ctx=${ctx} marks=${marks} />
     <${Timeline} key=${job.file} timeS=${job.timeS} plan=${plan} choice=${plan.choice} headOf=${headOf} pos=${job.clock.p}
+      bg=${bg} times=${times}
       frame=${job.frame} t=${t} />
   </section>`;
 }

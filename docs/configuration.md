@@ -40,6 +40,9 @@ The settings below are used only by a head that several lanes feed
 |---|---|---|---|
 | `head1_splitter_mm` … `head4_splitter_mm` | `1000` | mm, above 0, up to 2000; only on a head several lanes feed | How far the old lane rolls back at a lane swap, so that its tip is behind the head's splitter. Measure it with [`ACEK_SPLITTER_MEASURE`](commands.md#acek_splitter_measure), or with a tape ([How far the old lane rolls back](#how-far-the-old-lane-rolls-back)). Set on a head with one lane or none, it stops Klipper. |
 | `swap_speed` | `80`, or the unit's top speed when lower (70 on an older ace2k image), for each unit's moves | mm/s, within the unit's own speeds (9–80); set, it is checked with a head that several lanes feed, and otherwise clamped to the unit's speeds with a warning | The speed of a swap's roll back of the old lane, and of its push of the new lane to the head. |
+| `background_heads` | empty: no head | head numbers 1–4, separated by commas; only heads several lanes feed | The heads that swap their lane while parked in the dock, while another head prints. When that head's T comes, it is ready, or its swap goes on from where it stopped. The new filament's first pushes and its purge come out in the dock. So list a head only when its dock carries the adapted nozzle wiper, with an opening under the parked nozzle, and a larger waste bin sits under the docks. What comes out then falls through into the bin. When the head is picked, only the U1's cut and clean are left. The adapter cannot check the dock: listing a head says that its dock has both. A head out of 1–4, listed twice, or fed by one lane or none, stops Klipper. **Not recommended as it is.** Use it only on a head whose dock has been modified for it: an adapted nozzle wiper with an opening under the parked nozzle, and a larger waste bin. Even then, the chance that oozed plastic or a strand soils the print, or that colours mix in it, is high. |
+| `background_purge_mm` | `10`, the load macro's own purge | 0–100 mm; 0: the purge runs at the cleaning area | The purge of a background swap, in the dock. It is pushed past the new filament's 40 mm through the gear, in the same move, at the new filament's printing temperature. What comes out falls through the dock's opening. The head then arrives ready to print: its T heats it again if it cooled, cuts and cleans. With 0, the T runs the load's purge and clean at the cleaning area (`ACEK_SWAP_LOAD GRIP=0`). A value out of 0–100 stops Klipper. |
+| `arrival_wipe` | `True` | `True` / `False` | At the end of every swap, inline or in the background, and of every refill, the U1's own pre-extrusion cuts, wipes the nozzle on the rubber pads, drops the purge in the bin and goes forward to the head's idle position. With `True` the nozzle is wiped on the pads once more, with the U1's own wipe (`INNER_ROUGHLY_CLEAN_NOZZLE_BASE_DISCARD ACTION=4`), after the drop in the bin and just before the idle position (`MOVE_TO_XY_IDLE_POSITION_EXTRUDER`). The U1's pre-extrusion itself runs as always. The same key covers a head in `background_heads` that a `T` of the file takes from its dock with no swap (the lane it needs is in it already): while printing, after the U1's `T`, the head goes to the cleaning area (`MOVE_TO_DISCARD_FILAMENT_POSITION`), is wiped once with the same wipe and goes to its idle position (`MOVE_TO_XY_IDLE_POSITION_EXTRUDER`). Its dock has an opening, so a parked head may ooze. Not in the print's start (layer 0), which cleans the nozzle itself. `False` turns both extra wipes off. A value that is not a boolean stops Klipper. |
 | `probe_mm` | `100` | 60–300 mm | How far the probe rolls each lane back to find which lane is in a head. The swap's free check rolls back up to this far too. Keep it longer than the slack between the unit and the head (about 50 mm). A held lane takes up that slack with its plunger at rest, so a shorter value reads it as free. |
 | `probe_speed` | `50` | mm/s, within the unit's own speeds (9–80), checked only with a head that several lanes feed | The speed of every probe move, the swap's free check among them. |
 | `probe_max_temp` | `60` | 30–150 °C | The probe of a head whose sensor sees filament runs only on a cold head: the cold gear holds the filament, and that is what the probe reads. The adapter turns the heater off and waits until the head is below this temperature, with the head's print fan at full speed. It gives up after 15 minutes. |
@@ -246,6 +249,9 @@ Klipper does not start, and says why, when:
 | What is wrong | Message |
 |---|---|
 | `headN_splitter_mm` on a head with one lane or none | `ace2k_u1: head2_splitter_mm: head 2 has one lane or none` |
+| a head in `background_heads` that one lane feeds, or none | `ace2k_u1: background_heads: head 2 is fed by one lane or none` |
+| a `background_heads` entry that is not a head 1–4 | `ace2k_u1: background_heads: '5' is not a head 1-4` |
+| a head listed twice in `background_heads` | `ace2k_u1: background_heads: head 1 is listed twice` |
 | an `unload_temps` entry that is not a material and a temperature within 150–350 °C | `ace2k_u1: unload_temps: 'PLA' is not <material>:<°C> (150-350)` |
 | a material listed twice in `unload_temps` | `ace2k_u1: unload_temps: PLA is listed twice` |
 | a `temp_ranges` entry that is not a material and a range within 150–350 °C, low below high | `ace2k_u1: temp_ranges: 'PLA:230-190' is not <material>:<low>-<high> (150-350 °C)` |
@@ -286,9 +292,12 @@ the head still holds the filament, the print pauses.
 `ACEK_SWAP_LOAD` puts the new filament in. Its tip waits at the head's sensor. It receives
 `HEAD`, `LOAD_TEMP`, `PRINT_TEMP` (the new tool's printing temperature) and `MATERIAL`, the new
 filament's material: from its tag or its `ACEK_SPOOL` record, empty when neither tells it (never the
-old filament's head setting). Its default is below. It pushes 40 mm through the gear, which refills
-what the unload retracted, and then purges 30 mm. Both run at `LOAD_TEMP`, at 360 mm/min, which is
-the speed of the U1's own pre-extrusion.
+old filament's head setting). It also receives `GRIP`, 0 when a background swap (`background_heads`)
+already took the new filament through the gear in the dock with `background_purge_mm: 0`; the
+adapter passes it only then, so it is 1 by default. A background swap that purged in the dock runs
+no `ACEK_SWAP_LOAD` at all. Its default is below. It pushes 40 mm through the gear, which refills what the
+unload retracted, and then purges 10 mm. Both run at `LOAD_TEMP`, at 360 mm/min, which is the speed
+of the U1's own pre-extrusion. With `GRIP=0` it skips the 40 mm and only purges.
 
 ```
 [gcode_macro ACEK_SWAP_LOAD]
@@ -296,8 +305,10 @@ gcode:
   MOVE_TO_DISCARD_FILAMENT_POSITION
   M109 S{params.LOAD_TEMP} T{params.HEAD} A0
   M83
+  {% if params.GRIP|default(1)|int %}
   G1 E40 F360          ; through the gear, refilling what the unload retracted
-  G1 E30 F360          ; purge, at the speed of the U1's pre-extrusion at a printing temperature
+  {% endif %}
+  G1 E10 F360          ; purge, at the speed of the U1's pre-extrusion at a printing temperature
   ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD
 ```
 
@@ -307,12 +318,18 @@ no printing temperature (a refill with no tool of the plan) passes the U1's load
 both.
 
 The macro's purge is the swap's only purge, so a custom `ACEK_SWAP_LOAD` must purge. The default
-one purges 30 mm (a swap used to purge 30 mm here and 20 mm more in the U1's pre-extrusion).
+one purges 10 mm (a swap used to purge 30 mm here, and before that 20 mm more in the U1's
+pre-extrusion).
+
+A custom `ACEK_SWAP_LOAD` that does not read `GRIP` still works after a background swap. It pushes
+its 40 mm through the gear again, which only purges 40 mm more.
 
 The macro ends with the U1's clean. The swap's last step, `return`, then runs the U1's own
 pre-extrusion with no purge (`LENGTH=0`): its fan, its cut, a second clean, and the U1's idle
 position. A refill with no tool of the plan runs it with no purge too. One purge, two cleans: a
-few seconds more, but the nozzle oozes less on the way to the part. Without the macro's clean,
+few seconds more, but the nozzle oozes less on the way to the part. With `arrival_wipe` (in the
+settings above, on by default) the pre-extrusion wipes the nozzle on the pads once more before
+the idle position: three cleans. Without the macro's clean,
 the nozzle is cleaned once. Nothing breaks either way.
 
 That pre-extrusion retracts 0.5 mm. When the tool has been on the head before, the swap first

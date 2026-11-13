@@ -12,11 +12,11 @@ import { Timeline, rowsOf, span, stripDrag, stripPointer, zoomActions } from '..
 import { WHOLE, axisLabels, moveTo, pickView, resize, zoomIn, zoomOut } from '../js/zoom.js';
 import { headOfIn, liveLanes } from '../js/print-plan.js';
 import { liveAt, segmentsOf } from '../js/timeline.js';
-import { fmtHM } from '../js/format.js';
-import { totalOf } from '../js/clock.js';
-import { fileFrame, forgetEndedPrint } from '../js/state.js';
+import { fmtHM, fmtMS } from '../js/format.js';
+import { etaTo, leftOf, totalOf } from '../js/clock.js';
+import { fileFrame, forgetEndedPrint, printClock } from '../js/state.js';
 import { ingestStatus } from '../js/live.js';
-import { SWAP_S } from '../js/planner.js';
+import { changesOf, swapStops, timesOf } from '../js/swap-time.js';
 import { renderHtml, textOf } from './ui-helpers.js';
 import { loadEnglish } from './helpers.js';
 import { t } from '../js/i18n.js';
@@ -28,7 +28,10 @@ loadEnglish();
 // Each test starts a print afresh: the clock forgets the share it showed for the last one.
 const demo = () => {
   forgetEndedPrint({ print_stats: { state: 'complete' } });
-  return JSON.parse(readFileSync(new URL('../dev/demo-printing.json', import.meta.url), 'utf8'));
+  const s = JSON.parse(readFileSync(new URL('../dev/demo-printing.json', import.meta.url), 'utf8'));
+  // The adapter's measured average of an inline swap: 88 s, not the seed.
+  s.ace2k_u1.swap_times = { inline: { s: 88, n: 3 } };
+  return s;
 };
 // The running file's card: the slicer's 1:36, and its G-code over the whole file (so a share is the file position
 // over the plan's size).
@@ -88,17 +91,24 @@ const liveOf = (s, pos) => {
   return liveAt(segmentsOf(plan), plan.choice, headOf, pos);
 };
 
+// The demo with its plan for another file: the running print has no plan, so its clock counts no swap stop.
+const planless = () => {
+  const s = demo();
+  s.ace2k_u1.plan = { ...s.ace2k_u1.plan, file: 'other.gcode' };
+  return s;
+};
+
 test('the job: the plan of the running file with its choice, else no plan', () => {
   const s = demo();
   const job = printJob(appOf(s));
   assert.equal(job.file, 'objeto_5_cores_PLA_1h36m.gcode');
   assert.equal(job.plan, s.ace2k_u1.plan);
   assert.equal(job.clock.done, 2304);
-  // 40 % in 2304 s: the file's rate and the slicer's 1:36 agree on 3456 s left.
-  assert.deepEqual([job.clock.phase, job.clock.left, totalOf(job.clock)], ['running', 3456, 5760]);
-  const other = demo();
-  other.ace2k_u1.plan = { ...other.ace2k_u1.plan, file: 'other.gcode' };
-  assert.equal(printJob(appOf(other)).plan, null);
+  const other = planless();
+  const plain = printJob(appOf(other));
+  assert.equal(plain.plan, null);
+  // No plan, no stops: 40 % in 2304 s, the file's rate and the slicer's 1:36 agree on 3456 s left.
+  assert.deepEqual([plain.clock.phase, plain.clock.left, totalOf(plain.clock)], ['running', 3456, 5760]);
   const unset = demo();
   unset.ace2k_u1.plan = { ...unset.ace2k_u1.plan, choice: null };
   assert.equal(printJob(appOf(unset)).plan, null);
@@ -108,15 +118,113 @@ test('the job: the plan of the running file with its choice, else no plan', () =
   // Before the file's card comes: Klipper's whole-file progress, so a share shows at once (40 %).
   const early = printJob(appOf(demo(), { print: { files: [], cards: {} } }));
   assert.deepEqual([early.clock.p, early.clock.phase], [0.4, 'running']);
-  const start = demo();
+  const start = planless();
   start.virtual_sdcard = { file_position: 0, progress: 0 };
   start.print_stats.print_duration = 0;
   assert.equal(totalOf(printJob(appOf(start)).clock), 5760);
   assert.equal(printJob(appOf({ print_stats: { state: 'printing' } })).file, '');
 });
 
+// The demo's estimated stops on its plan, each with its share: the ones at or before p passed, the others ahead.
+const estimated = (s, p) => {
+  const plan = s.ace2k_u1.plan;
+  const frame = { start: CARD.gcodeStart, end: CARD.gcodeEnd };
+  const headOf = headOfIn(liveLanes(s, plan));
+  const { stops } = swapStops(changesOf(plan, frame, CARD.time), plan.choice, headOf, [], timesOf(s));
+  const xs = segmentsOf(plan, frame).map((g) => g.x);
+  const sum = (keep) => stops.reduce((n, st, i) => (st && keep(xs[i]) ? n + st.s : n), 0);
+  return { passed: sum((x) => x <= p), ahead: sum((x) => x > p), xs, stops };
+};
+
+test('the time left: measured stops passed are left out of the rate, the estimated stops ahead are added', () => {
+  const s = demo();
+  s.ace2k_u1.print_stops = { s: 300, n: 3, since: null };
+  const p = pOf(s);
+  const { ahead } = estimated(s, p);
+  const clock = printJob(appOf(s)).clock;
+  const own = /** @type {number} */ (leftOf(2304 - 300, p, 5760));
+  assert.equal(clock.print, own);
+  assert.equal(clock.left, Math.round(own + ahead));
+  // A stop that runs since 2294 s printed: 10 s more passed, and what is left of its estimate ahead.
+  s.ace2k_u1.print_stops = { s: 300, n: 3, since: 2294 };
+  const running = printJob(appOf(s)).clock;
+  assert.equal(running.print, leftOf(2304 - 310, p, 5760));
+  assert.ok(/** @type {number} */ (running.left) >= Math.round(/** @type {number} */ (running.print) + ahead));
+});
+
+test("the page's one clock counts the stops: the top bar and the Print tab read the same", () => {
+  const s = demo();
+  s.ace2k_u1.print_stops = { s: 300, n: 3, since: null };
+  const app = appOf(s);
+  const shared = printClock(app).clock;
+  assert.deepEqual(shared, printJob(app).clock);
+  assert.equal(shared.print, leftOf(2304 - 300, pOf(s), 5760));
+  assert.ok(/** @type {number} */ (shared.left) > /** @type {number} */ (shared.print));
+});
+
+test('the stops are worked out once per status, and only for a running print', () => {
+  const s = demo();
+  let reads = 0;
+  const times = s.ace2k_u1.swap_times;
+  Object.defineProperty(s.ace2k_u1, 'swap_times', {
+    get: () => {
+      reads += 1;
+      return times;
+    },
+  });
+  for (const state of ['complete', 'cancelled', 'error']) {
+    forgetEndedPrint({ print_stats: { state: 'complete' } });
+    const ended = { ...s, print_stats: { ...s.print_stats, state } };
+    printClock(appOf(ended));
+    assert.equal(reads, 0, state);
+  }
+  forgetEndedPrint({ print_stats: { state: 'complete' } });
+  const app = appOf(s);
+  const first = printClock(app).clock;
+  assert.equal(reads, 1);
+  assert.deepEqual(printClock(app).clock, first);
+  printJob(app);
+  assert.equal(reads, 1); // the top bar, the Print tab and the job read one set of stops
+});
+
+test('the time left from an older adapter: the passed stops are their estimates', () => {
+  const s = demo();
+  const p = pOf(s);
+  const { passed, ahead } = estimated(s, p);
+  const clock = printJob(appOf(s)).clock;
+  assert.equal(clock.print, leftOf(Math.max(0, 2304 - passed), p, 5760));
+  assert.equal(clock.left, Math.round(/** @type {number} */ (clock.print) + ahead));
+});
+
+test("a later change is reached after the stops before it, on the print's own rate", () => {
+  const s = demo();
+  s.ace2k_u1.print_stops = { s: 300, n: 3, since: null };
+  const p = pOf(s);
+  const lv = liveOf(s, p);
+  const { xs, stops } = estimated(s, p);
+  const clock = printJob(appOf(s)).clock;
+  // The stop of the next change after the next swap: it comes before that change, not before the swap itself.
+  const later = xs.findIndex((x, i) => x > lv.next.x && stops[i]);
+  const before = stops.reduce((n, st, i) => (st && xs[i] > p && xs[i] < xs[later] ? n + st.s : n), 0);
+  const own = /** @type {number} */ (clock.print);
+  const eta = Math.round(((xs[later] - p) / (1 - p)) * own + before);
+  assert.equal(etaTo(clock, xs[later]), eta);
+  assert.ok(before > 0);
+});
+
+test('a print with no slicer time: the clock counts no stops, as before, and nothing reads NaN', () => {
+  const s = demo();
+  s.ace2k_u1.print_stops = { s: 300, n: 3, since: 2000 };
+  const app = appOf(s, {
+    print: { ...appOf(s).print, cards: { [FILE]: { modified: 0, card: { ...CARD, time: null } } } },
+  });
+  const clock = printJob(app).clock;
+  assert.equal(clock.left, Math.round(/** @type {number} */ (leftOf(2304, pOf(s), null))));
+  assert.ok(!view(app).out.includes('NaN'));
+});
+
 test('the printing view: name, %, times, progress bar, Pause and Stop', () => {
-  const { out, nodes, runs } = view(appOf(demo()));
+  const { out, nodes, runs } = view(appOf(planless()));
   const text = textOf(out);
   assert.ok(text.includes('objeto_5_cores_PLA_1h36m'));
   assert.ok(text.includes(t('printing.pct', { pct: 40 })));
@@ -137,7 +245,8 @@ test('the next swap reads "Next spool swap · in ≈ h:mm" with its head, colour
   const { out } = view(appOf(s));
   const text = textOf(out);
   assert.match(text, /Next spool swap · in ≈ \d+:\d\d/);
-  // On the clock: (x − p) / (1 − p) × left, with 3456 s left at 40 %.
+  // On the clock: (x − p) / (1 − p) of the print's own time left (3456 s at 40 %: the demo's estimated stops passed
+  // are over its 2304 s, so the slicer's rate alone), and no stop before the next swap itself.
   const eta = fmtHM(Math.max(60, Math.round(((lv.next.x - pOf(s)) / (1 - pOf(s))) * 3456)));
   assert.ok(text.includes(t('printing.next', { eta })));
   const choice = s.ace2k_u1.plan.choice;
@@ -173,7 +282,7 @@ test('during a swap the now card turns orange and says the print waits', () => {
       t('printing.change', { head: t('units.head', { n: next.head }), from: next.from + 1, to: next.to + 1 }),
     ),
   );
-  assert.ok(text.includes(t('printing.waits', { time: fmtHM(SWAP_S) })));
+  assert.ok(text.includes(t('printing.waits', { time: fmtHM(timesOf(s).inline) })));
 });
 
 test('a swap that is over shows the Now card, though its part of the file is long', () => {
@@ -186,7 +295,7 @@ test('a swap that is over shows the Now card, though its part of the file is lon
   plan.order_at = plan.order_at.map((v) => (v > at ? Math.max(v, end) : v));
   // Well past one swap of print time after the change, still early in its part.
   const rate = pOf(s) / s.print_stats.print_duration; // share of the file per second
-  const pos = next.x + rate * SWAP_S * 3;
+  const pos = next.x + rate * timesOf(s).inline * 3;
   s.virtual_sdcard = { file_position: Math.ceil(pos * plan.size), progress: pos };
   s.print_stats.print_duration = pos / rate;
   const { out } = view(appOf(s));
@@ -308,7 +417,10 @@ test('the timeline: a row per used head with its swaps, thick and thin parts, �
   const s = demo();
   const plan = s.ace2k_u1.plan;
   const headOf = headOfIn(liveLanes(s, plan));
-  const out = renderHtml(html`<${Timeline} plan=${plan} choice=${plan.choice} headOf=${headOf} t=${t} />`);
+  const times = timesOf(s);
+  const out = renderHtml(
+    html`<${Timeline} plan=${plan} choice=${plan.choice} headOf=${headOf} times=${times} t=${t} />`,
+  );
   const text = textOf(out);
   assert.equal(out.match(/class="tlr"/g).length, 3); // T0, T1, T2; T3 prints nothing
   for (const h of [0, 1, 2]) assert.ok(text.includes(t('units.head', { n: h })));
@@ -317,7 +429,7 @@ test('the timeline: a row per used head with its swaps, thick and thin parts, �
   assert.ok(marks > 100);
   assert.ok(out.includes('class="act"') && out.includes('class="idle"'));
   for (const k of ['timeline.cap', 'timeline.legend_active', 'timeline.legend_idle']) assert.ok(text.includes(t(k)), k);
-  assert.ok(text.includes(t('timeline.legend_swap', { time: fmtHM(SWAP_S) })));
+  assert.ok(text.includes(t('timeline.legend_swap', { time: fmtMS(timesOf(s).inline) })));
   assert.ok(!out.includes('class="cur"') && !out.includes('class="past"'));
   const live = renderHtml(html`<${Timeline} plan=${plan} choice=${plan.choice} headOf=${headOf} pos=${0.4} t=${t} />`);
   assert.equal(live.match(/class="cur"/g).length, 3);

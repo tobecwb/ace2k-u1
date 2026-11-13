@@ -285,29 +285,32 @@ export const sameTool = (a, b) =>
 /** @param {PrintState} print @param {Plan | null | undefined} plan @returns {Choice} */
 export const choiceFor = (print, plan) => carriedChoice(print, plan)?.choice ?? {};
 
-// Counts the lane swaps of each head for a choice, as {head: swaps}.
-// A swap is a T whose lane is not the last lane of its head.
-// This is the rule of the adapter's plan module, line for line.
+// The swaps of a choice split in two: stops (the print stops for them) and free (a background swap of a parked head).
+// A swap is a T whose lane is not the last lane of its head; this is the rule of the adapter's plan module, line for
+// line. A swap at a T of a head in bg is free when a T of another head came between that head's previous T and this
+// one: the head was parked. Every other swap is a stop. With no head in bg, every swap is a stop.
 /**
- * @param {number[]} order
- * @param {Choice} choice
- * @param {(key: string) => number | null} headOf
- * @returns {Record<number, number>}
+ * @param {number[]} order @param {Choice} choice @param {(key: string) => number | null} headOf
+ * @param {number[]} [bg] @returns {{ stops: number, free: number }}
  */
-export function swaps(order, choice, headOf) {
+export function swapKinds(order, choice, headOf, bg = []) {
   /** @type {Record<number, string>} */
   const last = {};
-  /** @type {Record<number, number>} */
-  const count = {};
+  let prev = /** @type {number | null} */ (null);
+  let stops = 0;
+  let free = 0;
   for (const n of order) {
     const key = choice[n];
     const head = key != null ? headOf(key) : null;
     if (head == null) continue;
-    count[head] ??= 0;
-    if (head in last && last[head] !== key) count[head] += 1;
-    last[head] = /** @type {string} */ (key); // A null key has no head, so it was skipped above.
+    if (head in last && last[head] !== key) {
+      if (bg.includes(head) && prev !== head) free += 1;
+      else stops += 1;
+    }
+    last[head] = /** @type {string} */ (key);
+    prev = head;
   }
-  return count;
+  return { stops, free };
 }
 
 /** @param {Choice} choice @returns {number[]} */
@@ -705,14 +708,18 @@ function userBayWords(now, key, roots) {
 /** @param {number[]} ns */
 const colourNames = (ns) => ns.map((n) => t('print.colour_n', { n: n + 1 })).join(', ');
 
-// The swaps of what Print sends, counted on the live lanes' heads, or null while a colour the file prints has no
-// bay on a head.
-/** @param {Plan} plan @param {Choice} choice @param {PlanLane[]} lanes @returns {number | null} */
-export function sentSwaps(plan, choice, lanes) {
+// The stops and free swaps of what Print sends (swapKinds), counted on the live lanes' heads, or null while a colour
+// the file prints has no bay on a head. order is the T order counted: the file's, or the changes a frame keeps.
+/**
+ * @param {Plan} plan @param {Choice} choice @param {PlanLane[]} lanes @param {number[]} [bg]
+ * @param {number[]} [order]
+ * @returns {{ stops: number, free: number } | null}
+ */
+export function sentKinds(plan, choice, lanes, bg = [], order = plan.order) {
   const headOf = headOfIn(lanes);
   const used = usedTest(plan.order);
   if (!plan.tools.every((_, n) => !used(n) || headOf(choice[n]) != null)) return null;
-  return Object.values(swaps(plan.order, choice, headOf)).reduce((x, y) => x + y, 0);
+  return swapKinds(order, choice, headOf, bg);
 }
 
 // A pick that asks for a new spool: the tool's group owns no spool in the units.

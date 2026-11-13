@@ -5,7 +5,7 @@ together with the adapter `[ace2k_u1]` (`klippy/extras/ace2k_u1.py`, `config/ace
 the adapter, the U1's own filament handling (load, unload, runout and the rest) drives the unit.
 The guide also explains what the adapter does once it is installed.
 
-You need ace2k `v0.14.0` on the unit and on the printer. The installer installs it. The adapter
+You need ace2k `v0.15.0` on the unit and on the printer. The installer installs it. The adapter
 does not attach to the U1 when ace2k's host interface is older than `API_VERSION` 12. ace2k
 `v0.12.0-rc.1` has version 6 ([Troubleshooting](#troubleshooting)).
 
@@ -61,6 +61,7 @@ Every step on this page was run on a U1. Problems found on the way are listed un
   - [Why the U1's screen and Fluidd are refused](#why-the-u1s-screen-and-fluidd-are-refused)
   - [During the print](#during-the-print)
   - [When a spool runs out in a shared head](#when-a-spool-runs-out-in-a-shared-head)
+  - [Swapping a parked head in the background](#swapping-a-parked-head-in-the-background)
 - [The web page](#the-web-page)
 - [Troubleshooting](#troubleshooting)
 - [After a U1 firmware upgrade](#after-a-u1-firmware-upgrade)
@@ -358,12 +359,12 @@ U1, three things are different:
   needs no change.
 - Klipper is restarted with `/etc/init.d/S60klipper restart` ([Restart](#restart)).
 
-When it is done, `ACEK_STATUS` reports `ace2k 0.14.0` and `ACEK_HEALTH` reports `OK`.
+When it is done, `ACEK_STATUS` reports `ace2k 0.15.0` and `ACEK_HEALTH` reports `OK`.
 
 ### Copy
 
 This step copies the adapter's files and its web page. First get the release on your computer:
-`git clone --branch v0.5.0 https://github.com/tobecwb/ace2k-u1`. Then, from the directory
+`git clone --branch v0.6.0 https://github.com/tobecwb/ace2k-u1`. Then, from the directory
 that holds the `ace2k-u1` tree, run:
 
     scp ace2k-u1/klippy/extras/ace2k_u1*.py root@<printer>:/home/lava/klipper/klippy/extras/
@@ -478,7 +479,7 @@ Run the command above, and Klipper starts with them.
 
 In Klipper's console:
 
-- `ACEK_STATUS`: the firmware version (`0.14.0`), the four lanes (`idle`, with or without a
+- `ACEK_STATUS`: the firmware version (`0.15.0`), the four lanes (`idle`, with or without a
   filament), the temperatures, the mains frequency, and the dryer `idle`.
 - `ACEK_HEALTH`: `OK`.
 - About a second after Klipper is ready, the console line `ace2k_u1: hooked lanes [1, 2, 3, 4]`.
@@ -954,10 +955,11 @@ print uses that lane. The Eject button on the web page sends it with `WAIT=0`. T
 the bay before reads empty; a refusal, an `eject failed` line or a lane left in error stops the run
 at that bay.
 
-An eject that ends with the bay empty also forgets the lane's Edit spool setting (and a forgotten
-tag), as when you take the spool out by hand. A spool you put back is then read again, or set again
-with Edit spool. An eject that leaves its tail at the bay forgets it once you pull the tail out.
-An eject that fails or is canceled keeps the setting. The adapter's own roll backs (a swap, a refill, the probe, a load that is refused) keep it too.
+When the bay reads empty, the lane's Edit spool setting (and a forgotten tag) is forgotten,
+whatever emptied it: an eject, the Unload of the U1's screen, a runout, a roll back, or a pull by
+hand. A spool you put back is then read again, or set again with Edit spool. An eject that leaves
+its tail at the bay forgets it once you pull the tail out. A failed eject whose bay stays full keeps
+the setting.
 
 ### When the eject is refused
 
@@ -1233,12 +1235,14 @@ head and rolls the lane back behind the splitter. Load again and it loads.
    choices stay. A tool goes back to the suggestion when its spool is no longer offered, or when
    the file now gives that tool another color or material. A message names each one.
 3. Under the rows, the block **Where to put each spool** says how to place the spools so that
-   the print stops the fewest times for a lane swap. Tools of the same color and material share
+   the print stops for the least time. Tools of the same color and material share
    one line. Each line says "already in place", "move the spool from a:2 to here", or "put a PLA
    spool of this color here". On a lane whose spool no tool picks, the line says "check the PLA
    spool here: if it is this color, pick it in the table above; if not, put one here". A suggested lane that holds a spool of another material says "Take out the spool in
    a:4: the file does not use it." The block also shows the lane swaps and the time stopped, with
-   the spools as they are and for the best placement. The block is not shown while a print is on.
+   the spools as they are and for the best placement. The time stopped is an estimate. The page
+   prices each swap with the swap times measured on your printer. Before the adapter has measured
+   any swap, it uses the values measured on the bench. The block is not shown while a print is on.
 4. To use the block, move the spools as listed. Give each spool without a tag its material and
    color with **Edit spool**. Then open **Print…** again. The page plans the file again and
    reads the bays. Every line should then say "already in place".
@@ -1330,6 +1334,86 @@ shared tube. The next lane could not get past it, and only opening a tube would 
 4. Press **Resume**. The adapter reads the new spool's tag first. A spool without a tag must be set
    with Edit spool before you resume, or `RESUME` asks for it and the print stays paused.
 5. The new spool is pushed to the head and loaded, as in a swap. Then the print goes on.
+
+### Swapping a parked head in the background
+
+**Not recommended as it is.** Use it only on a head whose dock has been modified for it: an adapted
+nozzle wiper with an opening under the parked nozzle, and a larger waste bin. Even then, the chance
+that oozed plastic or a strand soils the print, or that colours mix in it, is high.
+
+This is off by default.
+
+A head that several lanes feed can change its lane while it is parked and another head prints.
+When its T comes, the head already holds the new filament, purged and ready to print, or the
+swap goes on from where the parked work stopped. The T picks the head, which heats to its printing
+temperature and waits at the cleaning area, then only the U1's pre-extrusion is left: it cuts and
+cleans.
+
+**The dock must be changed first.** In the dock, the U1's own tip moves and the purge push filament
+out of the nozzle, and the stock nozzle wiper sits right under it. For each head you list:
+
+- fit an adapted nozzle wiper with an opening under the parked nozzle, so what comes out falls
+  through. The U1 has one left-hand and three right-hand wipers;
+- fit a larger waste bin under the docks, to catch what falls.
+
+The adapter cannot check the dock. Listing a head says that its dock has both.
+
+**Turn it on** with [`background_heads`](configuration.md) in `[ace2k_u1]`, one number per head:
+
+    background_heads: 1
+
+A head that one lane feeds is refused: it never swaps. Leave the key out to turn it off.
+
+**What happens.** The moment a listed head is parked, the adapter looks ahead in the file. When
+that head will next need another lane, it starts. Several heads may swap at once. In the dock it heats the head, forms the tip
+with the U1's own tip moves, rolls the old lane back past the splitter, pushes the new lane to the
+head's sensor, heats to the new filament's printing temperature and takes 40 mm through the gear.
+In the same move it purges 10 mm more ([`background_purge_mm`](configuration.md)), the purge the
+load runs at the cleaning area otherwise. The purge comes out as a strand and falls through the
+dock's opening into the bin. With `background_purge_mm: 0` the purge runs at the cleaning area
+when the head is picked, as in a swap.
+
+When that head's T comes, the parked work stops at its next safe point. A tip or a unit move under
+way finishes first. If that takes more than a second, the active head waits at the cleaning area,
+never over the part, and stays at its printing temperature there. The swap then goes on from where the parked work stopped. Nothing is lost
+and nothing is done twice, except a tip that the gear still held, which the T forms again.
+
+A listed head that a `T` takes from its dock with no swap (its lane is in it already) is wiped
+once on the pads before it prints, because it may ooze through the opening while it waits. The
+[`arrival_wipe`](configuration.md) setting turns this off too.
+
+[`ACEK_BG_STATUS`](commands.md#acek_bg_status-acek_bg_swap-acek_bg_stop-acek_bg_move-the-background-swap)
+shows what each listed head is doing.
+
+**The time a background swap costs.** The Print tab prices each background swap. When the head has
+time to finish in its dock before its T, the print does not stop for it, except for the head's
+arrival. When the T comes before the dock work ends, the stop is the arrival, plus the dock work
+that is left, plus a resume cost. The timeline marks such a swap with an amber ▽. Without a slicer
+time in the file, a background swap is priced at its arrival only, and the panel shows a note that
+says so.
+
+The planner picks the placement with the least time stopped. Among equal ones, it picks the fewest
+swaps, then the fewest spools moved. The figure of one swap (a mark's title, the legend) shows in
+minutes:seconds. A head's time stopped, on its row of the timeline, shows in minutes:seconds under
+one hour and in hours:minutes from one hour up. The totals of the panel show in hours:minutes.
+
+**Where the times come from.** The adapter measures every swap on your printer and keeps a
+long-term average of each kind, in `swap-times.json` in the folder of the page's history. A swap
+that a pause came into is not measured, nor a T typed at the console. Before the first
+measurement, the page uses the values measured on the bench. To start again from them, stop
+Klipper and delete the file. See [`swap_times`](commands.md) in the status.
+
+**The print's time with the swaps.** The slicer's time does not count the swap stops. Once a file
+and its bays are chosen, the plan's header shows the slicer's time plus the estimated stops of the
+swaps that Print sends, with the slicer's time beside it: `≈ 0:52 with the swaps (0:35 in the
+slicer)`. The file list keeps the slicer's time. Neither counts the U1's own start routine (heating
+and its checks), about 5 minutes. During a print, the time left and the total in the header count
+the swap stops still to come, at their estimates, and so does the time to the next swap. The print's
+own speed is worked out from the time printed less the time it stopped for swaps, so a long stop is
+not spread over the rest of the print. That stopped time is the adapter's measure of this print
+([`print_stops`](commands.md) in the status). With an older adapter, the page counts the passed stops
+at their estimates. With no slicer time in the file, the page shows the times it showed before. The
+U1's screen shows its own estimate, which does not count the swaps.
 
 ## The web page
 

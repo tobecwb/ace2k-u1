@@ -25,8 +25,10 @@ try:
         CHUNK_CARRIED,
         INSIST_MIN_MM,
         MOVE_MARGIN_S,
+        STOPPED_KINDS,
         UNIT_STOPS,
         FreshWait,
+        StoppedError,
         TautWatch,
         carried,
         finite,
@@ -42,8 +44,10 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
         CHUNK_CARRIED,
         INSIST_MIN_MM,
         MOVE_MARGIN_S,
+        STOPPED_KINDS,
         UNIT_STOPS,
         FreshWait,
+        StoppedError,
         TautWatch,
         carried,
         finite,
@@ -141,7 +145,6 @@ class ProbeAdapter(Protocol):
     def lane_view(
         self, h: Hooked, eventtime: float | None = None
     ) -> tuple[LaneView, bool, int | None]: ...
-    def moved_out(self, h: Hooked) -> None: ...
     def retry_busy_start(
         self,
         h: Hooked,
@@ -161,6 +164,16 @@ class ProbeError(Exception):
     def __init__(self, message: str, reason: str | None = None) -> None:
         super().__init__(message)
         self.reason = reason
+
+
+class StoppedProbeError(ProbeError, StoppedError):
+    """A probe move that was stopped from outside (STOPPED_KINDS): a ProbeError, and a
+    StoppedError, so a background swap's line says the stop request that came meanwhile."""
+
+
+def ended(message: str, kind: object) -> ProbeError:
+    """The error of a probe move that ended kind: a StoppedProbeError for a stopped kind."""
+    return StoppedProbeError(message) if kind in STOPPED_KINDS else ProbeError(message)
 
 
 class HeldError(ProbeError):
@@ -331,19 +344,16 @@ class HeadProbe:
         """
         a = self.a
         with holding([h]):
-            try:
-                a.stop(h, "the swap's free check")
-                self._link(h)  # no move at all without a taut reading to stop it
-                length = length or self.cfg.probe_mm
-                speed = speed or self.cfg.probe_speed
-                # A roll back, but the tip may still be in the head here: the wait counts no tail.
-                wait_s = unit_move_wait_s(h, length, speed, PROBE_MARGIN_S)
-                armed, polled = self._split_stops(h, STOP_WATCH)
-                move = self._start_armed(h, "rollback", length, speed, armed)
-                why, kind, moved = self._watch(h, move, wait_s, polled)
-                snag = why == "taut" and self._empties(h)
-            finally:
-                a.moved_out(h)  # a bay emptied by a roll back keeps the spool record of the lane
+            a.stop(h, "the swap's free check")
+            self._link(h)  # no move at all without a taut reading to stop it
+            length = length or self.cfg.probe_mm
+            speed = speed or self.cfg.probe_speed
+            # A roll back, but the tip may still be in the head here: the wait counts no tail.
+            wait_s = unit_move_wait_s(h, length, speed, PROBE_MARGIN_S)
+            armed, polled = self._split_stops(h, STOP_WATCH)
+            move = self._start_armed(h, "rollback", length, speed, armed)
+            why, kind, moved = self._watch(h, move, wait_s, polled)
+            snag = why == "taut" and self._empties(h)
         if snag:
             a.say(
                 f"ace2k_u1: head {h.head + 1}: {a.lane_text(h)}'s plunger went taut after "
@@ -354,7 +364,7 @@ class HeadProbe:
         if why == "taut":
             raise HeldError(f"{a.lane_text(h)} is still held by head {h.head + 1}", moved)
         if why == "end" and kind not in FREE_KINDS + (RUNOUT_KIND,):
-            raise ProbeError(f"head {h.head + 1}: {a.lane_text(h)}'s free check ended {kind}")
+            raise ended(f"head {h.head + 1}: {a.lane_text(h)}'s free check ended {kind}", kind)
         return moved
 
     def _empties(self, h: Hooked) -> bool:
@@ -421,7 +431,7 @@ class HeadProbe:
         reach = length + (tail if finite(tail) else TAIL_MM)
         _why, kind, _moved = self.move(h, "feed", min(moved, reach), speed=speed)
         if kind not in FEED_BACK_KINDS:
-            raise ProbeError(f"head {h.head + 1}: {self.a.lane_text(h)}'s push back ended {kind}")
+            raise ended(f"head {h.head + 1}: {self.a.lane_text(h)}'s push back ended {kind}", kind)
         return True
 
     def _try(self, h: Hooked) -> bool:
@@ -430,55 +440,49 @@ class HeadProbe:
         Return True when the lane is in the head. The lane is stopped and held by which_lane.
         """
         a = self.a
-        try:
-            lane, _reports = self._link(h)  # no move at all without a taut reading to stop it
-            if lane.get("insert") is False:
-                # An empty bay holds nothing for the head. Its roll back could end in an
-                # unload_incomplete that leaves the lane in error, so it is not moved.
-                a.say(
-                    f"ace2k_u1: head {h.head + 1}: probe skips {a.lane_text(h)}: its bay is empty"
-                )
-                return False
-            if h.at_grip:
-                # The lane was just put in its bay and loaded to its grip only. It is in no head,
-                # and a roll back of probe_mm would take it out of its unit. The unit's own load
-                # leaves it at the parking point, and that is never skipped.
-                a.say(
-                    f"ace2k_u1: head {h.head + 1}: probe skips {a.lane_text(h)}: just put in its "
-                    "bay,"
-                    " at its grip"
-                )
-                return False
-            why, kind, moved = self.move(h, "rollback", self.cfg.probe_mm, STOP_WATCH)
-            if why == "taut":
-                # Stopped under tension. It is fed back what it rolled back, so its plunger is at
-                # rest again before the unload of the swap forms the tip.
-                if not self._feed_back(h, moved, self.cfg.probe_mm):
-                    a.say(
-                        f"ace2k_u1: head {h.head + 1}: {a.lane_text(h)}'s roll back gave no "
-                        "distance:"
-                        " not fed back"
-                    )
-                return True
-            if why == "empty":
-                # The tip goes to the head, and nothing holds it.
-                why, kind, _moved = self.feed_free(h, self.cfg.probe_mm, STOP_SET)
-                if why != "set":
-                    raise ProbeError(
-                        f"head {h.head + 1}: {a.lane_text(h)} pushed back {self.cfg.probe_mm:g} mm"
-                        f" without reaching the head's sensor (ended {kind})"
-                    )
-                return True
-            if kind == RUNOUT_KIND:
-                return False  # out of its bay, far from the head, and left there
-            if kind not in FREE_KINDS:
-                raise ProbeError(
-                    f"head {h.head + 1}: {a.lane_text(h)}'s probe roll back ended {kind}"
-                )
-            self._feed_back(h, moved, self.cfg.probe_mm)  # what it rolled back, no more
+        lane, _reports = self._link(h)  # no move at all without a taut reading to stop it
+        if lane.get("insert") is False:
+            # An empty bay holds nothing for the head. Its roll back could end in an
+            # unload_incomplete that leaves the lane in error, so it is not moved.
+            a.say(f"ace2k_u1: head {h.head + 1}: probe skips {a.lane_text(h)}: its bay is empty")
             return False
-        finally:
-            a.moved_out(h)  # a bay emptied by a roll back keeps the spool record of the lane
+        if h.at_grip:
+            # The lane was just put in its bay and loaded to its grip only. It is in no head,
+            # and a roll back of probe_mm would take it out of its unit. The unit's own load
+            # leaves it at the parking point, and that is never skipped.
+            a.say(
+                f"ace2k_u1: head {h.head + 1}: probe skips {a.lane_text(h)}: just put in its "
+                "bay,"
+                " at its grip"
+            )
+            return False
+        why, kind, moved = self.move(h, "rollback", self.cfg.probe_mm, STOP_WATCH)
+        if why == "taut":
+            # Stopped under tension. It is fed back what it rolled back, so its plunger is at
+            # rest again before the unload of the swap forms the tip.
+            if not self._feed_back(h, moved, self.cfg.probe_mm):
+                a.say(
+                    f"ace2k_u1: head {h.head + 1}: {a.lane_text(h)}'s roll back gave no "
+                    "distance:"
+                    " not fed back"
+                )
+            return True
+        if why == "empty":
+            # The tip goes to the head, and nothing holds it.
+            why, kind, _moved = self.feed_free(h, self.cfg.probe_mm, STOP_SET)
+            if why != "set":
+                raise ended(
+                    f"head {h.head + 1}: {a.lane_text(h)} pushed back {self.cfg.probe_mm:g} mm"
+                    f" without reaching the head's sensor (ended {kind})",
+                    kind,
+                )
+            return True
+        if kind == RUNOUT_KIND:
+            return False  # out of its bay, far from the head, and left there
+        if kind not in FREE_KINDS:
+            raise ended(f"head {h.head + 1}: {a.lane_text(h)}'s probe roll back ended {kind}", kind)
+        self._feed_back(h, moved, self.cfg.probe_mm)  # what it rolled back, no more
+        return False
 
     def push_in(
         self, slot: Slot, h: Hooked, speed: float | None, budget: float | None = None
@@ -512,7 +516,7 @@ class HeadProbe:
                     if attempt or not was_set:
                         self._ease_after_set(slot, h)
                     return None
-                if h.push_end != "blocked":
+                if h.push_last_end != "blocked":
                     return error
                 if attempt:
                     self._give_up(slot, h, pushed, known, again)
@@ -670,16 +674,13 @@ class HeadProbe:
         bay) with the sensor still set. A move stopped on the empty sensor must bring its final
         event, or this raises ProbeError, so no other move starts behind a stop that failed.
         """
-        a, n = self.a, f"head {h.head + 1}: {self.a.lane_text(h)}"
+        n = f"head {h.head + 1}: {self.a.lane_text(h)}"
         left = cap
         while left >= 1.0:
             step = min(left, move_max_mm(h))
             wait_s = unit_move_wait_s(h, step, speed, PROBE_MARGIN_S, reverse=True)
             move = self._start(h, "rollback", step, speed)
-            try:
-                why, kind, _moved = self._watch(h, move, wait_s, frozenset({"empty"}))
-            finally:
-                a.moved_out(h)  # a bay emptied by a roll back keeps the spool record of the lane
+            why, kind, _moved = self._watch(h, move, wait_s, frozenset({"empty"}))
             if why == "empty":
                 if move.result() is None:
                     raise ProbeError(f"{n}: its roll back was not seen to stop")
@@ -687,7 +688,7 @@ class HeadProbe:
             if kind == RUNOUT_KIND:
                 return False  # out of the bay: back as far as it goes
             if kind not in FREE_KINDS:
-                raise ProbeError(f"{n}'s roll back ended {kind}")
+                raise ended(f"{n}'s roll back ended {kind}", kind)
             left -= step
         return not self._sensor(h)
 
@@ -745,15 +746,15 @@ class HeadProbe:
             error = move(left, pushed)
             if error is None:
                 return "end", h.push_mm
-            if h.push_end not in ("blocked", "done") and (tries > 0 or h.push_moves > 1):
+            if h.push_last_end not in ("blocked", "done") and (tries > 0 or h.push_moves > 1):
                 failed(pushed)
                 return "abort", 0.0
-            if not h.push_known and (slot is not None or h.push_end != "blocked"):
+            if not h.push_known and (slot is not None or h.push_last_end != "blocked"):
                 return "unknown", h.push_mm  # the part known; the tip is past it
             # A lone head rolls nothing back, so a blocked end with no distance (a strand that did
             # not move reads so) is pushed again all the same. The tip's place stays unknown.
             unknown = unknown or not h.push_known
-            return ("blocked" if h.push_end == "blocked" else "end"), h.push_mm
+            return ("blocked" if h.push_last_end == "blocked" else "end"), h.push_mm
 
         label = f"the push of {a.lane_text(h)}"
         verdict, pushed, known, _tries = self._insist(h, once, budget, label, h.head + 1)
@@ -764,13 +765,10 @@ class HeadProbe:
 
         It runs at EASE_SPEED for at most EASE_MM. It also stops on a taut plunger (something holds
         it) and, with ``empty_ends``, on the head sensor going empty. Return the (why, kind, mm) of
-        the move. A bay emptied by this roll back keeps the lane's spool record.
+        the move.
         """
         stops = STOP_REST | {"empty"} if empty_ends else STOP_REST
-        try:
-            return self.move(h, "rollback", EASE_MM, stops, speed=EASE_SPEED)
-        finally:
-            self.a.moved_out(h)
+        return self.move(h, "rollback", EASE_MM, stops, speed=EASE_SPEED)
 
     def ease_to_rest(self, h: Hooked) -> tuple[bool, float]:
         """Roll the lane back until its plunger is at rest, before it is pushed again.
@@ -866,7 +864,7 @@ class HeadProbe:
                 # that is stuck or slipping would likely end its roll back the same way.)
                 if pushed > 0.0:
                     self._back_pushed(slot, x, pushed, True)
-                raise ProbeError(f"head {n}: {a.lane_text(x)}'s push toward the head ended {kind}")
+                raise ended(f"head {n}: {a.lane_text(x)}'s push toward the head ended {kind}", kind)
             return ("blocked", moved) if moved > 0.0 else ("unknown", 0.0)
 
         _verdict, pushed, known, tries = self._insist(x, once, length, a.lane_text(x), n)
@@ -959,9 +957,10 @@ class HeadProbe:
             # The tip goes back to the sensor, and nothing holds it.
             why, kind, _moved = self.feed_free(h, back, STOP_SET, speed=EASE_SPEED)
             if why != "set":
-                raise ProbeError(
+                raise ended(
                     f"head {n}: {a.lane_text(h)} eased off the head's sensor and did not reach it"
-                    f" again (ended {kind})"
+                    f" again (ended {kind})",
+                    kind,
                 )
             return
         if why != "rest":
@@ -996,17 +995,12 @@ class HeadProbe:
         several = length > cap
         while length >= 1.0:
             step = min(length, cap)
-            try:
-                _why, kind, moved = self.move(h, "rollback", step, speed=speed)
-            finally:
-                self.a.moved_out(
-                    h
-                )  # a bay emptied by a roll back keeps the spool record of the lane
+            _why, kind, moved = self.move(h, "rollback", step, speed=speed)
             if kind == RUNOUT_KIND:
                 return
             if kind not in FREE_KINDS:
-                raise ProbeError(
-                    f"head {h.head + 1}: {self.a.lane_text(h)}'s roll back ended {kind}"
+                raise ended(
+                    f"head {h.head + 1}: {self.a.lane_text(h)}'s roll back ended {kind}", kind
                 )
             if not several:
                 return  # one move, so its end is the end of the roll back

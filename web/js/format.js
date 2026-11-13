@@ -66,6 +66,13 @@ export function fmtMS(s) {
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
 }
 
+// A head's time stopped: m:ss under one hour, like a swap's own figure; h:mm from one hour up.
+/** @param {number} s @returns {string} */
+export function fmtStopped(s) {
+  const n = Number.isFinite(s) ? Math.round(s) : 0;
+  return n < 3600 ? fmtMS(n) : fmtHM(n);
+}
+
 // Seconds as h:mm. A positive value under a minute shows 0:01, so a near event never reads 0:00.
 /** @param {number} s @returns {string} */
 export function fmtHM(s) {

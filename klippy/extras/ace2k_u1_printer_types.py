@@ -5,7 +5,8 @@ It is imported under ``if TYPE_CHECKING:``. Nothing here runs on the printer.
 Each class lists the members that the adapter reads, writes or calls on that object. The names
 come from one of two places.
 - The tree of the U1 (klippy/extras/filament_feed.py, print_task_config.py, print_stats.py,
-  pause_resume.py, filament_parameters.py, kinematics/extruder.py, toolhead.py).
+  pause_resume.py, filament_parameters.py, heaters.py, stepper_enable.py, gcode_macro.py,
+  filament_entangle_detect.py, kinematics/extruder.py, stepper.py, toolhead.py).
 - The host interface of ace2k (docs/protocol.md of ace2k).
 tests/test_structure.py checks the names of the U1 against its tree. The version of the host
 interface checks the names of ace2k.
@@ -51,12 +52,15 @@ SpoolRecord = dict[str, Any]
 
 
 class Reactor(klipper.Reactor, Protocol):
-    """The reactor of Klipper, with the removal of a timer.
+    """The reactor of Klipper, with the removal of a timer and a callback run once.
 
-    The description of ace2k leaves that out.
+    The description of ace2k leaves them out.
     """
 
     def unregister_timer(self, timer_handler: object) -> None: ...
+    def register_callback(
+        self, callback: Callable[[float], object], waketime: float = ...
+    ) -> object: ...
 
 
 class GCodeCommand(klipper.GCodeCommand, Protocol):
@@ -319,6 +323,22 @@ class PauseResume(Protocol):
     def send_pause_command(self) -> None: ...
 
 
+class TangleCheck(Protocol):
+    """The tangle check of one head (filament_entangle_detect eN_filament).
+
+    skip_entangle_check(True) turns it off and skip_entangle_check(False) turns it on again.
+    Both take the head's position and its wheel counts as the new start, and set skip_check_flag
+    last; it is True while the check is off. skip_length_remained is what is left of the
+    start-of-print grace, skip_length its full length: no tangle is judged while it is >= 0.
+    """
+
+    skip_check_flag: bool
+    skip_length: float
+    skip_length_remained: float
+
+    def skip_entangle_check(self, skip: bool = ...) -> None: ...
+
+
 class Heater(Protocol):
     """The heater of an extruder."""
 
@@ -363,6 +383,97 @@ class FilamentParameters(Protocol):
     """
 
     def get_status(self, eventtime: float) -> Status: ...
+
+
+# --- the parked move: the stepper of an extruder, borrowed (ace2k_u1_parked) -------------------
+
+# The motion library of Klipper (chelper.get_ffi()): its ffi object and its library. Their members
+# are C functions and C objects, so they cross the boundary untyped.
+FfiMain = Any
+FfiLib = Any
+# A motion queue or a stepper kinematics of the motion library (a C pointer).
+CObject = Any
+
+
+class MotionStepper(Protocol):
+    """stepper.MCU_stepper, as the parked move borrows it (klippy/stepper.py)."""
+
+    def get_name(self) -> str: ...
+    def get_commanded_position(self) -> float: ...
+    def get_stepper_kinematics(self) -> CObject: ...
+    def set_stepper_kinematics(self, sk: CObject) -> CObject: ...
+    def set_trapq(self, tq: CObject) -> CObject: ...
+    def set_position(self, coord: tuple[float, float, float]) -> None: ...
+    def generate_steps(self, flush_time: float) -> None: ...
+
+
+class ExtruderStepper(Protocol):
+    """The ExtruderStepper of an extruder (kinematics/extruder.py), with its stepper."""
+
+    stepper: MotionStepper
+
+
+class ExtruderHeater(Protocol):
+    """The heater of an extruder, with its flag for min_extrude_temp (extras/heaters.py)."""
+
+    can_extrude: bool
+
+
+class MovingExtruder(Protocol):
+    """The PrinterExtruder of the U1 as the parked move reads it: its name, heater and stepper."""
+
+    extruder_stepper: ExtruderStepper | None
+
+    def get_name(self) -> str: ...
+    def get_heater(self) -> ExtruderHeater: ...
+
+
+class ClockMcu(Protocol):
+    """The main MCU of the toolhead, for the print time of a reactor time."""
+
+    def estimated_print_time(self, eventtime: float) -> float: ...
+
+
+class MotionToolHead(Protocol):
+    """The toolhead (toolhead.py), with the times that the parked move schedules after.
+
+    print_time is the end of what the print has queued, step_gen_time the end of the steps that
+    are generated. note_mcu_movequeue_activity keeps the flush of the MCU queues going to a time.
+    """
+
+    print_time: float
+    step_gen_time: float
+    mcu: ClockMcu
+
+    def get_extruder(self) -> MovingExtruder: ...
+    def note_mcu_movequeue_activity(self, mq_time: float) -> None: ...
+
+
+class EnableLine(Protocol):
+    """The enable line of one stepper (stepper_enable.EnableTracking)."""
+
+    def is_motor_enabled(self) -> bool: ...
+    def motor_enable(self, print_time: float) -> None: ...
+
+
+class StepperEnable(Protocol):
+    """The printer object stepper_enable, which finds the enable line of a stepper by name."""
+
+    def lookup_enable(self, name: str) -> EnableLine: ...
+
+
+class MacroTemplate(Protocol):
+    """The template of a G-code macro (gcode_macro.TemplateWrapper)."""
+
+    def create_template_context(self) -> dict[str, object]: ...
+    def render(self, context: dict[str, object]) -> str: ...
+
+
+class GCodeMacro(Protocol):
+    """A G-code macro (the printer object gcode_macro <NAME>): its variables and its template."""
+
+    variables: dict[str, object]
+    template: MacroTemplate
 
 
 # --- the objects of ace2k, as the adapter reaches them ------------------------------------------

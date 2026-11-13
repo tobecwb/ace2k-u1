@@ -78,6 +78,9 @@ class SearchAdapter(Protocol):
     def lane_or_none(self, h: Hooked) -> LaneView | None: ...
     def in_print(self) -> bool: ...
     def motion(self, h: Hooked, lane: LaneView | None = None) -> str | None: ...
+    def set_by_hand(self, h: Hooked) -> bool: ...
+    @property
+    def hooked(self) -> list[Hooked]: ...
 
 
 @dataclass
@@ -220,13 +223,16 @@ class TagSearch:
         else:
             self._try_start(search)
 
-    def _moot(self, lane: LaneView) -> str | None:
+    def _moot(self, h: Hooked, lane: LaneView) -> str | None:
         """Returns why no read with motion is needed any more, or None.
 
-        The bay emptied, or the tag is read, has no tag, or was never reported.
+        The bay emptied, the spool was set by hand (its tag is never taken), or the tag is read,
+        has no tag, or was never reported.
         """
         if lane.get("insert") is not True:
             return "its bay emptied"
+        if self.adapter.set_by_hand(h):
+            return "its spool was set by hand"
         state = (lane.get("tag") or {}).get("state")
         if state not in UNREAD_STATES and state not in TAG_UNSETTLED:
             return f"its tag is {state or 'unknown'}"
@@ -251,7 +257,30 @@ class TagSearch:
             or self.adapter.ejector.eject_running(h)
         ):
             return "a move is pending"
+        if self._other_lane_moves(h):
+            return "another lane of its unit moves"  # the unit would refuse the read
         return None
+
+    def _other_lane_moves(self, h: Hooked) -> bool:
+        """True when another lane of h's unit moves, as the unit counts it for the read.
+
+        Every lane of the unit counts, whether it feeds a head of the U1 or not, from one status
+        read of the unit. A lane moves when it is not idle or in error. A lane in its follow with
+        its motor at rest (duty 0) does not count: the read yields when that motor starts. A
+        status that cannot be read counts as a move, so the read waits.
+        """
+        try:
+            lanes = h.unit.get_status(self.adapter.reactor.monotonic())["lanes"]
+        except Exception:
+            logging.exception("ace2k_u1: lane %s status", self.adapter.lane_text(h))
+            return True
+        for i, lane in enumerate(lanes):
+            mode = lane.get("mode")
+            if i == h.lane or mode in (None, "idle", "error"):
+                continue
+            if mode != "following" or (lane.get("duty") or 0) > 0:
+                return True
+        return False
 
     def _try_start(self, search: _Search) -> None:
         """Starts the read with motion of a due lane.
@@ -267,7 +296,7 @@ class TagSearch:
         if search.first is None:
             search.first = now
         lane = self.adapter.lane_or_none(h)
-        moot = None if lane is None else self._moot(lane)
+        moot = None if lane is None else self._moot(h, lane)
         if moot is not None:
             del self.searches[h.key]
             logging.info("ace2k_u1: lane %s tag read with motion not needed: %s", n, moot)

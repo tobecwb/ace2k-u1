@@ -2,7 +2,7 @@ import { html } from './html.js';
 import { headName, unitLabel } from '../words.js';
 import { swatch } from './ColourChips.js';
 import { bayOwner, bayRoots, materialMatch, mergeRoot, NEW, sameTool, usedTest } from '../print-plan.js';
-import { pickCost } from '../planner.js';
+import { pickCosts } from '../planner.js';
 import { planNow } from '../state.js';
 import { swapsWords } from './PlanView.js';
 
@@ -15,14 +15,28 @@ import { swapsWords } from './PlanView.js';
 // more colours than bays: while the plan fits, it reads "does not fit"; while the plan does not fit yet, no number can
 // be given, so it reads nothing (a join is how the user makes the file fit). While the plan does not fit, a choice
 // that makes it fit has no delta to compare with: it reads "fits · n swaps", its swaps counted from nothing. No
-// choice is ever disabled for its cost.
-/** @param {UiCtx['t']} t @param {number | null} d @param {boolean} [fits] */
-export function costWords(t, d, fits = true) {
+// choice is ever disabled for its cost. free is the change in swaps in the background (pickCosts): the stops stay
+// the value shown, and only a choice that keeps the stops shows it ("+2 in the background"); "fits · n swaps" adds the
+// swaps in the background it would have.
+/** @param {UiCtx['t']} t @param {number | null} d @param {boolean} [fits] @param {number} [free] */
+export function costWords(t, d, fits = true, free = 0) {
   if (d === null) return fits ? { text: t('print.no_fit'), cls: 'c bad' } : { text: '', cls: 'c' };
-  if (!fits) return { text: t('print.fits_swaps', { swaps: swapsWords(t, d) }), cls: 'c good' };
+  if (!fits) {
+    const swaps = swapsWords(t, d);
+    const text = free ? t('print.fits_swaps_bg', { swaps, n: free }) : t('print.fits_swaps', { swaps });
+    return { text, cls: 'c good' };
+  }
   if (d > 0) return { text: t('print.cost_more', { n: d }), cls: 'c bad' };
-  return d < 0 ? { text: t('print.cost_less', { n: -d }), cls: 'c good' } : { text: t('print.cost_zero'), cls: 'c' };
+  if (d < 0) return { text: t('print.cost_less', { n: -d }), cls: 'c good' };
+  if (free > 0) return { text: t('print.cost_bg_more', { n: free }), cls: 'c' };
+  return free < 0
+    ? { text: t('print.cost_bg_less', { n: -free }), cls: 'c' }
+    : { text: t('print.cost_zero'), cls: 'c' };
 }
+
+// The timing the placement was scored with, so a pick's cost compares like with like (planner.js pickCosts).
+/** @param {import('../state.js').PlanNow} now */
+const timingOf = (now) => ({ frame: now.frame, timeS: now.timeS, times: now.times });
 
 // The unit part of a lane key: "a" for "a:2", "" for "2" (a single unit).
 /** @param {string} key */
@@ -63,8 +77,19 @@ function Bay({ ctx, now, n, lane, roots }) {
     return html`<button type="button" class="opt" disabled title=${t('print.other_material')}>
       ${swatch(lane.colour)}<span>${name}</span><span class="c">${t('print.other_material')}</span></button>`;
   const owner = bayOwner(now.plan, roots, now.merges, n, lane.key);
-  const d = pickCost(now.plan, now.raw, now.planLanes, now.merges, n, lane.key, now.fixed);
-  const cost = costWords(t, d, now.place?.fits ?? true);
+  const c = pickCosts(
+    now.plan,
+    now.raw,
+    now.planLanes,
+    now.merges,
+    n,
+    lane.key,
+    now.fixed,
+    now.bg,
+    now.place,
+    timingOf(now),
+  );
+  const cost = costWords(t, c.d, now.place?.fits ?? true, c.free);
   // Marked when colour n prints from this bay: the pick of its root (its own, or the colour it really joins).
   const root = mergeRoot(now.plan, now.merges, n);
   const on = now.pick[root] === lane.key;
@@ -78,11 +103,13 @@ function Bay({ ctx, now, n, lane, roots }) {
 }
 
 /**
- * A row of the other options: a new spool, or a join with another colour, with its swap cost.
- * @param {{ ctx: UiCtx, on: boolean, d: number | null, fits: boolean, run: () => unknown, children: unknown }} props
+ * A row of the other options: a new spool, or a join with another colour, with its swap cost (d, and free in the
+ * background, as costWords).
+ * @param {{ ctx: UiCtx, on: boolean, d: { d: number | null, free: number }, fits: boolean, run: () => unknown,
+ *   children: unknown }} props
  */
 function Row({ ctx, on, d, fits, run, children }) {
-  const cost = costWords(ctx.t, d, fits);
+  const cost = costWords(ctx.t, d.d, fits, d.free);
   return html`<button type="button" class=${on ? 'row sel' : 'row'} aria-pressed=${on} onClick=${run}>
     ${children}<span class=${`r ${cost.cls}`}>${cost.text}</span></button>`;
 }
@@ -122,9 +149,10 @@ export function ColourPicker({ app, ctx, n }) {
   const define = { n: s, material: tool.material ?? '', colour: tool.colour ?? '' };
   // The colours the user set on each bay, worked out once for every bay of the picker.
   const roots = bayRoots(now.plan, Object.fromEntries(now.fixed.map((j) => [j, now.pick[j]])), now.merges);
-  // The swaps that colour n adds or saves by taking v: a bay, NEW or a merge.
+  // The stops that colour n adds or saves by taking v (a bay, NEW or a merge), and its swaps in the background.
   /** @param {string | { merge: number }} v */
-  const cost = (v) => pickCost(now.plan, now.raw, now.planLanes, now.merges, n, v, now.fixed);
+  const cost = (v) =>
+    pickCosts(now.plan, now.raw, now.planLanes, now.merges, n, v, now.fixed, now.bg, now.place, timingOf(now));
   return html`<div class="card picker">
     <p class="t1">${swatch(tool.colour)} ${words}</p>
     <p class="note">${t('print.pick_note')}</p>

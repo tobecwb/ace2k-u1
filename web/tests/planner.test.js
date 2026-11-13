@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   placement,
-  pickCost,
+  pickCosts,
   planStats,
-  SWAP_S,
   search,
   spoolMismatch,
   spoolVerdict,
@@ -13,7 +12,7 @@ import {
   colourVerdict,
   knownMaterials,
 } from '../js/planner.js';
-import { chosen, MAX_GROUPS, mergeRoot, NEW, printGate, swaps } from '../js/print-plan.js';
+import { chosen, MAX_GROUPS, mergeRoot, NEW, printGate, swapKinds } from '../js/print-plan.js';
 import { loadEnglish } from './helpers.js';
 import { t } from '../js/i18n.js';
 
@@ -59,7 +58,6 @@ test('the 5-colour file on the wiring of today: 110 swaps now, 1 suggested, two 
   assert.equal(p.best, 1);
   assert.deepEqual(acts(p), ['T0 b:1 move a:1', 'T1 a:2 there', 'T3 a:3 there', 'T4 a:4 there', 'T6 a:1 move b:1']);
   assert.deepEqual(p.takeOut, []);
-  assert.equal(SWAP_S, 90);
 });
 
 test('the 9-colour file: 362 swaps on 1, 4, 4 and 4 lanes; it does not fit the 5 lanes of today', () => {
@@ -197,7 +195,7 @@ function brute(plan, pick, lanes) {
   const walk = (g) => {
     if (g === keys.length) {
       const choice = Object.fromEntries(used.map((n) => [n, `${heads[group.get(n)]}:${group.get(n)}`]));
-      const s = Object.values(swaps(plan.order, choice, (key) => Number(key.split(':')[0]))).reduce((a, b) => a + b, 0);
+      const s = swapKinds(plan.order, choice, (key) => Number(key.split(':')[0])).stops;
       const moved = keys.filter((_, k) => own[k]?.head !== heads[k]).length;
       if (!best || s < best[0] || (s === best[0] && moved < best[1])) best = [s, moved];
       return;
@@ -449,11 +447,13 @@ test('a group with no spool, on a lane of another material, puts one and takes t
 test('a search over heads that cannot hold the groups finds no placement', () => {
   assert.deepEqual(search([0, 1, 0], 2, [1, 0, 0, 0], [-1, -1]), {
     swaps: Infinity,
+    seconds: Infinity,
     moved: Infinity,
     masks: [],
   });
   const fits = search([0, 1, 0], 2, [1, 1, 0, 0], [-1, -1]);
   assert.equal(fits.swaps, 0);
+  assert.equal(fits.seconds, 0);
   assert.equal(fits.masks.length, 4);
 });
 
@@ -587,40 +587,40 @@ test('with no merges argument the placement is the one of an empty merges object
   assert.deepEqual(a, b);
 });
 
-test('pickCost is the change in best swaps', () => {
+test('pickCosts is the change in best swaps', () => {
   const pick = { 0: '1', 1: '2', 2: '3' };
   const base = placement(two, pick, four, {})?.best ?? 0;
   const merged = placement(two, pick, four, { 1: 0 })?.best ?? 0;
-  assert.equal(pickCost(two, pick, four, {}, 1, { merge: 0 }), merged - base);
-  assert.equal(pickCost(two, pick, four, {}, 0, '1'), 0);
+  assert.equal(pickCosts(two, pick, four, {}, 1, { merge: 0 }).d, merged - base);
+  assert.equal(pickCosts(two, pick, four, {}, 0, '1').d, 0);
 });
 
-test('pickCost of a lane drops the tool from the merges, and NEW is priced too', () => {
+test('pickCosts of a lane drops the tool from the merges, and NEW is priced too', () => {
   const pick = { 0: '1', 1: '2', 2: '3' };
   const merged = placement(two, pick, four, { 1: 0 })?.best ?? 0;
   const apart = placement(two, pick, four, {})?.best ?? 0;
-  assert.equal(pickCost(two, pick, four, { 1: 0 }, 1, '2'), apart - merged);
-  assert.equal(pickCost(two, pick, four, {}, 0, NEW), 0);
+  assert.equal(pickCosts(two, pick, four, { 1: 0 }, 1, '2').d, apart - merged);
+  assert.equal(pickCosts(two, pick, four, {}, 0, NEW).d, 0);
 });
 
-test("pickCost of a merge drops the tool's own pick: a NEW tool that joins keeps the group's spool", () => {
+test("pickCosts of a merge drops the tool's own pick: a NEW tool that joins keeps the group's spool", () => {
   const pick = { 0: '1', 1: NEW, 2: '3' };
   const base = placement(two, pick, four, {})?.best ?? 0;
   const joined = placement(two, { 0: '1', 2: '3' }, four, { 1: 0 });
-  assert.equal(pickCost(two, pick, four, {}, 1, { merge: 0 }), (joined?.best ?? 0) - base);
+  assert.equal(pickCosts(two, pick, four, {}, 1, { merge: 0 }).d, (joined?.best ?? 0) - base);
   assert.equal(joined?.lines.find((l) => l.tools.includes(1))?.act, 'there');
   // With the NEW pick kept, the joined group would own nothing.
   assert.equal(placement(two, pick, four, { 1: 0 })?.lines.find((l) => l.tools.includes(1))?.act, 'put');
 });
 
-test('pickCost is 0 with no plan to place, and null for a choice that does not fit', () => {
-  assert.equal(pickCost({ ...two, order: [] }, {}, four, {}, 0, '1'), 0);
+test('pickCosts is 0 with no plan to place, and null for a choice that does not fit', () => {
+  assert.equal(pickCosts({ ...two, order: [] }, {}, four, {}, 0, '1').d, 0);
   const pair = four.slice(0, 2);
   // Joined, the three tools are two colours on two lanes; apart they are three.
-  assert.equal(pickCost(two, {}, pair, { 1: 0 }, 1, '2'), null);
+  assert.equal(pickCosts(two, {}, pair, { 1: 0 }, 1, '2').d, null);
   // From a plan that does not fit, a choice that fits gives its swaps.
   const fits = placement(two, {}, pair, { 1: 0 });
-  assert.equal(pickCost(two, {}, pair, {}, 1, { merge: 0 }), fits?.best);
+  assert.equal(pickCosts(two, {}, pair, {}, 1, { merge: 0 }).d, fits?.best);
 });
 
 test('more colours than the search plans: not planned, and the page says why instead of freezing', () => {
@@ -655,10 +655,10 @@ test("a picker's costs run N + 1 searches: the pick as it is stays in the memo",
   const pick = chosen(plan, {});
   const options = ['a:2', 'a:3', 'a:4', 'b:1', NEW];
   const before = planStats.searches;
-  for (const v of options) pickCost(plan, pick, today, {}, 0, v);
+  for (const v of options) pickCosts(plan, pick, today, {}, 0, v).d;
   assert.equal(planStats.searches - before, options.length + 1);
   // Drawn again: every result is in the memo.
-  for (const v of options) pickCost(plan, pick, today, {}, 0, v);
+  for (const v of options) pickCosts(plan, pick, today, {}, 0, v).d;
   assert.equal(planStats.searches - before, options.length + 1);
 });
 

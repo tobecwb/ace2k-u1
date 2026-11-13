@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 try:
     from .ace2k_u1_common import ARMED_MODES, MOVE_MODES, SEATED_MM, finite, forward_mm
-    from .ace2k_u1_grip import OUT_KINDS, OUT_MODES
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
     from ace2k_u1_common import (  # type: ignore[import-not-found, no-redef]
         ARMED_MODES,
@@ -30,7 +29,6 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
         finite,
         forward_mm,
     )
-    from ace2k_u1_grip import OUT_KINDS, OUT_MODES  # type: ignore[import-not-found, no-redef]
 
 # These kinds are notices. They never end a move.
 NOTICE_KINDS = ("behind", "snag", "tail")
@@ -74,7 +72,6 @@ class EventsAdapter(Protocol):
     def lane_text(self, h: Hooked) -> str: ...
     def lane_args(self, h: Hooked) -> str: ...
     def say(self, msg: str) -> None: ...
-    def moved_out(self, h: Hooked) -> None: ...
     def present_or_not(self, h: Hooked) -> bool: ...
     def shared(self, h: Hooked) -> bool: ...
     def print_state(self) -> str | None: ...
@@ -121,8 +118,6 @@ class FeedEvents:
         slot = self.adapter.slot_of(h)
         if slot is not None and event.get("mode") in MOVE_MODES:
             slot.loaded = None  # a lane of the head moved: what is in the head may have changed
-        if kind in OUT_KINDS or event.get("mode") in OUT_MODES:
-            self.adapter.moved_out(h)
         self._on_final(h, kind, event)
         self.adapter.ejector.on_final(h, event)
 

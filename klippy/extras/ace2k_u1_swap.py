@@ -23,14 +23,18 @@ if TYPE_CHECKING:
     from .ace2k_u1_printer_types import Extruder, GCodeCommand, Reactor
     from .ace2k_u1_probe import HeadProbe
     from .ace2k_u1_spools import LaneSpools
+    from .ace2k_u1_swap_times import SwapTimes
     from .ace2k_u1_tracker import PrintTracker
 
 try:
+    from . import ace2k_u1_in_use as in_use_module
     from . import ace2k_u1_probe
     from .ace2k_u1_common import (
         PAUSE_WAIT_S,
+        STOPPED_KINDS,
         Hooked,
         Slot,
+        StoppedError,
         error_line,
         finite,
         setting_written,
@@ -40,11 +44,14 @@ try:
     from .ace2k_u1_rollback import Rollback
     from .ace2k_u1_tags import TAG_QUOTED, TagWriter
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
+    import ace2k_u1_in_use as in_use_module  # type: ignore[import-not-found, no-redef]
     import ace2k_u1_probe  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_common import (  # type: ignore[import-not-found, no-redef]
         PAUSE_WAIT_S,
+        STOPPED_KINDS,
         Hooked,
         Slot,
+        StoppedError,
         error_line,
         finite,
         setting_written,
@@ -66,7 +73,8 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
 # - The spool.
 # - The load (heated to the printing temperature, grip, purge, the U1's clean).
 # - A read of the sensor of the head.
-# - The U1's own pre-extrusion: its retraction, one clean and its idle exit.
+# - The U1's own pre-extrusion: its retraction, one clean and its idle exit. With arrival_wipe it
+#   wipes once more before the idle exit (_arriving).
 # The slicer retracts a tool before its T, and pushes that much back when the same tool comes
 # back. On a shared head the swap has just purged the nozzle full. So the pre-extrusion retracts
 # what the slicer retracted when the arriving tool last left the head (10 mm in the files seen).
@@ -89,6 +97,8 @@ SWAP_LOAD_MACRO = "ACEK_SWAP_LOAD"
 # The steps after the load of the swap. A failure at one of them goes on from that step at RESUME,
 # with no probe, while the head reads set (the load put the new lane in the head).
 LOADED_STEPS = SWAP_STEPS[SWAP_STEPS.index("loaded") :]
+# The steps that move the unit only, and take seconds with no head picked for them.
+UNIT_STEPS = ("free", "roll back", "hand over", "push")
 # The push and the steps after it, up to the loaded check. A failure at one of them, with the head
 # set at RESUME and the push's record (SwapState.pushed_alone), goes on from the spool, unprobed.
 PUSHED_STEPS = ("push", "spool", "load")
@@ -105,8 +115,22 @@ U1_PREEXTRUDE_MM = 20.0
 RETRACT_F = 1800
 # The retraction of the U1's own pre-extrusion, in mm. The return step retracts the rest.
 U1_PREEXTRUDE_RETRACT_MM = 0.5
+# A head this far under its printing temperature waits for it in the return (_wait_hot): the
+# U1's M109 settles within about this much.
+WAIT_HOT_DELTA_C = 4.0
+# The U1's move to the cleaning area, where the return waits for the heat after a dock purge.
+DISCARD_POSITION = "MOVE_TO_DISCARD_FILAMENT_POSITION"
 # The G-code state the return step's retraction saves and restores.
 RETRACT_STATE = "ACEK_SWAP_RETRACT"
+# With arrival_wipe, the U1's own wipe on the pads, run once more at the end of the return's
+# pre-extrusion, just before its idle exit (Swapper.idle_exit_wipe).
+ARRIVAL_WIPE = "INNER_ROUGHLY_CLEAN_NOZZLE_BASE_DISCARD ACTION=4"
+# The G-code state saved around the wipe of a listed head that a plain T takes from its dock
+# (Swapper.dock_exit_wipe).
+DOCK_WIPE_STATE = "ACEK_DOCK_WIPE"
+# The U1's idle exit as its pre-extrusion macro ends: with no offset. Its move to the cleaning
+# area (MOVE_TO_DISCARD_FILAMENT_POSITION) calls the same command with these offsets.
+IDLE_EXIT_OFFSETS = ("X_OFFSET", "Y_OFFSET")
 U1_UNLOAD_TEMP = 250.0  # the unload temperature of the U1 when its filament table cannot tell
 U1_LOAD_TEMP = 250.0  # the load temperature of the U1 when its filament table cannot tell
 
@@ -160,6 +184,18 @@ class NoSpoolLine(str):
 
 
 @dataclass
+class Arrival:
+    """A return that runs the U1's pre-extrusion of head with arrival_wipe (Swapper._arriving).
+
+    spent: its one more wipe has run. said: why a bare idle exit did not wipe was logged.
+    """
+
+    head: int
+    spent: bool = False
+    said: bool = False
+
+
+@dataclass
 class SwapState:
     """A lane swap on the head of slot for T<tool>: the old lane goes out and the new lane comes in.
 
@@ -197,6 +233,17 @@ class SwapState:
     # When the rest of a refill ended with its tail at the sensor of the bay (reactor time). RESUME
     # then waits for the bay to empty (refill_ready).
     tail_at_bay_s: float | None = None
+    # The steps a background swap finished in the dock (ace2k_u1_background). The swap that goes
+    # on from it skips them (resume_background), once.
+    done_in_dock: frozenset[str] = frozenset()
+    # The background swap took the new filament through the gear. The load then skips its grip.
+    gripped: bool = False
+    # This attempt is timed for the swap times: a T of the file, printing, from the first step,
+    # the old lane known, no refill and no background work. A failure clears it (a RESUME's time
+    # holds the pause).
+    timed: bool = False
+    # resume_background runs this attempt: an arrival, timed by the background swap instead.
+    from_background: bool = False
 
 
 @dataclass
@@ -244,6 +291,8 @@ class SwapHost(Protocol):
     def swap_cfg(self) -> SwapConfig: ...
     @property
     def refiller(self) -> SwapRefiller: ...
+    @property
+    def swap_times(self) -> SwapTimes: ...
     def head_set_or(
         self, h: Hooked, default: bool, unread: str | Callable[[], str] | None = None
     ) -> bool: ...
@@ -264,6 +313,12 @@ class Swapper:
         # probe reads. Then RESUME runs the T that asked for the swap.
         self.swap_pending: SwapState | None = None
         self.resuming = False  # a RESUME is running a pending swap; the status says so
+        # The return that runs the U1's pre-extrusion with arrival_wipe now (_arriving): the wrap
+        # of the U1's idle exit wipes once more for it (idle_exit_wipe). One at a time: the
+        # return's calls run one after the other under the G-code lock, and nothing in the U1's
+        # pre-extrusion starts another return (its T<index> is not sent once the return's own
+        # T<head> A0 made the head active; were it sent, the T finds its lane in and swaps nothing).
+        self.arrival: Arrival | None = None
         # The T commands that are owed, in the order they came. They are the T of a pending swap and
         # any T that was refused while a swap was pending. Each is an OwedTool. The SwapState of a
         # pending swap counts as one, because it has the same two fields. RESUME runs them in order
@@ -281,6 +336,20 @@ class Swapper:
             "loaded": self._step_loaded,
             "return": self._step_return,
         }
+        # Called first by swap, before an inline swap, and by go_on and a refill: a background
+        # swap gives way (Background.before_inline). Its arguments are the swap's G-code (None
+        # from a timer), slot, tool, the T's parameters and whether that T is owed already. It
+        # returns False when the print paused, True when it ran a swap of its own, and None when
+        # there was none.
+        self.before_swap: (
+            Callable[
+                [GCodeCommand | None, Slot | None, int | None, ToolParams | None, bool],
+                bool | None,
+            ]
+            | None
+        ) = None
+        # Called at the end of giving_way with the head (Background.yield_ended).
+        self.yield_ended: Callable[[int], None] | None = None
 
     def _adapter(self) -> Adapter:
         """Returns the adapter of the host. It is built at the hook, before any swap runs."""
@@ -401,19 +470,37 @@ class Swapper:
         So the swap puts that value back. Then the steps run, from the step that the probe read.
 
         A refill goes on only once its rest is out and a new spool is in its bay (refill_ready).
+        The background swap of the head gives way for all of it (giving_way).
         """
-        if pending.refill and not self.host.refiller.refill_ready(pending):
-            return False
-        if not self._probe_pending(pending):
-            return False
-        # Goes on from the step that the probe read, not from the step that failed.
-        if not self.host.refiller.spool_known(pending):
-            return False
-        if pending.saved:
-            e_pos = self.e_pos(pending.slot.head)
-            if e_pos is not None:
-                pending.e_pos = e_pos
-        return self._run_swap(gcmd, pending)
+        with self.giving_way(gcmd, pending.slot):
+            if pending.refill and not self.host.refiller.refill_ready(pending):
+                return False
+            if not self._probe_pending(pending):
+                return False
+            # Goes on from the step that the probe read, not from the step that failed.
+            if not self.host.refiller.spool_known(pending):
+                return False
+            if pending.saved:
+                e_pos = self.e_pos(pending.slot.head)
+                if e_pos is not None:
+                    pending.e_pos = e_pos
+            return self._run_swap(gcmd, pending)
+
+    @contextlib.contextmanager
+    def giving_way(self, gcmd: GCodeCommand | None, slot: Slot) -> Iterator[None]:
+        """Stops the background swap of slot's head and waits for it, before a pending swap or a
+        refill of that head moves anything; it is kept for its T. gcmd is None from a timer.
+
+        While the block runs the run is yielded: that swap unloads and loads the head itself.
+        At its end, done or failed, the run is a kept run as any other (yield_ended).
+        """
+        try:
+            if self.before_swap is not None:
+                self.before_swap(gcmd, slot, None, None, False)
+            yield
+        finally:
+            if self.yield_ended is not None:
+                self.yield_ended(slot.head)
 
     def _probe_pending(self, state: SwapState) -> bool:
         """Reads the head to find the step from which a pending swap goes on.
@@ -534,7 +621,17 @@ class Swapper:
 
         params holds the parameters of the T itself (an owed T that RESUME runs). Otherwise they
         are read from gcmd.
+
+        A background swap gives way first (before_swap). When that ran a swap of this head that
+        put lane new in, nothing more runs.
         """
+        tool_params = self._tool_params(gcmd) if params is UNREAD else params
+        if self.swap_pending is None and self.before_swap is not None:
+            took = self.before_swap(gcmd, slot, tool, tool_params, params is not UNREAD)
+            if took is False:
+                return False
+            if took and slot is not None and slot.current is new:
+                return True
         pending = self.swap_pending
         if pending is not None:
             if slot is None or pending.slot is not slot:
@@ -554,9 +651,26 @@ class Swapper:
             old=slot.current,
             new=new,
             tool=tool,
-            tool_params=self._tool_params(gcmd) if params is UNREAD else params,
+            tool_params=tool_params,
         )
         return self._run_swap(gcmd, state)
+
+    def resume_background(self, gcmd: GCodeCommand, state: SwapState) -> bool:
+        """Goes on with the state that a background swap left, from its step (ace2k_u1_background).
+
+        The steps it finished in the dock are skipped, and a load after its grip skips the grip.
+        A load the dock's purge covered is skipped too: the head only heats and waits first
+        (_load_done). This holds
+        for this run only: a failure leaves a pending swap that RESUME goes on with as any other.
+        Returns what swap returns.
+        """
+        state.from_background = True
+        try:
+            return self._run_swap(gcmd, state)
+        finally:
+            state.done_in_dock = frozenset()
+            state.gripped = False
+            state.from_background = False
 
     @staticmethod
     def _tool_params(gcmd: GCodeCommand) -> ToolParams | None:
@@ -573,11 +687,33 @@ class Swapper:
         except Exception:
             return None
 
+    def _is_timed(self, state: SwapState, step: str) -> bool:
+        """Whether this first attempt gives a sample to the swap times (SwapState.timed)."""
+        return (
+            step == SWAP_STEPS[0]
+            and not state.refill
+            and not state.owed
+            and not state.probed
+            and not state.from_background
+            and state.old is not None
+            and not state.done_in_dock
+            and self._adapter().print_state() == "printing"
+            and self.host.u1.from_file()  # a T typed at the console is not timed
+        )
+
     def _run_swap(self, gcmd: GCodeCommand, state: SwapState) -> bool:
+        """Runs the swap (_run_steps), timed as a stop of the print (PrintStops.swap)."""
+        stops = self.host.swap_times.stops
+        with stops.swap(self.host.reactor, self.printing_on, self.host.printer) as run:
+            run.ok = self._run_steps(gcmd, state)
+        return run.ok
+
+    def _run_steps(self, gcmd: GCodeCommand, state: SwapState) -> bool:
         """Runs the steps of the swap, from state.step on.
 
         Returns True when they all ran. Otherwise the head is put back, the console says why, the
-        print pauses plainly, and it returns False.
+        print pauses plainly, and it returns False. While printing, the head is picked before a
+        unit step that nothing picked it for (_pick_first).
         """
         adapter = self._adapter()
         slot, new = state.slot, state.new
@@ -588,7 +724,10 @@ class Swapper:
             try:
                 if first:
                     adapter.say(f"ace2k_u1: {self.swap_text(state)}")
-                    state.started = self.host.reactor.monotonic()
+                    state.started, state.timed = (
+                        self.host.reactor.monotonic(),
+                        self._is_timed(state, step),
+                    )
                     self.host.tracker.drop_owed_heat(head)  # the head swaps: it docks no more
                     self.host.u1.script("SAVE_GCODE_STATE NAME=ACEK_SWAP")
                     state.e_pos = self.e_pos(head)
@@ -608,7 +747,13 @@ class Swapper:
                 # "restore" means that every step is done and only the G-code restore is left.
                 at = state.step
                 steps = SWAP_STEPS[SWAP_STEPS.index(at) :] if at in SWAP_STEPS else ()
+                self._pick_first(state, [s for s in steps if s not in state.done_in_dock])
+                if "load" in steps and "load" in state.done_in_dock:
+                    step = "load"
+                    self._load_done(state)  # the target only: the return waits once picked
                 for step in steps:
+                    if step in state.done_in_dock:
+                        continue  # a background swap did it in the dock
                     state.step = step
                     self.swap_step(step, state)
                 step = state.step = "restore"
@@ -625,7 +770,67 @@ class Swapper:
             self.host.tracker.after_swap(head, state.tool, state.print_temp)
         took_s = self.host.reactor.monotonic() - (state.started or self.host.reactor.monotonic())
         adapter.say(f"ace2k_u1: head {head + 1}: {adapter.lane_text(new)} in ({took_s:.0f} s)")
+        self._note_inline(state, took_s)
         return True
+
+    def _note_inline(self, state: SwapState, took_s: float) -> None:
+        """Gives the swap times the duration of a swap that was timed and ended well.
+
+        A swap that the print paused during (it is not printing now, or a pause was asked) gives
+        none: its time holds the pause.
+        """
+        if state.timed and self.printing_on():
+            self.host.swap_times.note("inline", took_s)
+        state.timed = False
+
+    def printing_on(self) -> bool:
+        """Tells whether the print is printing, with no pause taken or asked."""
+        return self._adapter().print_state() == "printing" and not self.host.u1.pause_taken()
+
+    def _pick_first(self, state: SwapState, todo: list[str]) -> None:
+        """Picks the head and takes it to the cleaning area before a unit step, while printing.
+
+        A swap may reach the free check, the roll back, the hand over or the push with nothing
+        that picked the head: a background swap that goes on at its T from one of them, or an
+        unload with the head's sensor empty (it picks only to form a tip). These move the unit
+        only, for seconds, and nothing picks the head before the load. The leaving head would
+        wait over the print meanwhile (bench B7: 4 s over the wipe tower for a free check). So
+        the head of the swap is picked first, the leaving head docks, and the unit steps run with
+        the new head at the cleaning area, as after the unload of today. The unload of a head
+        with filament picks the head itself (the sensor is read as the unload reads it, and an
+        unreadable one fails the swap at this step, as the unload would); the spool, the load
+        and the return do not wait on the unit. In a paused print the head has left the part
+        already, and nothing moves; outside a print (a T typed at the console) neither. A head that
+        is active already is not picked again. Without X and Y homed nothing moves, and the log
+        says so.
+        """
+        if not todo or self._adapter().print_state() != "printing" or self.host.u1.pause_taken():
+            return
+        first = todo[0]
+        if first == "unload" and self._head_sensor(state):
+            return  # the unload picks the head itself, before its tip
+        if first != "unload" and first not in UNIT_STEPS:
+            return
+        head, timer = state.slot.head, state.timer
+        if not self._xy_homed():
+            logging.info(
+                "ace2k_u1: head %d: X and Y not homed: the swap does not pick it before %s",
+                head + 1,
+                first,
+            )
+            return
+        if self._adapter().active_head(self.host.u1) != head:
+            self.host.u1.script(f"T{head} A0", timer)
+        self.host.u1.script(DISCARD_POSITION, timer)
+
+    def _head_sensor(self, state: SwapState) -> bool:
+        """Reads the sensor of the swap's head; an unreadable one raises, naming the head."""
+        try:
+            return bool(self._adapter().head_set(state.new))
+        except Exception as err:
+            raise RuntimeError(
+                f"head {state.slot.head + 1}: its sensor cannot be read — {error_line(err)}"
+            ) from err
 
     def _probe_would_wait(self, state: SwapState) -> bool:
         """Tells whether the probe of a head with an unknown lane would run inside a printing T.
@@ -661,6 +866,7 @@ class Swapper:
         """
         self.host.tracker.clear_wait_skip()
         self.host.tracker.drop_owed_heat()
+        state.timed = False  # a RESUME's time holds the pause
         self.swap_pending = state
         self.put_back(state, paused)
         try:
@@ -803,7 +1009,7 @@ class Swapper:
 
     def _step_unload(self, state: SwapState) -> None:
         adapter = self._adapter()
-        old, new = state.old, state.new
+        old = state.old
         head = state.slot.head
         self._xy_homed_or_raise(head)
         if old is None:
@@ -815,7 +1021,9 @@ class Swapper:
         # freed length of an earlier attempt does not count for this one.
         state.unloaded = False
         state.freed_mm = 0.0
-        if adapter.head_set(new):  # the sensor of the head: the filament of the old lane is in it
+        if self._head_sensor(
+            state
+        ):  # the sensor of the head: the filament of the old lane is in it
             # The unload macro forms the tip at the temperature of the old material. It takes the
             # filament out of the gear and leaves its tip on the sensor of the head. Only the roll
             # back of the old lane clears the tip. By default the macro ends by heating toward the
@@ -929,6 +1137,13 @@ class Swapper:
                 f"{adapter.lane_text(new)} did not reach the head's sensor within its "
                 f"{budget_mm:g} mm"
             )
+        end = new.push_last_end  # the end of the push move that gave the error
+        if error is not None and end in STOPPED_KINDS:
+            # Stopped from outside (a cancelled print, a stop request, the unit's link): the U1's
+            # error for it is a timeout, which it was not.
+            raise StoppedError(
+                f"{adapter.lane_text(new)}'s push was stopped before the head ({end})"
+            )
         if error is not None:
             raise RuntimeError(f"{adapter.lane_text(new)} did not reach the head ({error})")
         # The filament is at the sensor of the head. The unit follows the load macro from its first
@@ -949,31 +1164,99 @@ class Swapper:
         # the push did not run (the lane was already in the head). If it is armed already, nothing
         # happens.
         adapter.follow.arm(new, PAUSE_WAIT_S)
-        temp = self._swap_temp(state.tool)
-        if not temp:
-            temp = self._load_temp(new)
-            what = f"T{state.tool}" if state.tool is not None else f"head {head + 1}"
-            adapter.say(
-                f"ace2k_u1: head {head + 1}: no printing temperature known for {what}: the "
-                f"load temperature, {temp:g} °C, is kept"
-            )
-        state.print_temp = temp
+        temp = state.print_temp = self.load_print_temp(state)
         # The moves and extrusions of the macro act on the active head. The head is selected here
         # every time. The T<head> of the unload runs only when there is filament to unload. A swap
         # or refill that goes on at its RESUME finds whatever head the pause left active.
         timer = state.timer
+        # A background swap gripped already: the macro skips its move through the gear.
+        grip = " GRIP=0" if state.gripped else ""
         self.host.u1.script(f"T{head} A0", timer)
         self._macro(
             state,
             SWAP_LOAD_MACRO,
             f"HEAD={head} LOAD_TEMP={temp:g} PRINT_TEMP={temp:g} "
-            f"MATERIAL={material_param(self.host.spool_lanes.material(new))}",
+            f"MATERIAL={material_param(self.host.spool_lanes.material(new))}{grip}",
         )
         # The kept temperature is used up. A later swap takes a newer one, else the one of the plan.
         # A refill with no tool has none.
         plan = self.host.tracker.plan
         if plan is not None and state.tool is not None:
             plan.kept.pop(state.tool, None)
+
+    def load_print_temp(self, state: SwapState) -> float:
+        """Returns the temperature the new filament loads and prints at.
+
+        It is the swap's temperature of the tool (_swap_temp). With none known, it is the U1's
+        load temperature, and the console says so.
+        """
+        temp = self._swap_temp(state.tool)
+        if temp:
+            return temp
+        head = state.slot.head
+        temp = self._load_temp(state.new)
+        what = f"T{state.tool}" if state.tool is not None else f"head {head + 1}"
+        self._adapter().say(
+            f"ace2k_u1: head {head + 1}: no printing temperature known for {what}: the "
+            f"load temperature, {temp:g} °C, is kept"
+        )
+        return temp
+
+    def _load_done(self, state: SwapState) -> None:
+        """Stands in for a load that a background swap's purge covered in the dock.
+
+        The dock gives the heater back at its end, so the head may be at its standby. Here only
+        its target is set (M104, no wait), before the spool, the loaded check and the return:
+        the head is not picked yet, and a wait now would hold the head that leaves, hot, wherever
+        the file's T found it (over the wipe tower). The return picks the head, takes it to the
+        cleaning area and waits there (_wait_hot), as the U1's pre-extrusion does, before any
+        retraction. So the retraction never pulls cold filament, and the file's first M109 after
+        the swap is skipped only after a real wait. The temperature is the newest the file asked
+        for the tool (kept, with what it called while the dock ran), else the one the dock purged
+        at. The kept temperature of the tool is used up, as by the load.
+        """
+        plan = self.host.tracker.plan
+        kept = None
+        if plan is not None and state.tool is not None:
+            kept = plan.kept.pop(state.tool, None)
+        temp = kept or state.print_temp or self.load_print_temp(state)
+        state.print_temp = temp
+        self.host.u1.script(f"M104 S{temp:g} T{state.slot.head} A0", state.timer)
+
+    def _wait_hot(self, state: SwapState) -> None:
+        """Takes the picked head to the cleaning area and waits for its printing temperature.
+
+        After a load the dock's purge covered (_load_done set the target only), and whenever the
+        head's target or temperature is below print_temp (a RESUME of a swap that failed after
+        the load: its pause may have left the head cooling). An unread heater waits too. It runs
+        in the return, after the head's T and before any retraction, in the swap's own saved
+        G-code state, so the restore puts the position back as after any swap. The U1's
+        pre-extrusion starts the same way (MOVE_TO_DISCARD_FILAMENT_POSITION, then M109).
+        """
+        if state.print_temp is None:
+            return
+        if "load" not in state.done_in_dock and not self._below(state.slot.head, state.print_temp):
+            return
+        head, timer = state.slot.head, state.timer
+        self.host.u1.script(DISCARD_POSITION, timer)
+        self.host.u1.script(f"M109 S{state.print_temp:g} T{head} A0", timer)
+
+    def _below(self, head: int, temp: float) -> bool:
+        """Tells whether the head's target, or its temperature, is under temp.
+
+        A head with no extruder or heater to read waits, and the log says so.
+        """
+        ext = self._extruder(head)
+        heater = None if ext is None else ext.get_heater()
+        if heater is None:
+            logging.info(
+                "ace2k_u1: head %d: its heater cannot be read: the return waits for %g °C",
+                head + 1,
+                temp,
+            )
+            return True
+        now, target = heater.get_temp(self.host.reactor.monotonic())
+        return target < temp - WAIT_HOT_DELTA_C or now < temp - WAIT_HOT_DELTA_C
 
     def _step_loaded(self, state: SwapState) -> None:
         adapter = self._adapter()
@@ -986,34 +1269,38 @@ class Swapper:
         state.slot.loaded = new  # the swap ended with this lane in the head
 
     def _step_return(self, state: SwapState) -> None:
-        # The U1's own pre-extrusion with no purge (LENGTH=0): the load macro has purged and
-        # cleaned once, so this adds its fan, its cut, a second clean and its idle exit out of
-        # the cleaning area: one purge, two cleans. A soft filament purges nothing here either:
-        # the U1's macro sets its 10 mm only when SOFT is True, and SOFT=1 reaches it as the
-        # string "1". For a tool it runs forced, and the U1 records the tool as pre-extruded,
-        # so the file's call right after the swap is skipped. The macro retracts 0.5 mm before
-        # its fan and its clean. When the tool owes more (_retract_owed: what the slicer
-        # retracted when the tool last left the head, because the slicer pushes that much back
-        # at the tower), _retract_rest spends it and retracts the rest just before the macro.
-        # The head is then hot at the cleaning area after the load macro's purge and clean, so
-        # the nozzle leaves the bin retracted by the total and the macro's clean comes last.
-        # With nothing known, in a pause, or for a refill, the U1's 0.5 mm stays alone.
-        # A refill with no tool runs the same macro directly, with no purge too: its load macro
-        # has purged. The restore then puts back the G-code state with no move, and the next
-        # print move takes the head to the part. If the print is paused, the RESUME of the U1
-        # moves back by itself.
+        # The U1's own pre-extrusion with no purge (LENGTH=0): the load macro has purged and cleaned
+        # once, so this adds its fan, its cut, a second clean and its idle exit out of the cleaning
+        # area: one purge, two cleans. After a background swap whose purge covered the load in the
+        # dock, the head was purged there; it heats and waits at the cleaning area once picked
+        # (_wait_hot), so this gives the swap's only clean. A soft filament purges nothing
+        # here either: the U1's macro sets its 10 mm only when SOFT is True, and SOFT=1 reaches it
+        # as the string "1". For a tool it runs forced, and the U1 records the tool as pre-extruded,
+        # so the file's call right after the swap is skipped. The macro retracts 0.5 mm before its
+        # fan and its clean. When the tool owes more (_retract_owed: what the slicer retracted when
+        # the tool last left the head, because the slicer pushes that much back at the tower),
+        # _retract_rest spends it and retracts the rest just before the macro. The head is then hot
+        # at the cleaning area after the load macro's purge and clean, so the nozzle leaves the bin
+        # retracted by the total and the macro's clean comes last. With nothing known, in a pause,
+        # or for a refill, the U1's 0.5 mm stays alone. A refill with no tool runs the same macro
+        # directly, with no purge too: its load macro has purged. The restore then puts back the
+        # G-code state with no move, and the next print move takes the head to the part. If the
+        # print is paused, the RESUME of the U1 moves back by itself. With arrival_wipe, both calls
+        # wipe once more before the idle exit (_arriving).
         head, timer = state.slot.head, state.timer
         # A mark left from an earlier swap must not skip this swap's own pre-extrusion.
         self.host.tracker.preextrude_after = None
         # The head is selected first, with the U1's own T. Otherwise its pre-extrusion sends a T
         # of the file's kind, which would come back here at a RESUME with another head active.
         self.host.u1.script(f"T{head} A0", timer)
+        self._wait_hot(state)
         self._primed_e_pos(head)
         if state.tool is not None:
             tool = state.tool
             mm = self._retract_owed(state)
             said = "" if mm is None else self._retract_rest(state, tool, mm)
-            self.host.u1.script(f"{PREEXTRUDE} INDEX={tool} FORCE=1 LENGTH=0", timer)
+            with self._arriving(head):
+                self.host.u1.script(f"{PREEXTRUDE} INDEX={tool} FORCE=1 LENGTH=0", timer)
             self._adapter().say(
                 f"ace2k_u1: head {head + 1}: pre-extrusion after the swap (T{tool}){said}"
             )
@@ -1021,8 +1308,109 @@ class Swapper:
         # The temperature the load left the head at. With no tool, it is the U1's load temperature.
         temp = state.print_temp if state.print_temp is not None else self._load_temp(state.new)
         soft = self._soft(head)
-        self.host.u1.script(f"{INNER_PREEXTRUDE} SOFT={soft} TEMP={temp:g} LENGTH=0", timer)
+        with self._arriving(head):
+            self.host.u1.script(f"{INNER_PREEXTRUDE} SOFT={soft} TEMP={temp:g} LENGTH=0", timer)
         self._adapter().say(f"ace2k_u1: head {head + 1}: pre-extrusion after the refill")
+
+    @contextlib.contextmanager
+    def _arriving(self, head: int) -> Iterator[None]:
+        """Marks the return's call of the U1's pre-extrusion of head, with arrival_wipe set.
+
+        The U1 runs its pre-extrusion as always (SM_PRINT_PREEXTRUDE_FILAMENT, or its macro for
+        a refill), with its own checks, temperature, waits and record of the tool. Only its idle
+        exit at the end is wrapped: the wipe runs just before it (idle_exit_wipe). The mark ends
+        with the call, error or not.
+        """
+        if not self.host.swap_cfg.arrival_wipe:
+            yield
+            return
+        self.arrival = Arrival(head)
+        try:
+            yield
+        finally:
+            self.arrival = None
+
+    def idle_exit_wipe(self, gcmd: GCodeCommand) -> None:
+        """Wipes once more on the pads before the U1's idle exit at the end of a return.
+
+        The wrap of MOVE_TO_XY_IDLE_POSITION_EXTRUDER calls this before the U1's own handler. It
+        wipes only for the return marked by _arriving, once, and only for a call with no offset
+        (the end of the pre-extrusion macro: its move to the cleaning area calls the same command
+        with offsets) while that return's head is the active one. The head is then at the
+        cleaning area, where the macro's drop in the bin left it; the U1's wipe starts and ends
+        there. A bare idle exit with the active head unread or another one says so once.
+        """
+        mark = self.arrival
+        if mark is None:
+            return
+        params = gcmd.get_command_parameters()
+        if mark.spent or any(key in params for key in IDLE_EXIT_OFFSETS):
+            return
+        name = self.host.u1.active_extruder_name()  # read once: the test and the log line
+        if name is None or self._adapter().head_of_extruder(name) != mark.head:
+            if not mark.said:
+                mark.said = True
+                logging.info(
+                    "ace2k_u1: head %d: no wipe before this idle exit: the active extruder is %s",
+                    mark.head + 1,
+                    "unread" if name is None else name,
+                )
+            return
+        mark.spent = True
+        self.host.u1.script(ARRIVAL_WIPE)  # inside the U1's command: under the lock it holds
+        logging.info(
+            "ace2k_u1: head %d: the arrival wipes once more before its idle exit", mark.head + 1
+        )
+
+    def dock_exit_wipe(self, head: int) -> None:
+        """Wipes head once on the pads after a T of the file took it from its dock with no swap.
+
+        The T wrapper calls this for a head in background_heads (Wraps._left_dock). The docks of
+        those heads have an opening for the purge, so a parked head may ooze while it waits. A T
+        with a swap cleans the head in its return; a plain T does not. So, with arrival_wipe, the
+        head goes to the cleaning area the way the U1's pre-extrusion starts
+        (MOVE_TO_DISCARD_FILAMENT_POSITION), wipes once with the U1's wipe (ARRIVAL_WIPE) and
+        leaves through the U1's idle exit, as the pre-extrusion ends. It runs in its own saved
+        G-code state, restored with no move: the next print move takes the head to the part. The
+        caller has checked that the print is printing (Wraps._dock_watch). Only with X and Y
+        homed, and not in the print's start (layer 0): the start picks the heads for its own
+        checks and cleans the nozzle itself. A failure is logged and said (the wipe's first, then
+        a failed restore), and the print goes on; the wipe is said done only when both ran.
+        """
+        if not self.host.swap_cfg.arrival_wipe:
+            return
+        if not self._xy_homed() or self.host.u1.current_layer() == 0:
+            return
+        u1 = self.host.u1
+        try:
+            u1.script(f"SAVE_GCODE_STATE NAME={DOCK_WIPE_STATE}")
+        except Exception as err:
+            self._dock_wipe_failed(head, "its wipe after the dock failed", err)
+            return
+        failed: Exception | None = None
+        try:
+            u1.script(DISCARD_POSITION)
+            u1.script(ARRIVAL_WIPE)
+            u1.idle_exit()
+        except Exception as err:
+            failed = err
+        restored: Exception | None = None
+        try:
+            u1.script(f"RESTORE_GCODE_STATE NAME={DOCK_WIPE_STATE} MOVE=0")
+        except Exception as err:
+            restored = err
+        if failed is not None:
+            self._dock_wipe_failed(head, "its wipe after the dock failed", failed)
+        if restored is not None:
+            what = "the G-code state after its wipe was not restored"
+            self._dock_wipe_failed(head, what, restored)
+        if failed is None and restored is None:
+            self._adapter().say(f"ace2k_u1: head {head + 1}: leaves its dock: one wipe")
+
+    def _dock_wipe_failed(self, head: int, what: str, err: Exception) -> None:
+        """Logs and says a failure of the dock wipe of head (dock_exit_wipe)."""
+        logging.error("ace2k_u1: head %d: %s", head + 1, what, exc_info=err)
+        self._adapter().say(f"ace2k_u1: head {head + 1}: {what} — {error_line(err)}")
 
     def _retract_rest(self, state: SwapState, tool: int, mm: float) -> str:
         """Retracts what mm adds to the U1's 0.5 mm, before the U1's pre-extrusion runs.
@@ -1315,7 +1703,8 @@ class Swapper:
                 f"the head — {'; '.join(problems)}"
             )
         try:
-            self.host.u1.script(TagWriter.format_params(params, TAG_QUOTED))
+            with in_use_module.own_write(self._adapter()):
+                self.host.u1.script(TagWriter.format_params(params, TAG_QUOTED))
         except Exception as err:
             why = error_line(err)
             return f"ace2k_u1: head {h.head + 1}: spool setting refused: {why}"

@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { headOfIn, swaps } from '../js/print-plan.js';
+import { chosen, headOfIn, liveLanes, swapKinds } from '../js/print-plan.js';
+import { placement } from '../js/planner.js';
+import { bgHeads } from '../js/state.js';
+import { changesOf, swapStops, timesOf } from '../js/swap-time.js';
 import { estimateMs } from '../js/reading.js';
 import { bands, liveAt, segmentsOf } from '../js/timeline.js';
 
@@ -71,7 +74,9 @@ test('printing: heads swap spools, the plan matches its bays and "now" and "next
   const s = demo('printing');
   const p = s.ace2k_u1.plan;
   const headOf = headOfIn(p.lanes);
-  const counts = swaps(p.order, p.choice, headOf);
+  // The swaps of each head: swapKinds counted on that head alone.
+  const onHead = (/** @type {number} */ h) => swapKinds(p.order, p.choice, (k) => (headOf(k) === h ? h : null)).stops;
+  const counts = Object.fromEntries(Object.keys(p.heads).map((h) => [h, onHead(Number(h))]));
   assert.ok(Object.values(counts).some((n) => Number(n) > 0));
   assert.deepEqual(p.heads, counts);
   const segs = segmentsOf(p);
@@ -122,4 +127,34 @@ test('files: the big nine-colour file has its size, a card and a plan that arriv
   const plan = d.plans['big-9-colours.gcode'];
   assert.equal(plan.tools.length, 9);
   assert.ok(plan.delayMs > /** @type {number} */ (estimateMs(big.size)));
+});
+
+test('files: benchy on four units shows inline, ready and late swaps', () => {
+  const files = demo('files');
+  const status = demo('four');
+  const file = 'benchy-5col.gcode';
+  const plan = { ...files.plans[file], lanes: liveLanes(status, files.plans[file]) };
+  const card = files.cards[file];
+  const frame = { start: card.gcodeStart, end: card.gcodeEnd };
+  const times = timesOf(status);
+  const bg = bgHeads(status);
+  assert.deepEqual(bg, [0, 1]);
+  for (const k of ['inline', 'ready', 'dock', 'resume']) assert.ok(status.ace2k_u1.swap_times[k].n > 0, k);
+  const place = /** @type {any} */ (
+    placement(plan, chosen(plan, {}), plan.lanes, {}, [], bg, { frame, timeS: card.time, times })
+  );
+  const headOf = headOfIn(plan.lanes);
+  const stops = swapStops(changesOf(plan, frame, card.time), place.choice, headOf, bg, times).stops;
+  const kinds = new Set(stops.filter(Boolean).map((x) => /** @type {any} */ (x).kind));
+  assert.deepEqual([...kinds].sort(), ['inline', 'late', 'ready']);
+  // Inline: two changes in a row on one background head. Ready and late: a background head that was parked.
+  const changes = changesOf(plan, frame, card.time);
+  const headAt = (/** @type {number} */ i) => headOf(place.choice[changes[i].tool]);
+  const inline = stops.findIndex((x) => x?.kind === 'inline');
+  assert.ok(inline > 0 && headAt(inline) === headAt(inline - 1) && bg.includes(headAt(inline)), 'two changes in a row');
+  for (const kind of ['ready', 'late'])
+    assert.ok(bg.includes(headAt(stops.findIndex((x) => x?.kind === kind))), `${kind} is on a background head`);
+  // Tool changes spread over the file, not bunched at one end.
+  const at = files.plans[file].order_at;
+  assert.ok(at[0] <= card.gcodeStart + 1 && at.at(-1) > card.gcodeEnd * 0.7);
 });

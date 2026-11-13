@@ -1,6 +1,10 @@
 {
   "gcodes": {
     "ACEK_ADAPTER_STATUS": "Report what the ace2k U1 adapter hooked",
+    "ACEK_BG_MOVE": "Move parked HEAD's extruder DISTANCE mm at VELOCITY mm/s, outside a print (bench)",
+    "ACEK_BG_STATUS": "Report the background swap of each head",
+    "ACEK_BG_STOP": "Stop HEAD's background swap at its next step, or drop the state it kept",
+    "ACEK_BG_SWAP": "Swap parked HEAD to LANE in its dock, outside a print (bench); its T loads it",
     "ACEK_EJECT": "Take LANE's filament (of UNIT, with several units) out of its bay, unloading its head on the U1 first when the head holds it; WAIT=0 returns at once",
     "ACEK_FREE_CHECK": "Run a swap's free check on LANE (of UNIT) alone: roll it back up to LENGTH at SPEED, watching its plunger; says free or held",
     "ACEK_HEAD_PREPARE": "Before Load into head N: push LANE (of UNIT) to its head's sensor to read its tag when its material is not set; refused when it stays unset",
@@ -17,6 +21,7 @@
     "ACEK_LANE_ACTIVE",
     "M104",
     "M109",
+    "MOVE_TO_XY_IDLE_POSITION_EXTRUDER",
     "RESUME",
     "SDCARD_PRINT_FILE",
     "SDCARD_PRINT_FILE_WITH_PARAMETERS",
@@ -61,6 +66,7 @@
     "ACEK_LANE_ACTIVE": "help of ACEK_LANE_ACTIVE",
     "M104": "help of M104",
     "M109": "help of M109",
+    "MOVE_TO_XY_IDLE_POSITION_EXTRUDER": "help of MOVE_TO_XY_IDLE_POSITION_EXTRUDER",
     "RESUME": "help of RESUME",
     "SDCARD_PRINT_FILE": "help of SDCARD_PRINT_FILE",
     "SDCARD_PRINT_FILE_WITH_PARAMETERS": "help of SDCARD_PRINT_FILE_WITH_PARAMETERS",
@@ -117,11 +123,14 @@
       "lanes",
       "pause_reason",
       "plan",
+      "print_stops",
       "probe_cold",
       "probe_max_temp",
       "resuming",
       "setting_for",
-      "spools"
+      "spools",
+      "swap_times",
+      "swapping"
     ],
     "heads_entry": [
       "lane",
@@ -197,7 +206,33 @@
       "push_end",
       "tag_forgotten"
     ],
-    "push_end": "blocked"
+    "print_stops": [
+      "n",
+      "s",
+      "since"
+    ],
+    "push_end": "blocked",
+    "swap_times": [
+      "dock",
+      "inline",
+      "ready",
+      "resume",
+      "steps"
+    ],
+    "swap_times_entry": [
+      "n",
+      "s"
+    ],
+    "swap_times_steps": [
+      "free",
+      "grip",
+      "hand over",
+      "heat",
+      "loaded",
+      "push",
+      "roll back",
+      "unload"
+    ]
   },
   "pause_reason": {
     "not_hooked": null,

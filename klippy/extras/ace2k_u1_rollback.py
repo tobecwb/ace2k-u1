@@ -20,11 +20,19 @@ if TYPE_CHECKING:
     from .ace2k_u1_swap import SwapState
 
 try:
-    from .ace2k_u1_common import PUSH_POLL_S, move_max_mm, unit_move_wait_s
+    from .ace2k_u1_common import (
+        PUSH_POLL_S,
+        STOPPED_KINDS,
+        StoppedError,
+        move_max_mm,
+        unit_move_wait_s,
+    )
     from .ace2k_u1_hooks import NUDGE_MARGIN_S
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
     from ace2k_u1_common import (  # type: ignore[import-not-found, no-redef]
         PUSH_POLL_S,
+        STOPPED_KINDS,
+        StoppedError,
         move_max_mm,
         unit_move_wait_s,
     )
@@ -174,7 +182,6 @@ class Rollback:
                 reactor.pause(reactor.monotonic() + PUSH_POLL_S)
         finally:
             h.hold = held
-            adapter.moved_out(h)  # a bay that it emptied keeps the spool record of the lane
         # The wait above has seen the final event arrive.
         kind: str | None = cast("FeedEvent", move.result()).get("kind")
         if kind == "runout":
@@ -194,6 +201,8 @@ class Rollback:
                 f"ace2k_u1: head {h.head + 1}: {adapter.lane_text(h)}'s tail is past the unit's "
                 "drive gear, at its bay: take it out by hand"
             )
+        elif kind in STOPPED_KINDS:
+            raise StoppedError(f"{adapter.lane_text(h)} ended {kind}")
         elif kind != "done":
             raise RuntimeError(f"{adapter.lane_text(h)} ended {kind}")
         return kind

@@ -10,14 +10,15 @@ tests/test_structure.py checks them against the tree of the U1. So if an update 
 one, that test fails, not the printer.
 
 Some public reads of the objects of the U1 are not here. They live where they are used. These
-are its virtual_sdcard, its extruder list and the print_stats object that the Adapter is given
-at the hook.
+are its virtual_sdcard (but for from_file), its extruder list and the print_stats object that the
+Adapter is given at the hook.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
         PrintStats,
         PrintTaskConfig,
         Status,
+        TangleCheck,
     )
 
 try:
@@ -44,6 +46,94 @@ Spool = tuple[str, "str | None", str, str]
 TAG_KEYS = ("vendor", "type", "subtype")  # the three names of the filament setting, in U1 order
 
 
+class TangleOffError(Exception):
+    """The U1's tangle check of a head could not be turned off: its parked moves do not run."""
+
+
+class _TangleHold:
+    """The adapter's hold on the tangle check of one head (U1Printer.tangle_check_off).
+
+    Made by turning the check off, or by finding it off already (the U1 holds it then). While it
+    lasts, u1_call stands for the check's skip_entangle_check: the U1's own calls go through it.
+    """
+
+    def __init__(self, check: TangleCheck, head: int) -> None:
+        method, flag = hooks_module.TANGLE_SKIP
+        self.check, self.head, self.count = check, head, 0
+        self.own: Callable[[bool], None] = getattr(check, method)  # the U1's method
+        self.own_set = method in vars(check)  # set on the object itself, not by its class
+        self.u1 = getattr(check, flag, False) is True  # the U1 holds it off too
+        if not self.u1:
+            try:
+                self.own(True)
+            except Exception as err:
+                logging.exception("ace2k_u1: turning off the tangle check of head %d", head + 1)
+                raise TangleOffError(
+                    f"the tangle check of head {head + 1} could not be turned off: {err}"
+                ) from err
+        setattr(check, method, self.u1_call)
+
+    def u1_call(self, skip: bool = False) -> None:
+        """skip_entangle_check, as the U1 calls it while the hold lasts.
+
+        Off is passed on (it takes a new start and keeps the check off). On is recorded and
+        applied when the hold ends: the parked moves still run.
+        """
+        self.u1 = bool(skip)
+        if skip:
+            self.own(True)
+            return
+        logging.info(
+            "ace2k_u1: the U1 turned on the tangle check of head %d while its parked moves run: "
+            "it is turned on once they have ended",
+            self.head + 1,
+        )
+
+    def release(self) -> None:
+        """Gives the check its method back and turns it on, unless the U1 still holds it off."""
+        method, _ = hooks_module.TANGLE_SKIP
+        if self.own_set:
+            setattr(self.check, method, self.own)  # the one the object had
+        else:
+            with contextlib.suppress(AttributeError):
+                delattr(self.check, method)  # the class's own method again
+        if self.u1:
+            logging.info(
+                "ace2k_u1: the tangle check of head %d is held off by the U1: left to it",
+                self.head + 1,
+            )
+            return
+        try:
+            self.own(False)
+        except Exception:
+            logging.exception("ace2k_u1: turning on the tangle check of head %d", self.head + 1)
+            self._grace()
+
+    def _grace(self) -> None:
+        """Turns the check on with the U1's start-of-print grace, when turning it on failed.
+
+        Turning it on failed before it took a new start, so the start it has is the one from
+        before the parked moves. The U1's check judges nothing during its grace
+        (filament_entangle_detect.py:197): it takes each new reading as the start, and it gives
+        the grace back the same way at the start of a print and when the check is set on
+        (filament_entangle_detect.py:116, 128). So the stale start is dropped at its first
+        reading, and no tangle is judged against it. Leaving the check off instead would leave
+        the head unwatched for the rest of the print and the next ones: the U1 does not clear the
+        flag at a print's start, and a later hold would take it for the U1's. Without the grace's
+        attributes it is turned on all the same, and the log says its start may be stale.
+        """
+        _, flag = hooks_module.TANGLE_SKIP
+        remained, length = hooks_module.TANGLE_GRACE
+        how = "with the U1's grace"
+        try:
+            setattr(self.check, remained, float(getattr(self.check, length)))
+        except Exception:
+            logging.exception("ace2k_u1: the grace of the tangle check of head %d", self.head + 1)
+            how = "with no grace: its start may be stale"
+        setattr(self.check, flag, False)
+        logging.error("ace2k_u1: the tangle check of head %d is on again %s", self.head + 1, how)
+
+
 class U1Printer:
     """Reads the private state of the U1.
 
@@ -55,6 +145,7 @@ class U1Printer:
         self._printer = printer
         self._reactor = reactor
         self._settings_unread = False  # a read of the heads' settings failed, and was logged
+        self._tangle_holds: dict[int, _TangleHold] = {}  # head -> the adapter's hold on its check
 
     def _lookup(self, name: str) -> object:
         """Returns the printer object called name, or None when it is not there.
@@ -86,6 +177,22 @@ class U1Printer:
 
     def paused(self) -> bool:
         return self.print_state() == "paused"
+
+    def from_file(self) -> bool:
+        """Tells whether the command that runs now is a line of the printed file.
+
+        The virtual_sdcard of the U1 says so while it runs a line of the file. A command typed at
+        the console runs between two lines, so it is not one. Without a virtual_sdcard that can
+        tell, it returns True.
+        """
+        ask = getattr(self._lookup("virtual_sdcard"), "is_cmd_from_sd", None)
+        if not callable(ask):
+            return True
+        try:
+            return bool(ask())
+        except Exception:
+            logging.debug("ace2k_u1: virtual_sdcard.is_cmd_from_sd", exc_info=True)
+            return True
 
     def u1_paused(self) -> bool:
         """Tells whether the print is paused.
@@ -176,6 +283,55 @@ class U1Printer:
     def nozzle_volume(extruder: Extruder | None) -> str:
         volume: str = getattr(extruder, hooks_module.EXTRUDER_ATTRIBUTES["volume"], "standard")
         return volume
+
+    # --- the tangle check of a head ---------------------------------------------------------
+
+    @contextlib.contextmanager
+    def tangle_check_off(self, head: int) -> Iterator[None]:
+        """Holds the U1's tangle check of the head off while the block runs.
+
+        Why: queuing a parked move moves the position the check reads by the move's distance
+        backwards at once, and the move then walks it back while it runs on the MCU (the
+        mechanism is in ace2k_u1_parked.ParkedMover._run). The lane's wheel stays still through
+        both, so a check left on sees a tangle. The block must hold the queue and the wait for
+        the end of the moves, also when the queue fails part-way: only then does the check read
+        the head as before the moves. The U1 turns the check off the same way around its own load
+        and unload (filament_feed.py:1808/1822, 1858/1894, 1949/1977).
+
+        The hold is the adapter's own. While it lasts, the check's skip_entangle_check is
+        replaced on the object, so a U1 load or unload of the same head that turns the check on
+        mid-block leaves it off until the block ends. Holds of the same head nest. When the last
+        one ends, the U1's method is put back, and the check is turned on (which takes the head's
+        position and wheel counts as the new start), unless the U1 holds it off itself then: it
+        turned it off before the block or inside it and has not turned it on again yet.
+
+        A head with no check runs the block with none. A check that cannot be turned off raises
+        TangleOffError before the block runs: the parked moves must not run unguarded.
+        """
+        check = self._tangle_check(head)
+        if check is None:
+            yield
+            return
+        hold = self._tangle_holds.get(head)
+        if hold is None:
+            hold = self._tangle_holds[head] = _TangleHold(check, head)
+        hold.count += 1
+        try:
+            yield
+        finally:
+            hold.count -= 1
+            if hold.count == 0:
+                del self._tangle_holds[head]
+                hold.release()
+
+    def _tangle_check(self, head: int) -> TangleCheck | None:
+        name = hooks_module.TANGLE_CHECK % head
+        check = cast("TangleCheck | None", self._lookup(name))
+        if check is None:
+            logging.debug(
+                "ace2k_u1: no %s: the parked moves of head %d run with no check", name, head + 1
+            )
+        return check
 
     # --- G-code ----------------------------------------------------------------------------
 

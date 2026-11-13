@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { segmentsOf, bands, liveAt } from '../js/timeline.js';
-import { swaps } from '../js/print-plan.js';
+import { swapKinds } from '../js/print-plan.js';
 
 const plan = { order: [0, 1, 0, 2, 1], order_at: [0, 100, 300, 600, 800], size: 1000 };
 const choice = { 0: '1', 1: '2', 2: '3' };
@@ -75,8 +75,8 @@ test('offsets of the wrong length or a zero size fall back to equal shares', () 
 
 test('bands count the same swaps as print-plan', () => {
   const b = bands(segmentsOf(plan), choice, headOf);
-  const want = swaps(plan.order, choice, headOf);
-  assert.equal(b.find((x) => x.head === 0)?.swaps, want[0]);
+  const want = swapKinds(plan.order, choice, (k) => (headOf(k) === 0 ? 0 : null));
+  assert.equal(b.find((x) => x.head === 0)?.swaps, want.stops);
   assert.deepEqual(b.find((x) => x.head === 0)?.marks, [0.1, 0.3, 0.8]);
   assert.equal(b.find((x) => x.head === 1)?.swaps, 0);
 });
@@ -128,7 +128,8 @@ test('now, swapping and next follow the position', () => {
   const s = segmentsOf(plan);
   const a = liveAt(s, choice, headOf, 0.05);
   assert.deepEqual(a.now, { tool: 0, head: 0, key: '1' });
-  assert.deepEqual(a.next, { head: 0, from: 0, to: 1, x: 0.1 });
+  assert.deepEqual(a.next, { head: 0, from: 0, to: 1, x: 0.1, free: false });
+  assert.equal(a.nextStop, a.next);
   assert.deepEqual(liveAt(s, choice, headOf, 0.12, 0.05).swapping, { head: 0, from: 0, to: 1 });
   assert.equal(liveAt(s, choice, headOf, 0.25, 0.05).swapping, null);
   assert.equal(liveAt(s, choice, headOf, 0.85).next, null);
@@ -152,7 +153,7 @@ test('a position before every segment has no current change', () => {
 test('no plan, no timeline', () => {
   assert.deepEqual(segmentsOf(null), []);
   assert.deepEqual(bands([], {}, headOf), []);
-  assert.deepEqual(liveAt([], {}, headOf, 0.5), { now: null, swapping: null, next: null });
+  assert.deepEqual(liveAt([], {}, headOf, 0.5), { now: null, swapping: null, next: null, nextStop: null });
 });
 
 test('the swap in progress lasts about one swap of print time, never a third of a long part', () => {
@@ -214,4 +215,33 @@ test("segments measure the offsets against the frame (the G-code bytes), clamped
     bad.map((x) => x.x),
     [0, 1 / 3, 2 / 3],
   );
+});
+
+test('bands with the stops: late background swaps get their own marks, every swap its cost, each head its time', () => {
+  const segs = [
+    { tool: 0, x: 0, e: 0.25 },
+    { tool: 1, x: 0.25, e: 0.5 },
+    { tool: 2, x: 0.5, e: 0.75 },
+    { tool: 1, x: 0.75, e: 0.8 },
+    { tool: 0, x: 0.8, e: 1 },
+  ];
+  const ch = { 0: 'a', 1: 'c', 2: 'b' };
+  const hf = (/** @type {string} */ k) => ({ a: 0, b: 0, c: 1 })[k] ?? null;
+  const stops = [
+    null,
+    null,
+    { kind: /** @type {const} */ ('late'), s: 100 },
+    null,
+    { kind: /** @type {const} */ ('ready'), s: 15 },
+  ];
+  const [h0] = bands(segs, ch, hf, [0], stops);
+  assert.deepEqual([h0.marks, h0.freeMarks, h0.lateMarks], [[], [0.8], [0.5]]);
+  assert.equal(h0.free, 2);
+  assert.deepEqual(h0.cost, [
+    { x: 0.5, kind: 'late', s: 100 },
+    { x: 0.8, kind: 'ready', s: 15 },
+  ]);
+  assert.equal(h0.stopS, 115);
+  const [plain] = bands(segs, ch, hf, [0]);
+  assert.deepEqual([plain.lateMarks, plain.cost, plain.stopS], [[], [], null]);
 });

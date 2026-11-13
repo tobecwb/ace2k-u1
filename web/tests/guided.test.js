@@ -86,8 +86,12 @@ const movePlan = {
 
 function appOf(statusName, plan, print = {}, ui = {}) {
   const s = read(`../dev/demo-${statusName}.json`);
+  // These tests are about the guide, not the background swap or its times: they read the demo without both.
+  const u1 = { ...s.ace2k_u1, plan };
+  delete u1.background;
+  delete u1.swap_times;
   return {
-    status: { ...s, ace2k_u1: { ...s.ace2k_u1, plan }, print_stats: { state: 'standby' } },
+    status: { ...s, ace2k_u1: u1, print_stats: { state: 'standby' } },
     online: true,
     klippy: 'ready',
     selected: null,

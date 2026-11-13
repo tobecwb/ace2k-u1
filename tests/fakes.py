@@ -227,6 +227,7 @@ class FakeReactor:
     def __init__(self) -> None:
         self.now = 100.0
         self.async_callbacks = []
+        self.callbacks = []  # register_callback's, run by run_callbacks
         self.timers = []
         self.on_pause = []  # hooks called with the new time after each pause (tests append)
 
@@ -241,6 +242,14 @@ class FakeReactor:
 
     def register_async_callback(self, cb: Callable[[float], object]) -> None:
         self.async_callbacks.append(cb)  # a list's append: safe from another thread
+
+    def register_callback(self, cb: Callable[[float], object], waketime: float = NOW) -> None:
+        """reactor.register_callback: kept in callbacks, which a test runs (run_callbacks)."""
+        self.callbacks.append(cb)
+
+    def run_callbacks(self) -> None:
+        while self.callbacks:
+            self.callbacks.pop(0)(self.now)
 
     def run_async(self) -> None:
         while self.async_callbacks:
@@ -538,12 +547,16 @@ def extruder_list(count: int = 4) -> list[FakeExtruder]:
 
 
 class FakeRfid:
-    """ace2k's tag reader as the adapter uses it: start_read (API_VERSION 7) recorded; fail: an
-    exception it raises instead."""
+    """ace2k's tag reader as the adapter uses it: start_read (API_VERSION 7) and set_by_hand
+    recorded; fail: an exception start_read raises instead."""
 
     def __init__(self) -> None:
         self.reads = []
+        self.by_hand: list[int] = []
         self.fail = None
+
+    def set_by_hand(self, lane_index: int) -> None:
+        self.by_hand.append(lane_index)
 
     def start_read(self, lane_index: int) -> None:
         self.reads.append(lane_index)
@@ -838,12 +851,14 @@ class U1Moves:
     (a RETRACT_LENGTH makes it fail, as the U1's macro does),
     its printing_e_pos as it starts recorded in e_pos_at_preextrude. Its SOFT never changes the
     length: the U1's macro sets 10 mm only when SOFT == True, and a G-code parameter is a string.
-    T<h> A0 makes head h the active one.
+    T<h> A0 makes head h the active one. M109 S<t> T<h> A0 heats head h to t at once, and so
+    does ACEK_SWAP_LOAD to its PRINT_TEMP (both wait for it on the U1).
     The unload flow's STAGE=cancel sets the head's channel to unload_fail, then to preload_finish
     or wait_insert as its port reads. An AUTO_FEEDING without EXTRUDER= is ignored. The swap's
     macros as their defaults run: ACEK_SWAP_UNLOAD as INNER_FILAMENT_UNLOAD on the head it names
-    (made active), ACEK_SWAP_LOAD as its two extrusions and its clean (SWAP_GRIP_E + PURGE_E;
-    the swap's pre-extrusion cleans again) on the head it names (made active);
+    (made active), ACEK_SWAP_LOAD as its two extrusions and its clean (SWAP_GRIP_E + PURGE_E,
+    PURGE_E alone with GRIP=0; the swap's pre-extrusion cleans again) on the head it names (made
+    active);
     swap_macros records each call's parameters, e_pos_at_macro the head's printing_e_pos as each
     starts, active_at_macro the index of the head active as each is called (before the macro
     makes its own head active).
@@ -912,6 +927,8 @@ class U1Moves:
                 self._add(ext, self.LOAD_E)
                 printing = self.print_stats.state in ("printing", "paused")
                 self.flush_retract.append(abs(ext.printing_e_pos) if printing else 5.0)
+        elif cmd == "M109" and "A0" in words:
+            self._wait_heat(words)
         elif cmd[0] == "T" and cmd[1:].isdigit() and "A0" in words:
             self.active = self.extruders[int(cmd[1:])]
         elif cmd == "G1" and any(w.startswith("E") for w in words[1:]):
@@ -920,6 +937,14 @@ class U1Moves:
             self.active.printing_e_pos = 0.0
         if cmd == "SAVE_GCODE_STATE" and self.gcode_move is not None:
             self.gcode_move.save(self._value(words, "NAME") or "default")
+
+    def _wait_heat(self, words: list[str]) -> None:
+        """The U1's M109 S<t> T<h> A0: head h reaches t at once."""
+        head = next((w[1:] for w in words[1:] if w.startswith("T")), None)
+        temp = next((w[1:] for w in words[1:] if w.startswith("S")), None)
+        if head is not None and head.isdigit() and int(head) in self.extruders and temp:
+            heater = self.extruders[int(head)].heater
+            heater.temp = heater.target = float(temp)
 
     def _swap_macro(self, cmd: str, words: list[str]) -> None:
         """One of the swap's macros, on the head it names, made active."""
@@ -931,8 +956,11 @@ class U1Moves:
         self.active = ext
         if cmd == "ACEK_SWAP_UNLOAD":
             self._add(ext, self.UNLOAD_E)
-        else:
-            self._add(ext, self.SWAP_GRIP_E + self.PURGE_E)
+        else:  # GRIP=0: a background swap took the filament through the gear already
+            grip = self.SWAP_GRIP_E if params.get("GRIP", "1") != "0" else 0.0
+            self._add(ext, grip + self.PURGE_E)
+            if "PRINT_TEMP" in params:  # the macro heats the head and waits (its M109)
+                ext.heater.temp = ext.heater.target = float(params["PRINT_TEMP"])
 
     def _preextrude(self, cmd: str, words: list[str]) -> None:
         """The U1's pre-extrusion on the active head; with an INDEX, the tool's record set.

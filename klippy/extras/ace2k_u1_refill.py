@@ -322,9 +322,10 @@ class Refiller:
         step = state.step
         with swapper.swapping(head):
             try:
-                for step in REFILL_CLEAR_STEPS[REFILL_CLEAR_STEPS.index(state.step) :]:
-                    state.step = step
-                    swapper.swap_step(step, state)
+                with swapper.giving_way(None, state.slot):  # the head's background swap stops
+                    for step in REFILL_CLEAR_STEPS[REFILL_CLEAR_STEPS.index(state.step) :]:
+                        state.step = step
+                        swapper.swap_step(step, state)
             except Exception as err:
                 why = error_line(err)
                 swapper.put_back(state, True)

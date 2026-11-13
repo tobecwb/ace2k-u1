@@ -8,9 +8,13 @@ from typing import TYPE_CHECKING
 
 import ace2k_u1_tag_search as search_module
 import fakes
+import pytest
 from test_standing import event, setup, ticks
+from test_tools import tools_rig
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from ace2k_u1_adapter import Adapter
     from fakes import FakeAce2k, FakeReactor
 
@@ -334,3 +338,61 @@ def test_a_read_with_no_end_has_no_outcome_at_the_deadline() -> None:
     reactor.run_timers(reactor.now + 189.0)
     assert gcode.lines[-1] == "ace2k_u1: lane 1 tag read with motion: no outcome within 188 s"
     assert not adapter.tag_search.searches
+
+
+def test_a_lane_with_an_acek_spool_record_gets_no_read_with_motion(tmp_path: Path) -> None:
+    """The module hands its spool records to the adapter: a lane set by hand (an ACEK_SPOOL record
+    on file) gets no read with motion when the unit's own load leaves its tag pending, and a lane
+    without one does."""
+    for record in (False, True):
+        rig, by_name = tools_rig(tmp_path)
+        if record:
+            fakes.give_materials(rig.module)
+        a = by_name["a"]
+        a.lanes[2].update(insert=True, mode="loading")  # a:3, alone on head 2
+        rig.adapter.watch(rig.reactor.monotonic())
+        a.lanes[2]["tag"] = dict(PENDING)
+        rig.adapter.on_feed_event(2, {"kind": "loaded", "mode": "loading", "unit": "a", "seq": 0})
+        a.lanes[2]["mode"] = "idle"
+        rig.reactor.run_timers(rig.reactor.monotonic() + search_module.SEARCH_SETTLE_S + 0.5)
+        started = any("reading it with motion" in line for line in rig.gcode.lines)
+        assert started is not record
+
+
+def test_the_read_waits_while_another_lane_of_its_unit_moves() -> None:
+    adapter, reactor, ace, gcode = rig()
+    own_load(adapter, reactor, ace, PENDING)
+    ace.lanes[1]["mode"] = "loading"  # the neighbour loads: the unit would refuse the read
+    settle(reactor)
+    assert gcode.scripts == []
+    ace.lanes[1]["mode"] = "idle"
+    settle(reactor, search_module.SEARCH_RECHECK_S + 0.1)
+    assert gcode.scripts == [READ]
+
+
+def unhook_lane_4(adapter: Adapter) -> None:
+    """Lane 4 of the unit feeds no head of the U1 here: the adapter does not watch it."""
+    adapter.hooked = [x for x in adapter.hooked if x.lane != 3]
+
+
+def test_the_read_waits_while_an_unhooked_lane_of_its_unit_loads() -> None:
+    adapter, reactor, ace, gcode = rig()
+    unhook_lane_4(adapter)
+    own_load(adapter, reactor, ace, PENDING)
+    ace.lanes[3]["mode"] = "loading"  # the unit counts every lane, hooked or not
+    settle(reactor)
+    assert gcode.scripts == []
+    ace.lanes[3]["mode"] = "idle"
+    settle(reactor, search_module.SEARCH_RECHECK_S + 0.1)
+    assert gcode.scripts == [READ]
+
+
+@pytest.mark.parametrize("duty, waits", [(35, True), (0, False)])
+def test_a_following_lane_holds_the_read_only_while_its_motor_turns(duty: int, waits: bool) -> None:
+    """The unit does not count a lane in its follow with its motor at rest."""
+    adapter, reactor, ace, gcode = rig()
+    unhook_lane_4(adapter)
+    own_load(adapter, reactor, ace, PENDING)
+    ace.lanes[3].update(mode="following", duty=duty)
+    settle(reactor)
+    assert (gcode.scripts == []) is waits

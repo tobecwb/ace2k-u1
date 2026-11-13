@@ -65,8 +65,13 @@ function compare(list) {
   let fits = 0;
   list.forEach(({ plan, lanes }, c) => {
     const pick = chosen(plan, {});
-    const now = placement(plan, pick, lanes);
+    // The old search has no seconds: nowS and bestS are set aside.
+    const { nowS, bestS, ...now } = /** @type {NonNullable<ReturnType<typeof placement>>} */ (
+      placement(plan, pick, lanes)
+    );
     assert.deepEqual(now, oldPlacement(plan, pick, lanes), `case ${c}`);
+    assert.equal(nowS === null, now.now === null, `case ${c}`);
+    assert.equal(bestS === null, now.best === null, `case ${c}`);
     if (now?.fits) fits += 1;
   });
   return fits;

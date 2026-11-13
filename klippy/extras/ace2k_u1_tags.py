@@ -36,8 +36,10 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
     import ace2k_u1_plan as plan_module  # type: ignore[import-not-found, no-redef]
 try:
     from . import ace2k_u1_hooks as hooks_module
+    from . import ace2k_u1_in_use as in_use_module
 except ImportError:  # same as above, for the host tests
     import ace2k_u1_hooks as hooks_module  # type: ignore[import-not-found, no-redef]
+    import ace2k_u1_in_use as in_use_module  # type: ignore[import-not-found, no-redef]
 try:
     from .ace2k_u1_common import setting_written
     from .ace2k_u1_printer import U1Printer
@@ -87,6 +89,7 @@ class TagsAdapter(Protocol):
     """The adapter (ace2k_u1_adapter.Adapter), as the writes and reads of the tags use it."""
 
     print_stats: PrintStats | None  # set at setup_tags
+    own_writes: int  # the adapter's own writes of a head's setting going on now
 
     @property
     def reactor(self) -> Reactor: ...
@@ -842,7 +845,8 @@ class TagWriter:
             self.adapter.say(f"ace2k_u1: lane {n} -> e{head}: not sent — {reason}")
             return
         try:
-            cast("GCode", self.adapter.gcode).run_script(script)
+            with in_use_module.own_write(self.adapter):
+                cast("GCode", self.adapter.gcode).run_script(script)
         except Exception as err:
             tags.note_failed(key)
             self.applied[key] = f"not applied — {err}"
