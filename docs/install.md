@@ -364,7 +364,7 @@ When it is done, `ACEK_STATUS` reports `ace2k 0.15.0` and `ACEK_HEALTH` reports 
 ### Copy
 
 This step copies the adapter's files and its web page. First get the release on your computer:
-`git clone --branch v0.6.0 https://github.com/tobecwb/ace2k-u1`. Then, from the directory
+`git clone --branch v0.7.0 https://github.com/tobecwb/ace2k-u1`. Then, from the directory
 that holds the `ace2k-u1` tree, run:
 
     scp ace2k-u1/klippy/extras/ace2k_u1*.py root@<printer>:/home/lava/klipper/klippy/extras/

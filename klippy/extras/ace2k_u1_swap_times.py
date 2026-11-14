@@ -32,12 +32,21 @@ SAMPLE_MAX_S = 600.0  # a sample over this is a failure or a wait, not a swap: i
 FILE_NAME = "swap-times.json"
 FORMAT = 1  # the file's "v"
 STOP_WAIT_S = 1.0  # how long stop() waits for the writer thread
-KINDS = ("inline", "ready", "dock", "resume")
+# "depart" and "light" are the light background swap's averages (spec section 5).
+KINDS = ("inline", "ready", "dock", "resume", "depart", "light")
 # The dock's steps, in order (ace2k_u1_background.DOCK_STEPS; a test pins them equal).
 STEPS = ("heat", "unload", "free", "roll back", "hand over", "push", "grip", "loaded")
 # The values measured on the printer on 2026-11-10 (bench B7), used until a quantity is measured.
 # web/tests/fixtures/swap-time-seeds.json pins them for both the adapter and the page.
-SEEDS: dict[str, float] = {"inline": 94.0, "ready": 15.0, "dock": 65.0, "resume": 15.0}
+# "depart" 29 s and "light" 41 s: the light background swap's seeds (spec section 5).
+SEEDS: dict[str, float] = {
+    "inline": 94.0,
+    "ready": 15.0,
+    "dock": 65.0,
+    "resume": 15.0,
+    "depart": 29.0,
+    "light": 41.0,
+}
 STEP_SEEDS: dict[str, float] = {
     "heat": 0.0,
     "unload": 27.0,

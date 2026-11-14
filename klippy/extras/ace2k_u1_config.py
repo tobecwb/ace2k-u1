@@ -57,6 +57,11 @@ TEMP_RANGES_DEFAULT = "PLA:190-230, PETG:220-260, ABS:230-270, ASA:230-270, TPU:
 # The purge of a background swap: the new filament pushed out of the nozzle in the dock (mm). The
 # default is the load macro's own purge.
 BACKGROUND_PURGE_MM, BACKGROUND_PURGE_MAX_MM = 10.0, 100.0
+PURGE_FILL_MM = 30.0  # the fill of the new lane's path in a swap's purge (mm)
+PURGE_WASH_FACTOR = 0.2  # the share of the matrix's value that washes the old colour out
+PURGE_MAX_MM = 80.0  # the ceiling of fill + wash in a swap's purge (mm)
+PURGE_LIMIT_MM = 200.0  # the most any of the two lengths may be set to (mm)
+PURGE_FACTOR_MAX = 2.0  # the most the wash factor may be set to
 GROUP_LANES = 2  # a head with this many lanes or more is a + group
 
 # The lane of a head as parse_lanes gives it: (head index, unit name or None, lane index).
@@ -80,9 +85,15 @@ class SwapConfig:
     unload_temps: dict[str, float] = field(default_factory=dict)
     # The heads that swap their lane while parked (background_heads, 0-based).
     background_heads: frozenset[int] = frozenset()
+    # The heads that swap in the light way: the unit only, while parked (0-based).
+    light_background_heads: frozenset[int] = frozenset()
     # The new filament purged out of the nozzle in the dock after the grip (mm). 0: none, and the
     # load macro purges when the head is picked.
     background_purge_mm: float = BACKGROUND_PURGE_MM
+    # The swap's purge by the slicer's matrix: fill + wash_factor * matrix value, capped at max.
+    purge_fill_mm: float = PURGE_FILL_MM
+    purge_wash_factor: float = PURGE_WASH_FACTOR
+    purge_max_mm: float = PURGE_MAX_MM
     # True: a swap's arrival wipes the nozzle once more on the pads, after the U1's pre-extrusion
     # drops the purge in the bin and before the head goes to its idle position (arrival_wipe).
     arrival_wipe: bool = True
@@ -302,9 +313,10 @@ def read_swap_keys(config: Config, counts: dict[int, int]) -> SwapConfig:
     """Reads the keys of the lane swap.
 
     They are swap_speed, headN_splitter_mm for each head with several lanes, the colour limits,
-    the keys of the probe, background_heads, background_purge_mm and arrival_wipe. counts is the
-    result of lane_counts. For the splitter distance it records the value and which heads use the
-    default. A splitter distance on a head with one lane or none stops Klipper at the start.
+    the keys of the probe, background_heads, light_background_heads, background_purge_mm and
+    arrival_wipe. counts is the result of lane_counts. For the splitter distance it records the
+    value and which heads use the default. A splitter distance on a head with one lane or none
+    stops Klipper at the start.
     """
     splitter: dict[int, float] = {}
     default: set[int] = set()
@@ -320,6 +332,19 @@ def read_swap_keys(config: Config, counts: dict[int, int]) -> SwapConfig:
             default.add(head)
         splitter[head] = value
     swap_speed = config.getfloat("swap_speed", None, above=0.0)
+    background = read_background_heads(config, counts)
+    light = read_background_heads(config, counts, "light_background_heads")
+    if overlap := background & light:
+        head = min(overlap)
+        raise config.error(
+            f"ace2k_u1: light_background_heads: head {head + 1} is also in background_heads"
+        )
+    purge_fill = config.getfloat("purge_fill_mm", PURGE_FILL_MM, minval=0.0, maxval=PURGE_LIMIT_MM)
+    purge_max = config.getfloat("purge_max_mm", PURGE_MAX_MM, minval=0.0, maxval=PURGE_LIMIT_MM)
+    if purge_max < purge_fill:
+        raise config.error(
+            f"ace2k_u1: purge_max_mm ({purge_max:g}) is below purge_fill_mm ({purge_fill:g})"
+        )
     return SwapConfig(
         # The ceiling of the speeds comes from the unit (its speed_max). A value that is set is
         # checked at the hook (bound_problems); the default follows each unit (swap_speed_for).
@@ -337,35 +362,41 @@ def read_swap_keys(config: Config, counts: dict[int, int]) -> SwapConfig:
         probe_speed=config.getfloat("probe_speed", 50.0, above=0.0),
         probe_max_temp=config.getfloat("probe_max_temp", 60.0, minval=30.0, maxval=150.0),
         unload_temps=read_unload_temps(config),
-        background_heads=read_background_heads(config, counts),
+        background_heads=background,
+        light_background_heads=light,
         # After the grip in the dock, the new filament is pushed this far more: the purge of the
         # load, done in the dock. It falls through the dock's opening.
         background_purge_mm=config.getfloat(
             "background_purge_mm", BACKGROUND_PURGE_MM, minval=0.0, maxval=BACKGROUND_PURGE_MAX_MM
         ),
+        purge_fill_mm=purge_fill,
+        purge_wash_factor=config.getfloat(
+            "purge_wash_factor", PURGE_WASH_FACTOR, minval=0.0, maxval=PURGE_FACTOR_MAX
+        ),
+        purge_max_mm=purge_max,
         # One more wipe on the pads at the end of each swap's arrival, before the idle position.
         arrival_wipe=config.getboolean("arrival_wipe", True),
     )
 
 
-def read_background_heads(config: Config, counts: dict[int, int]) -> frozenset[int]:
-    """Reads background_heads, a comma-separated list of head numbers 1 to 4.
+def read_background_heads(
+    config: Config, counts: dict[int, int], key: str = "background_heads"
+) -> frozenset[int]:
+    """Reads background_heads (or the list named by key), head numbers 1 to 4 with commas.
 
     Returns the heads 0-based. Empty by default. A head out of 1-4, a head listed twice and a
     head that one lane feeds (or none) stop Klipper at the start.
     """
-    raw = config.get("background_heads", "")
+    raw = config.get(key, "")
     heads: set[int] = set()
     for item in filter(None, (x.strip() for x in str(raw).split(","))):
         if not item.isdigit() or not 1 <= int(item) <= LANES:
-            raise config.error(f"ace2k_u1: background_heads: {item!r} is not a head 1-{LANES}")
+            raise config.error(f"ace2k_u1: {key}: {item!r} is not a head 1-{LANES}")
         head = int(item) - 1
         if head in heads:
-            raise config.error(f"ace2k_u1: background_heads: head {head + 1} is listed twice")
+            raise config.error(f"ace2k_u1: {key}: head {head + 1} is listed twice")
         if counts.get(head, 0) < GROUP_LANES:
-            raise config.error(
-                f"ace2k_u1: background_heads: head {head + 1} is fed by one lane or none"
-            )
+            raise config.error(f"ace2k_u1: {key}: head {head + 1} is fed by one lane or none")
         heads.add(head)
     return frozenset(heads)
 

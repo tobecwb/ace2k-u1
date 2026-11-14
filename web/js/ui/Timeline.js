@@ -1,6 +1,6 @@
 import { html, useMemo, useRef, useState } from './html.js';
 import { segmentsOf, bands } from '../timeline.js';
-import { SEEDS, changesOf, swapStops } from '../swap-time.js';
+import { SEED_TIMES, changesOf, swapStops } from '../swap-time.js';
 import { floorPct, fmtMS, fmtStopped, unit } from '../format.js';
 import { headName } from '../words.js';
 import {
@@ -105,8 +105,10 @@ const swapTime = (s) => fmtMS(Math.round(s));
 
 // The title of a mark: the time that swap stops the print (m:ss) when it is estimated, else what the mark is, so every
 // mark has one. A free swap stops the print as its head arrives, and a late one stops it longer.
-/** @param {UiCtx['t']} t @param {{ kind: string, s: number | null }} m */
+/** @param {UiCtx['t']} t @param {{ kind: string, s: number | null, depart?: number }} m */
 export function titleOf(t, m) {
+  if (m.kind === 'light' && m.s !== null && m.depart !== undefined)
+    return t('timeline.light_title', { time: swapTime(m.s), depart: swapTime(m.depart) });
   if (m.s !== null) return t('timeline.stop_title', { time: swapTime(m.s) });
   if (m.kind === 'late') return t('timeline.late_title');
   return m.kind === 'free' ? t('timeline.free_title') : t('timeline.swap_title');
@@ -133,7 +135,7 @@ function Row({ band, plan, pos, view, t }) {
           ? html`<span class=${p.active ? 'act' : 'idle'} style=${partStyleOf(at, plan.tools[p.tool]?.colour)}></span>`
           : null;
       })}
-      ${band.drawn.map((m) => markAt(m.x, view, m.kind === 'stop' ? 'sw-mark' : `sw-mark free${m.kind === 'late' ? ' late' : ''}`, titleOf(t, m)))}
+      ${band.drawn.map((m) => markAt(m.x, view, m.kind === 'stop' || m.kind === 'light' ? 'sw-mark' : `sw-mark free${m.kind === 'late' ? ' late' : ''}`, titleOf(t, m)))}
       ${past ? html`<span class="past" style=${`left:0%;width:${past.width}%`}></span>` : null}
       ${cur === null ? null : html`<span class="cur" style=${`left:${cur}%`}></span>`}
     </div>
@@ -195,7 +197,7 @@ const rowsCache = new WeakMap();
  * @param {import('../swap-time.js').SwapTimes} [times]
  * @returns {ReturnType<typeof bands>}
  */
-export function rowsOf(plan, choice, headOf, frame, bg = [], timeS = null, times = SEEDS) {
+export function rowsOf(plan, choice, headOf, frame, bg = [], timeS = null, times = SEED_TIMES) {
   const picks = Object.entries(choice).map(([n, key]) => [n, key, headOf(key)]);
   const key = JSON.stringify([frame?.start, frame?.end, picks, bg, timeS, times]);
   const hit = rowsCache.get(plan);
@@ -228,7 +230,7 @@ export function Timeline({
   timeS = null,
   view: fixed = null,
   bg,
-  times = SEEDS,
+  times = SEED_TIMES,
   t,
 }) {
   const [own, setOwn] = useState(/** @type {View} */ (WHOLE));
@@ -247,7 +249,11 @@ export function Timeline({
     <div class="leg">
       <span><i class="lg act"></i>${t('timeline.legend_active')}</span>
       <span><i class="lg idle"></i>${t('timeline.legend_idle')}</span>
-      <span><b class="lg-mark">${t('timeline.mark')}</b> ${t('timeline.legend_swap', { time: swapTime(times.inline) })}</span>
+      <span><b class="lg-mark">${t('timeline.mark')}</b> ${t('timeline.legend_swap', { time: swapTime(times.inline) })}${
+        rows.some((b) => b.drawn.some((m) => m.kind === 'light'))
+          ? t('timeline.legend_light', { time: swapTime(times.depart + times.light) })
+          : ''
+      }</span>
       ${
         rows.some((b) => b.free)
           ? html`<span><b class="lg-mark free">${t('timeline.mark_bg')}</b> ${t('timeline.legend_bg', { time: swapTime(times.ready) })}</span>`

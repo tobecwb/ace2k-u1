@@ -213,8 +213,10 @@
     ],
     "push_end": "blocked",
     "swap_times": [
+      "depart",
       "dock",
       "inline",
+      "light",
       "ready",
       "resume",
       "steps"

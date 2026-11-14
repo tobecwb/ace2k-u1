@@ -533,6 +533,8 @@
   "timeline.legend_late": "the head was needed before its swap in the dock ended: the print waits for the rest of the swap",
   "timeline.mark_late": "▽",
   "timeline.stop_title": "about {time} stopped",
+  "timeline.light_title": "about {time} stopped, {depart} of it when the head left",
+  "timeline.legend_light": ", or about {time} for a light swap, part of it when the head leaves",
   "timeline.swap_title": "a spool swap",
   "timeline.free_title": "a swap in the background: the print stops briefly as the head arrives",
   "timeline.late_title": "the head was needed before its swap in the dock ended: the print waits for the rest of the swap",

@@ -9,7 +9,7 @@ import { Timeline, titleOf } from '../js/ui/Timeline.js';
 import { bands, liveAt, segmentsOf } from '../js/timeline.js';
 import { headOfIn, liveLanes, printGate } from '../js/print-plan.js';
 import { pickCosts } from '../js/planner.js';
-import { SEEDS, changesOf, swapStops } from '../js/swap-time.js';
+import { SEED_TIMES, changesOf, swapStops, SEEDS, timesOf } from '../js/swap-time.js';
 import { bgHeads, forgetEndedPrint, liveBg, planNow } from '../js/state.js';
 import { DASH, fmtHM, fmtMS } from '../js/format.js';
 import { renderHtml, textOf } from './ui-helpers.js';
@@ -76,6 +76,14 @@ const ctxOf = (app) => ({ app, t, render: () => {}, toast: () => {}, run: () => 
 test('bgHeads: the heads the background status lists, none without one', () => {
   assert.deepEqual(bgHeads({ ace2k_u1: { background: [IDLE, null, IDLE, null] } }), [0, 2]);
   assert.deepEqual(bgHeads({ ace2k_u1: {} }), []);
+  // A light head is not a full background head; a missing mode is full (an older adapter).
+  const light = { ...IDLE, mode: 'light' };
+  const full = { ...IDLE, mode: 'full' };
+  assert.deepEqual(bgHeads({ ace2k_u1: { background: [light, full, IDLE, null] } }), [1, 2]);
+  assert.deepEqual(timesOf({ ace2k_u1: { background: [light, full, IDLE, light] } }).lightHeads, [0, 3]);
+  assert.deepEqual(timesOf({ ace2k_u1: {} }).lightHeads, []);
+  // A light head's swap stops the print at its T: it is never free.
+  assert.deepEqual(liveBg({ ace2k_u1: { background: [light, null], swapping: [] } }).free, []);
   assert.deepEqual(bgHeads({}), []);
 });
 
@@ -244,7 +252,7 @@ test('the legend and the marks round an average the same way', () => {
   const headOf = headOfIn(/** @type {any} */ (lanes));
   const p = { tools: [{ colour: '#ff0000' }, { colour: '#00ff00' }, { colour: '#0000ff' }], order: [0, 1, 2, 0] };
   const choice = { 0: 'a', 1: 'b', 2: 'c' };
-  const times = { ...SEEDS, inline: 93.6, ready: 15.6 };
+  const times = { ...SEED_TIMES, inline: 93.6, ready: 15.6 };
   const out = renderHtml(
     html`<${Timeline} plan=${p} choice=${choice} headOf=${headOf} bg=${[0]} times=${times} t=${t} />`,
   );
@@ -318,6 +326,16 @@ test('the next swap tells a free swap, and the next stop after it', () => {
   assert.equal(all.nextStop, all.next);
   // No stop after the last free swap.
   assert.equal(liveAt(segmentsOf({ order: [0, 1, 2, 0] }), liveChoice, liveHeadOf, 0.3, null, [0]).nextStop, null);
+});
+
+test("a light head's swap is the next stop, not a swap in the background", () => {
+  const segs = segmentsOf({ order: [0, 1, 2, 0, 1] });
+  for (const state of ['idle', 'stopped', 'running', 'finished']) {
+    const seen = liveBg({ ace2k_u1: { background: [{ ...IDLE, state, mode: 'light' }, null], swapping: [] } });
+    const live = liveAt(segs, liveChoice, liveHeadOf, 0.3, null, seen.free, seen);
+    assert.deepEqual(live.next, { head: 0, from: 1, to: 0, x: 0.6, free: false }, state);
+    assert.equal(live.nextStop, live.next, state);
+  }
 });
 
 // The printing demo at the share pos, with the background status bg and the heads the adapter swaps now.
@@ -462,7 +480,7 @@ test("the header's time: the slicer's time plus the stops of the swaps Print sen
     assert.equal(planTimeWords(t, bad, printGate(bad, false)), t('print.slicer_time', { time: fmtHM(time) }));
   }
   // Swaps that stop the print for no time: the slicer's time alone, not "with the swaps".
-  const free = { inline: 0, ready: 0, dock: 0, resume: 0 };
+  const free = { ...SEED_TIMES, inline: 0, ready: 0, dock: 0, resume: 0 };
   assert.equal(
     planTimeWords(t, { ...now, times: free }, printGate(now, false)),
     t('print.slicer_time', { time: '1:07' }),
@@ -528,8 +546,41 @@ test('every mark carries its own estimate and a title: the stop time, else what 
   assert.equal(titleOf(t, { kind: 'free', s: null }), t('timeline.free_title'));
   assert.equal(titleOf(t, { kind: 'late', s: null }), t('timeline.late_title'));
   assert.ok(t('timeline.free_title').includes('briefly') && t('timeline.late_title').includes('the rest of the swap'));
+  // A light stop is a ▼ (a stop's class) carrying how much of it is the head leaving.
+  const lightStops = [null, { kind: 'light', s: 83, depart: 29 }, null, null];
+  const [lit] = bands(segs, choice, headOf, [], /** @type {any} */ (lightStops));
+  assert.deepEqual(lit.drawn, [
+    { x: 0.25, kind: 'light', s: 83, depart: 29 },
+    { x: 0.75, kind: 'stop', s: null },
+  ]);
+  assert.deepEqual(lit.marks, [0.25, 0.75]);
+  assert.deepEqual(lit.freeMarks, []);
+  assert.equal(titleOf(t, lit.drawn[0]), t('timeline.light_title', { time: fmtMS(83), depart: fmtMS(29) }));
+  assert.equal(
+    t('timeline.light_title', { time: '1:23', depart: '0:29' }),
+    'about 1:23 stopped, 0:29 of it when the head left',
+  );
   // Rendered, every mark has a title.
   const p = { tools: [{ colour: '#ff0000' }, { colour: '#00ff00' }, { colour: '#0000ff' }], order: [0, 1, 2, 0] };
   const out = renderHtml(html`<${Timeline} plan=${p} choice=${choice} headOf=${headOf} bg=${[0]} t=${t} />`);
   assert.ok(!/<u class="sw-mark[^"]*" aria-hidden/.test(out), 'a mark without a title');
+});
+
+test('a light swap draws a ▼ with its own title, and the legend says what it is', () => {
+  const lanes = [
+    { key: 'a', head: 0 },
+    { key: 'b', head: 0 },
+    { key: 'c', head: 1 },
+  ];
+  const headOf = headOfIn(/** @type {any} */ (lanes));
+  const choice = { 0: 'a', 1: 'b', 2: 'c' };
+  const p = { tools: [{ colour: '#ff0000' }, { colour: '#00ff00' }, { colour: '#0000ff' }], order: [0, 2, 1] };
+  const times = { ...SEED_TIMES, lightHeads: [0] };
+  const out = renderHtml(html`<${Timeline} plan=${p} choice=${choice} headOf=${headOf} times=${times} t=${t} />`);
+  assert.ok(out.includes('class="sw-mark"'), out);
+  assert.ok(!out.includes('sw-mark free'));
+  assert.ok(out.includes(`title="${t('timeline.light_title', { time: fmtMS(70), depart: fmtMS(29) })}"`), out);
+  assert.ok(textOf(out).includes(t('timeline.legend_light', { time: fmtMS(70) })), textOf(out));
+  const plain = renderHtml(html`<${Timeline} plan=${p} choice=${choice} headOf=${headOf} t=${t} />`);
+  assert.ok(!textOf(plain).includes(t('timeline.legend_light', { time: fmtMS(70) })));
 });

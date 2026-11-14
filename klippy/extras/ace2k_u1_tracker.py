@@ -9,14 +9,16 @@ G-code here. ace2k_u1.py wraps the commands of the U1 and calls this module.
 from __future__ import annotations
 
 import logging
+import math
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple, Protocol, TypedDict, Union, cast
 
 if TYPE_CHECKING:
     from .ace2k_klipper_types import GCodeCommand, Reactor
     from .ace2k_u1_common import Hooked, Slot
+    from .ace2k_u1_config import SwapConfig
     from .ace2k_u1_printer import U1Printer
     from .ace2k_u1_printer_types import Coordinator
 
@@ -129,11 +131,19 @@ class Plan:
     # Tools whose kept line was said. This is per print, so it is dropped with the plan.
     kept_said: set[int] = field(default_factory=set)
     cool_said: set[int] = field(default_factory=set)  # tools whose cool-down line was said
+    # tool -> t_raw of the file's printing temperature for a tool whose lane is in its head (it was
+    # applied). A cool-down of another tool on that lane, since the same T, would undo it
+    # (_keeps_same_lane).
+    heated_at: dict[int, int] = field(default_factory=dict)
     order_at: list[int] = field(default_factory=list)  # file offset of each order entry (timeline)
     size: int = 0  # the file size the offsets refer to
     # head -> the first tool whose heater-off command was held (_heaters_off)
     off_held: dict[int, int] = field(default_factory=dict)
     end_unload: bool | None = None  # None until the plan is set
+    # The slicer's flush matrix (flush[old][new], mm3), None when the file has none usable, and
+    # the filament diameter of each tool (None when unknown): the swap's purge (pair_purge).
+    flush: tuple[tuple[float, ...], ...] | None = None
+    diameters: list[float | None] = field(default_factory=list)
     choice: dict[int, Hooked] | None = None
     set: bool = False  # last: the fields above build their sets before this name hides the builtin
 
@@ -185,6 +195,19 @@ class PrintTracker:
         # background swap at the cleaning area is kept at the first meanwhile (printing_before).
         # It is dropped at the start or end of a print.
         self.cooled_from: dict[int, tuple[float, float]] = {}
+        # head -> S: the file's cool-down of a light head that departs at the next T
+        # (keep_cool_down). The departure needs the nozzle hot for the tip, so the call is held
+        # and the departure applies it at its end (Departure._cool_down); a T at which the head
+        # does not depart applies it then. It is dropped at the start or end of a print.
+        self.light_cool: dict[int, float] = {}
+        # (T of the file, head) -> whether the head departs at that T (Departure.departs_at). The
+        # ACE2kU1 sets it once the departure exists; None: no light head departs.
+        self.departs_at: Callable[[int, int], bool] | None = None
+        # (tool, S): the file's M109 for the tool of the next T, at which the active light head
+        # departs (defer_wait). It is applied without its wait, so the tool heats during the
+        # departure, and Departure.before_tool waits for it before the U1's T. It is dropped at
+        # the start or end of a print.
+        self.wait_after_depart: tuple[int, float] | None = None
 
     def read_plan(self, path: str) -> ace2k_u1_plan.ParsedPlan:
         """Runs ace2k_u1_plan.read_file(path) in a thread of its own.
@@ -254,8 +277,9 @@ class PrintTracker:
         swap = self.swap_for(n)
         if swap is None:
             value = gcmd.get_float("S", 0.0)
-            if self.keep_cool_down(n, value):
+            if self.keep_cool_down(n, value) or self._keeps_same_lane(n, value):
                 return TempCall(True)
+            self._note_heated(n, value)
             self._owe_pre_heat(n, value)
             self.note_cool_down(n, value)
             return TempCall(False)
@@ -319,6 +343,42 @@ class PrintTracker:
             return None
         return ext.get_heater().get_temp(self.host.reactor.monotonic())[1]
 
+    def _tool_slot(self, n: int) -> tuple[Hooked | None, Slot | None]:
+        """Returns the lane of T<n> in the running plan and the Slot of its head (None, None)."""
+        h = self.tool_lane(n)
+        return h, None if h is None else self._adapter().slot_of(h)
+
+    def _lane_in_head(self, n: int) -> Hooked | None:
+        """Returns the lane of T<n> when it is the lane in its head now, else None."""
+        h, slot = self._tool_slot(n)
+        return h if slot is not None and slot.current is h else None
+
+    def _note_heated(self, n: int, value: float) -> None:
+        """Records the file's printing temperature for T<n>, whose lane is in its head."""
+        if self._lane_in_head(n) is not None and value > 0.0 and self.printing_temp(n, value):
+            self._known_plan().heated_at[n] = self.t_raw
+
+    def _keeps_same_lane(self, n: int, value: float) -> bool:
+        """Tells whether a cool-down of T<n> is dropped: it would cool a lane already heated.
+
+        Two tools of the file on one lane are one nozzle on the printer, which the slicer does not
+        know. The next T of the file on the head of T<n> names another tool on the same lane, and
+        the file has already sent that tool's printing temperature since the last T (heated_at):
+        the cool-down is not applied, so the head stays hot for it. Said once for each tool.
+        """
+        h = self._lane_in_head(n)
+        if h is None or (value > 0.0 and self.printing_temp(n, value)):
+            return False
+        nxt = self._next_on_head(h.head)
+        if nxt is None or nxt[1] is not h or nxt[0] == n:
+            return False
+        m = nxt[0]
+        plan = self._known_plan()
+        if plan.heated_at.get(m) != self.t_raw:
+            return False
+        self._say_cool_kept(plan, n, f"T{m} prints the same lane on head {h.head + 1}")
+        return True
+
     def _owe_pre_heat(self, n: int, value: float) -> None:
         """Records the pre-heat that the head of T<n> owes once it docks, if any (_pre_heat_for).
 
@@ -375,6 +435,30 @@ class PrintTracker:
             return []
         return [(head, s, line) for head, (s, line) in sorted(owed.items()) if head != h.head]
 
+    def defer_wait(self, gcmd: GCodeCommand) -> bool:
+        """Tells whether a file's M109 waits after the departure instead of before it.
+
+        The call is for the tool of the very next T of the file, on another head than the active
+        one, and the active head departs in the light way at that T (departs_at): the slicer would
+        hold the active head over the purge tower while the next head heats, then the departure
+        would stop the print again. The call is recorded in wait_after_depart for
+        Departure.before_tool, which waits for it once the departure has run.
+        """
+        departs_at = self.departs_at
+        if departs_at is None or gcmd.get_int("A", 1) == 0 or gcmd.get("T", None) is None:
+            return False
+        if self._plan_running() is None:
+            return False  # a print with no plan set and started: the call runs as sent
+        m = gcmd.get_int("T")
+        if self._next_t()[0] != m:
+            return False
+        h = self.tool_lane(m)
+        active = self._adapter().active_head(self.host.u1)
+        if h is None or active is None or h.head == active or not departs_at(m, active):
+            return False
+        self.wait_after_depart = (m, gcmd.get_float("S", 0.0))
+        return True
+
     def clear_wait_skip(self) -> None:
         """Forgets the M109 that a swap would let pass."""
         self.wait_skip_tool = self.wait_skip_temp = None
@@ -388,6 +472,8 @@ class PrintTracker:
         self.clear_wait_skip()
         self.retract_owed = {}
         self.cooled_from = {}
+        self.light_cool = {}
+        self.wait_after_depart = None
 
     def after_swap(self, head: int, tool: int | None, temp: float | None) -> None:
         """Marks a swap's end: the file's pre-extrusion and its first M109 are skipped."""
@@ -422,6 +508,33 @@ class PrintTracker:
     def spend_retract(self, tool: int) -> None:
         """Forgets the value of tool once a swap has retracted it."""
         self.retract_owed.pop(tool, None)
+
+    def pair_purge(
+        self, head: int, old: Hooked | None, tool: int | None, cfg: SwapConfig
+    ) -> tuple[int, float, float] | None:
+        """Returns (the tool that left head, mm, the slicer's mm3) of a swap's purge, or None.
+
+        The pair is the tool that left head (_left_head) and tool. The length is the purge_fill_mm
+        of cfg plus purge_wash_factor times the slicer's flush for that pair, spread over the
+        section of the new filament and capped at purge_max_mm. It is None
+        with no tool (a refill), no plan, no tool that left known for sure, or no flush matrix.
+        It is also None when the tool that left is tool itself (a refill of the same tool on
+        another lane): that is no colour pair, and the macro purges its default.
+        """
+        plan = self.plan
+        if tool is None or plan is None or plan.flush is None:
+            return None
+        left = self._left_head(head, old, tool)
+        if left is None or left == tool:
+            return None
+        row = plan.flush[left] if 0 <= left < len(plan.flush) else ()
+        if not 0 <= tool < len(row):
+            return None
+        cell = row[tool]
+        d = plan.diameters[tool] if tool < len(plan.diameters) else None
+        d = ace2k_u1_plan.DEFAULT_DIAMETER if d is None else d
+        mm = cfg.purge_fill_mm + cfg.purge_wash_factor * cell / (math.pi * (d / 2) ** 2)
+        return left, round(min(cfg.purge_max_mm, mm), 1), cell
 
     def _left_head(self, head: int, old: Hooked | None, tool: int) -> int | None:
         """Returns the tool of the last T line of the file on head, before the T of tool.
@@ -508,7 +621,7 @@ class PrintTracker:
         of the file. The owed T that a RESUME runs (_run_tool) goes to the handler of the U1 and
         not through here, so it is the same T that was counted when the print paused. So t_index
         is the index of the T that is being run, and the next T is the one after it
-        (next_t_lane).
+        (_next_t).
 
         The order merges a T that is repeated on consecutive lines. So a T of the entry where the
         print is moves nothing. That covers the repeated T{initial_extruder} of the start and the
@@ -550,17 +663,17 @@ class PrintTracker:
         if nxt is not None:
             self.t_raw = nxt
 
-    def next_t_lane(self) -> Hooked | None:
-        """Returns the lane of the very next T line of the file, after the one being run.
+    def _next_t(self) -> tuple[int | None, Hooked | None]:
+        """Returns (tool, lane) of the very next T line of the file, after the one being run.
 
         Repeated lines are included. So the cool-down at the start, before a repeated T0, is not a
-        cool-down of an outgoing tool. Returns None when there is no next line, or when the plan
-        chose no lane for it.
+        cool-down of an outgoing tool. Either is None when there is no next line, the lane also
+        when the plan chose no lane for it.
         """
         m = next(self._raw_after(), None)
         if m is None:
-            return None
-        return cast("dict[int, Hooked]", self._known_plan().choice).get(m)
+            return None, None
+        return m, cast("dict[int, Hooked]", self._known_plan().choice).get(m)
 
     def keep_cool_down(self, n: int, value: float) -> bool:
         """Tells whether the call is the cool-down of the outgoing tool on a shared head.
@@ -574,6 +687,9 @@ class PrintTracker:
         the unload of the U1 nor a pause). It is not stored either. It is said once for each tool
         and print.
 
+        A light head that departs at the next T (another head's) needs its nozzle hot for the tip:
+        its cool-down is held in light_cool, and its departure applies it (_hold_light_cool).
+
         Any other next T (another head, the same lane, or none) leaves the head to rest, and the
         call is applied.
         """
@@ -582,10 +698,22 @@ class PrintTracker:
             return False
         if value > 0.0 and self.printing_temp(n, value):
             return False
-        nxt = self.next_t_lane()
-        if nxt is None or nxt.head != slot.head or nxt is h:
+        m, nxt = self._next_t()
+        if m is None or nxt is None or nxt is h:
             return False
+        if nxt.head != slot.head:
+            return self._hold_light_cool(n, m, slot, value)
         self._hold_cool_down(n, slot, value)
+        return True
+
+    def _hold_light_cool(self, n: int, m: int, slot: Slot, value: float) -> bool:
+        """Holds the cool-down of T<n> when slot's head departs at T<m>. Said once for each tool."""
+        departs_at = self.departs_at
+        if departs_at is None or not departs_at(m, slot.head):
+            return False
+        self.light_cool[slot.head] = value
+        plan = self._known_plan()
+        self._say_cool_kept(plan, n, f"head {slot.head + 1} forms its tip as it leaves")
         return True
 
     def _hold_cool_down(self, n: int, slot: Slot, value: float) -> None:
@@ -597,11 +725,13 @@ class PrintTracker:
         plan = self._known_plan()
         if value <= 0.0:
             plan.off_held.setdefault(slot.head, n)  # sent at the end of the print, as any held off
+        self._say_cool_kept(plan, n, f"head {slot.head + 1} is about to swap")
+
+    def _say_cool_kept(self, plan: Plan, n: int, why: str) -> None:
+        """Says once for each tool and print that the file's cool-down of T<n> was kept back."""
         if n not in plan.cool_said:
             plan.cool_said.add(n)
-            self._adapter().say(
-                f"ace2k_u1: T{n}'s cool-down kept: head {slot.head + 1} is about to swap"
-            )
+            self._adapter().say(f"ace2k_u1: T{n}'s cool-down kept: {why}")
 
     def printing_temp(self, n: int, value: float) -> bool:
         """Tells whether a temperature for T<n> is a printing temperature.
@@ -633,8 +763,7 @@ class PrintTracker:
 
         The Slot is None when the tool has no lane, or when its head is fed by one lane only.
         """
-        h = self.tool_lane(n)
-        slot = None if h is None else self._adapter().slot_of(h)
+        h, slot = self._tool_slot(n)
         if slot is None or not slot.shared:
             return h, None
         return h, slot

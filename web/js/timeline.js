@@ -62,8 +62,8 @@ const isFree = (bg, head, before) => bg.includes(head) && before !== head;
 // count, and swaps counts both. With stops (one per segment: swapStops over the same segments), a free swap whose
 // stop is late (called back before its dock work ended) goes to lateMarks, every swap adds {x, kind, s} to cost, and
 // stopS is the head's time stopped; without stops, lateMarks and cost are empty and stopS is null. drawn lists the same
-// marks as {x, kind, s} (kind stop, free or late, in that order; s the estimated stop in seconds, or null without
-// one), so a mark carries its own estimate.
+// marks as {x, kind, s} (kind light, stop, free or late, in that order; s the estimated stop in seconds, or null without
+// one), so a mark carries its own estimate; a light mark (a stop of the head's light swap) also has depart.
 /**
  * @param {Segment[]} segs
  * @param {Record<number, string>} choice
@@ -107,8 +107,15 @@ export function bands(segs, choice, headOf, bg = [], stops) {
     const cost = swaps.flatMap((w) => (w.stop ? [{ x: w.x, kind: w.stop.kind, s: w.stop.s }] : []));
     /** @param {'stop' | 'free' | 'late'} kind @param {(w: (typeof swaps)[number]) => boolean} keep */
     const drawnOf = (kind, keep) => swaps.filter(keep).map((w) => ({ x: w.x, kind, s: w.stop?.s ?? null }));
+    // A light swap is a stop (a ▼); its mark carries how much of its time is the head leaving.
+    const lightOf = swaps.flatMap((w) =>
+      !w.free && w.stop?.kind === 'light'
+        ? [{ x: w.x, kind: /** @type {const} */ ('light'), s: w.stop.s, depart: w.stop.depart }]
+        : [],
+    );
     const drawn = [
-      ...drawnOf('stop', (w) => !w.free),
+      ...lightOf,
+      ...drawnOf('stop', (w) => !w.free && w.stop?.kind !== 'light'),
       ...drawnOf('free', (w) => w.free && !late(w)),
       ...drawnOf('late', (w) => w.free && late(w)),
     ];

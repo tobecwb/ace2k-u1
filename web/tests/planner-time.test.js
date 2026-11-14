@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pickCosts, placement, planStats, search } from '../js/planner.js';
 import { chosen, headOfIn } from '../js/print-plan.js';
-import { bgStop, changesOf, SEEDS, swapStops } from '../js/swap-time.js';
+import { bgStop, changesOf, swapStops, SEED_TIMES } from '../js/swap-time.js';
 
 // The planner scores the estimated seconds stopped (swap-time.js): the least seconds, then the fewest stops, then
 // the fewest swaps. These tests check the search against a brute force over every placement, by seconds.
@@ -111,7 +111,7 @@ for (const fractional of [false, true])
       ][rnd(3)];
       if (caps.reduce((a, b) => a + b, 0) < count) continue;
       const bg = [[0], [0, 1], [1, 3], []][rnd(4)];
-      const times = { inline: 60 + rnd(60), ready: rnd(30), dock: rnd(120), resume: rnd(30) };
+      const times = { ...SEED_TIMES, inline: 60 + rnd(60), ready: rnd(30), dock: rnd(120), resume: rnd(30) };
       const durs = order.map(() => (fractional ? rnd(800) / 10 + 0.05 : rnd(80)));
       const found = search(order, count, caps, Array(count).fill(-1), 0, bg, { pre: sums(durs), times });
       const want = least(every(order, durs, count, caps, bg, times));
@@ -127,15 +127,15 @@ test('one more stop that saves seconds wins over fewer stops', () => {
   // (ready + the dock left + resume = 94.8 s against 94 s), so the least seconds keep the stops.
   const order = repeat([0, 1, 2, 1], 10);
   const durs = order.map(() => 0.2);
-  const all = every(order, durs, 3, [2, 1], [0], SEEDS);
+  const all = every(order, durs, 3, [2, 1], [0], SEED_TIMES);
   const byStops = all.reduce((a, b) => (b[1] < a[1] ? b : a));
   const bySeconds = least(all);
   assert.deepEqual(byStops.slice(0, 2), [1801, 0]);
   assert.deepEqual(bySeconds.slice(0, 2), [1786, 19]);
-  const found = search(order, 3, [2, 1], [-1, -1, -1], 0, [0], { pre: sums(durs), times: SEEDS });
+  const found = search(order, 3, [2, 1], [-1, -1, -1], 0, [0], { pre: sums(durs), times: SEED_TIMES });
   assert.deepEqual([found.seconds, found.swaps], [1786, 19]);
   // With long windows the dock is done in time: the background swaps win with no stop.
-  const long = search(order, 3, [2, 1], [-1, -1, -1], 0, [0], { pre: sums(order.map(() => 60)), times: SEEDS });
+  const long = search(order, 3, [2, 1], [-1, -1, -1], 0, [0], { pre: sums(order.map(() => 60)), times: SEED_TIMES });
   assert.deepEqual([long.seconds, long.swaps], [665, 0]);
 });
 
@@ -143,13 +143,13 @@ test('placement reports nowS and bestS from the swap stops, null with now and be
   const order = repeat([0, 1, 2], 4);
   const plan = planOf('t.gcode', order, 3);
   const lanes = emptyLanes([4, 4, 0, 0]);
-  const timing = { frame: null, timeS: 1200, times: SEEDS };
+  const timing = { frame: null, timeS: 1200, times: SEED_TIMES };
   const pick = chosen(plan, { 0: 'a:1', 1: 'a:2', 2: 'b:1' });
   const p = placement(plan, pick, lanes, {}, [], [0], timing);
   const changes = changesOf(plan, null, 1200);
   const headOf = headOfIn(lanes);
-  assert.equal(p?.nowS, Math.round(swapStops(changes, pick, headOf, [0], SEEDS).total));
-  assert.equal(p?.bestS, Math.round(swapStops(changes, p?.choice ?? {}, headOf, [0], SEEDS).total));
+  assert.equal(p?.nowS, Math.round(swapStops(changes, pick, headOf, [0], SEED_TIMES).total));
+  assert.equal(p?.bestS, Math.round(swapStops(changes, p?.choice ?? {}, headOf, [0], SEED_TIMES).total));
   assert.ok(Number.isInteger(p?.nowS) && Number.isInteger(p?.bestS));
   // A pick that names no hooked lane: now and nowS are null together.
   const open = placement(plan, chosen(plan, {}), lanes, {}, [], [0], timing);
@@ -171,13 +171,13 @@ test('the memo key holds the frame, the slicer time and the four averages', () =
   const lanes = emptyLanes([4, 4, 0, 0]);
   const pick = chosen(plan, {});
   const at = (timing) => placement(plan, pick, lanes, {}, [], [0], timing);
-  const base = { frame: null, timeS: 1000, times: { ...SEEDS } };
+  const base = { frame: null, timeS: 1000, times: { ...SEED_TIMES } };
   const before = planStats.searches;
   const first = at(base);
   assert.equal(planStats.searches, before + 1);
-  assert.equal(at({ ...base, times: { ...SEEDS } }), first);
+  assert.equal(at({ ...base, times: { ...SEED_TIMES } }), first);
   assert.equal(planStats.searches, before + 1);
-  at({ ...base, times: { ...SEEDS, dock: 80 } });
+  at({ ...base, times: { ...SEED_TIMES, dock: 80 } });
   assert.equal(planStats.searches, before + 2);
   at({ ...base, timeS: 2000 });
   assert.equal(planStats.searches, before + 3);
@@ -190,7 +190,7 @@ test('with a frame, now and best count the same changes', () => {
   const plan = { ...planOf('f.gcode', [0, 1, 0], 2), order_at: [10, 20, 30], size: 40 };
   const lanes = emptyLanes([2, 0, 0, 0]);
   const pick = chosen(plan, { 0: 'a:1', 1: 'a:2' });
-  const timing = { frame: { start: 0, end: 25 }, timeS: 100, times: SEEDS };
+  const timing = { frame: { start: 0, end: 25 }, timeS: 100, times: SEED_TIMES };
   const p = placement(plan, pick, lanes, {}, [], [], timing);
   assert.equal(p?.now, p?.best);
   assert.equal(p?.nowS, p?.bestS);
@@ -203,13 +203,13 @@ test('a suggestion that shows more seconds than the pick as it is keeps the pick
   const plan = planOf('w.gcode', [1, 0, 1, 2, 3, 1, 0, 1, 3, 2, 0], 4);
   const lanes = emptyLanes([2, 2, 0, 0]);
   const pick = { 0: 'b:1', 1: 'a:1', 2: 'a:2', 3: 'b:2' };
-  const timing = { frame: null, timeS: 84, times: SEEDS };
+  const timing = { frame: null, timeS: 84, times: SEED_TIMES };
   const changes = changesOf(plan, null, 84);
   const headOf = headOfIn(lanes);
   // The search's own best, worked out as the panel works it out, shows more than the pick as it is.
   const searched = { 0: 'b:1', 1: 'a:1', 2: 'b:2', 3: 'a:2' };
   /** @param {Record<number, string>} c */
-  const shown = (c) => Math.round(swapStops(changes, c, headOf, [1, 2], SEEDS).total);
+  const shown = (c) => Math.round(swapStops(changes, c, headOf, [1, 2], SEED_TIMES).total);
   assert.ok(shown(searched) > shown(pick));
   const p = placement(plan, pick, lanes, {}, [], [1, 2], timing);
   assert.equal(p?.fits, true);
@@ -222,7 +222,7 @@ test('pickCosts with the timing of the placement: a pick that changes nothing co
   const plan = { ...planOf('p.gcode', [0, 1, 0], 2), order_at: [10, 20, 30], size: 40 };
   const lanes = emptyLanes([2, 0, 0, 0]);
   const pick = chosen(plan, { 0: 'a:1', 1: 'a:2' });
-  const timing = { frame: { start: 0, end: 25 }, timeS: 100, times: SEEDS };
+  const timing = { frame: { start: 0, end: 25 }, timeS: 100, times: SEED_TIMES };
   const base = placement(plan, pick, lanes, {}, [], [], timing);
   assert.deepEqual(pickCosts(plan, pick, lanes, {}, 0, 'a:1', [], [], base, timing), { d: 0, free: 0 });
 });
@@ -248,7 +248,7 @@ test('the 3445-change nine-colour file places with timing and background heads w
   ]) {
     for (const timeS of [20000, 200000]) {
       const start = Date.now();
-      const p = placement(plan, chosen(plan, {}), lanes, {}, [], bg, { frame: null, timeS, times: SEEDS });
+      const p = placement(plan, chosen(plan, {}), lanes, {}, [], bg, { frame: null, timeS, times: SEED_TIMES });
       assert.ok(Date.now() - start < 1000, `${bg} ${timeS}`);
       assert.equal(p?.fits, true);
       assert.ok(Number.isFinite(p?.bestS) && (p?.free ?? 0) > 0, `${bg} ${timeS}`);

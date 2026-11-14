@@ -26,7 +26,7 @@ import {
   usedTest,
   without,
 } from './print-plan.js';
-import { changesOf, SEEDS, bgStop, swapStops } from './swap-time.js';
+import { changesOf, SEED_TIMES, bgStop, lightStop, swapStops } from './swap-time.js';
 
 /** @typedef {import('./types.js').Plan} Plan */
 /** @typedef {import('./types.js').PlanLane} PlanLane */
@@ -133,17 +133,30 @@ function groupTimes(changes, used, of) {
   return { order, pre };
 }
 
+// One swap of a head: its seconds, and whether it is a free swap (else a stop). parked: another head's group stood
+// just before it; w is the print time the head waited, or null when not known.
+/**
+ * @param {import('./swap-time.js').SwapTimes} times @param {{ parked: boolean, bg: boolean, light: boolean }} how
+ * @param {number | null} w @returns {{ s: number, free: boolean }}
+ */
+function swapCost(times, { parked, bg, light }, w) {
+  if (!parked) return { s: times.inline, free: false };
+  if (light) return { s: lightStop(times, w).s, free: false };
+  return bg ? { s: bgStop(times, w).s, free: true } : { s: times.inline, free: false };
+}
+
 // The cost of a set of groups on one head (mask): its stops, free swaps and estimated stop seconds. order is the T
 // order of groups, pre the prefix sums of their print times (null when not known), times the averages (swap-time.js).
 // With bg (the head swaps in the background), a swap is a background swap when a group of another head stands just
 // before it; its window is the print time between the head's two uses, without the stops between (brief 7.1: the
-// heads' costs stay apart, so the search stays exact). Every other swap is inline.
+// heads' costs stay apart, so the search stays exact). Every other swap is inline. A light head (times.lightHeads, the
+// head's own light flag) prices such a swap with lightStop, and counts it a stop: the print stops for it.
 /**
  * @param {number[]} order @param {Float64Array | null} pre @param {number} mask @param {boolean} bg
- * @param {import('./swap-time.js').SwapTimes} times
+ * @param {import('./swap-time.js').SwapTimes} times @param {boolean} [light]
  * @returns {{ stops: number, free: number, seconds: number }}
  */
-function headCost(order, pre, mask, bg, times) {
+function headCost(order, pre, mask, bg, times, light = false) {
   let last = -1;
   let at = -1;
   let stops = 0;
@@ -152,13 +165,10 @@ function headCost(order, pre, mask, bg, times) {
   order.forEach((g, i) => {
     if (!((mask >> g) & 1)) return;
     if (last !== -1 && last !== g) {
-      if (bg && at !== i - 1) {
-        free += 1;
-        seconds += bgStop(times, pre ? pre[i] - pre[at + 1] : null).s;
-      } else {
-        stops += 1;
-        seconds += times.inline;
-      }
+      const c = swapCost(times, { parked: at !== i - 1, bg, light }, pre ? pre[i] - pre[at + 1] : null);
+      seconds += c.s;
+      if (c.free) free += 1;
+      else stops += 1;
     }
     last = g;
     at = i;
@@ -172,7 +182,7 @@ function countOf(order, masks, bg) {
   let stops = 0;
   let free = 0;
   masks.forEach((mask, h) => {
-    const c = headCost(order, null, mask, bg.includes(h), SEEDS);
+    const c = headCost(order, null, mask, bg.includes(h), SEED_TIMES);
     stops += c.stops;
     free += c.free;
   });
@@ -286,18 +296,20 @@ const NONE = Infinity;
  * @param {number[]} order @param {number} count @param {number[]} caps @param {number[]} kept
  * @param {number} [fixed] @param {number[]} [bg] @param {Timing} [timing] @returns {Best}
  */
-export function search(order, count, caps, kept, fixed = 0, bg = [], timing = { pre: null, times: SEEDS }) {
+export function search(order, count, caps, kept, fixed = 0, bg = [], timing = { pre: null, times: SEED_TIMES }) {
   const heads = caps.length;
   const states = 2 ** count;
   const scale = order.length + 1;
-  // The score of each set of groups on one head, -1 until worked out: one table for a head in bg, one for the others.
-  const cost = [new Float64Array(states).fill(-1), new Float64Array(states).fill(-1)];
+  // The score of each set of groups on one head, -1 until worked out: one table for a head in bg, one for a light
+  // head (timing.times.lightHeads), one for the others.
+  const cost = [0, 1, 2].map(() => new Float64Array(states).fill(-1));
   /** @param {number} mask @param {number} h */
   const costOf = (mask, h) => {
-    const free = bg.includes(h) ? 1 : 0;
-    const table = cost[free];
+    const light = timing.times.lightHeads.includes(h);
+    const free = bg.includes(h) && !light;
+    const table = cost[light ? 2 : free ? 1 : 0];
     if (table[mask] < 0) {
-      const c = headCost(order, timing.pre, mask, free === 1, timing.times);
+      const c = headCost(order, timing.pre, mask, free, timing.times, light);
       table[mask] = Math.round(c.seconds) * scale + c.stops + c.free;
     }
     return table[mask];
@@ -652,7 +664,7 @@ function work(plan, used, given, lanes, merges, fixed, bg, timing) {
  */
 // No frame, no slicer time, the seeds: the planner as it was, the times of the bench.
 /** @type {PlanTiming} */
-const NO_TIMING = Object.freeze({ frame: null, timeS: null, times: SEEDS });
+const NO_TIMING = Object.freeze({ frame: null, timeS: null, times: SEED_TIMES });
 
 // The latest results, by plan, the pick of the printed tools and what the planner reads of each lane, the
 // most recent last. The panel draws often, and the search runs once per input. The colour picker asks for the
