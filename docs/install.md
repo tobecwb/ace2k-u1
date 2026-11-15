@@ -164,9 +164,9 @@ In the commands below:
 
 Do this before you install the software.
 
-**The tubes.** Use PTFE tubes with a 2 mm inner diameter between each unit and its head. When the
+**The tubes.** Use PTFE tubes with a 3 mm inner diameter between each unit and its head. When the
 U1 unloads a head, it forms a thick tip at the end of the filament. A narrower tube can catch that
-tip. The filament then cannot go back to the unit, and a new load cannot reach the head. 2 mm
+tip. The filament then cannot go back to the unit, and a new load cannot reach the head. 3 mm
 works on the author's printer. With a splitter, the tube after it needs the same care
 ([The splitter and its tubes](#the-splitter-and-its-tubes)).
 
@@ -1181,7 +1181,7 @@ splitter: load two lanes of each unit on the head, unload the head, run
 When the U1 unloads a head, it forms a thick tip at the end of the filament. At every swap this tip
 travels back through the splitter, and the new lane's tip travels forward through it.
 
-- After a splitter, use a tube with a wide bore (2 mm inner diameter, as in [Mounting](#mounting)).
+- After a splitter, use a tube with a wide bore (3 mm inner diameter, as in [Mounting](#mounting)).
 - Lay that tube in a straight run, with no tight bend.
 
 A thick tip catches in a narrow tube or in a tight bend. The new lane then cannot reach the head,
