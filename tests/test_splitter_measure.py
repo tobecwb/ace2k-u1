@@ -14,6 +14,7 @@ from ace2k_u1_common import Hooked, move_max_mm
 from ace2k_u1_probe import ProbeError
 from ace2k_u1_splitter import (
     MEASURE_SPEED,
+    OFF_SENSOR_MAX_MM,
     REPUSH_MAX_MM,
     SENSOR_CLEAR_MM,
     SPLITTER_MARGIN_MM,
@@ -47,6 +48,7 @@ class Tube:
     # (lane, mode, mm, speed)
     log: list[tuple[str, str, float, float | None]] = field(default_factory=list)
     a_moves_with_b_at: list[float] = field(default_factory=list)
+    a_trace: list[float] = field(default_factory=list)  # a_back after each move of A
     clear: float = 3.0
     stuck: bool = False
 
@@ -74,8 +76,10 @@ class FakeProbe:
             t.a_moves_with_b_at.append(t.b_out)
             if "set" in stops and length >= t.a_back:  # reaches the head's sensor
                 moved, t.a_back = t.a_back, 0.0
+                t.a_trace.append(t.a_back)
                 return "set", None, moved
             t.a_back -= length
+            t.a_trace.append(t.a_back)
             return "end", "done", length
         return self._feed_b(length, stops)
 
@@ -104,22 +108,30 @@ class FakeProbe:
         length: float,
         stops: frozenset[str] = frozenset(),
         speed: float | None = None,
+        free_tip: bool = False,
     ) -> tuple[str, str | None, float]:
         assert h == "A" and mode == "rollback"
+        assert free_tip  # no tip is in the extruder during the measure
         t = self.t
         t.log.append((h, "rollback", length, speed))
         t.a_moves_with_b_at.append(t.b_out)
         if "empty" in stops and t.sensor() and not t.stuck and t.a_back + length >= t.clear:
             moved, t.a_back = t.clear - t.a_back, t.clear
+            t.a_trace.append(t.a_back)
             return "empty", None, moved
         t.a_back += length
+        t.a_trace.append(t.a_back)
         return "end", "done", length
 
-    def back(self, h: str, length: float, speed: float | None = None) -> None:
+    def back(
+        self, h: str, length: float, speed: float | None = None, free_tip: bool = False
+    ) -> None:
+        assert free_tip  # every roll back of the measure frees its tip's catches
         self.t.log.append((h, "back", length, speed))
         if h == "A":
             self.t.a_moves_with_b_at.append(self.t.b_out)
             self.t.a_back += length
+            self.t.a_trace.append(self.t.a_back)
         else:
             self.t.b_out -= length
 
@@ -164,7 +176,7 @@ def test_the_pair_finds_the_point_and_leaves_both_lanes_in_place() -> None:
     point, adapter = measure(tube)
     assert tube.point <= point < tube.point + 5.0
     assert tube.b_out == pytest.approx(0.0)  # B back at its parking point
-    assert tube.a_back == pytest.approx(point + SPLITTER_MARGIN_MM)  # A behind the splitter
+    assert tube.a_back == pytest.approx(tube.pushed_a)  # A back where it started
     assert "ace2k_u1: head 1: a:1 leaves the splitter at" in adapter.lines[-1]
 
 
@@ -172,7 +184,8 @@ def test_b_waits_behind_the_meeting_point_before_every_move_of_a() -> None:
     tube = Tube()
     measure(tube)
     wait = tube.meet - WAIT_BACK_MM
-    moves = tube.a_moves_with_b_at[3:]  # after A's push to the sensor and its two backs off
+    # after A's push to the sensor and its two backs off, before A goes back where it started
+    moves = tube.a_moves_with_b_at[3:-1]
     assert moves  # A moved
     assert all(b == pytest.approx(wait) for b in moves)
 
@@ -210,22 +223,50 @@ def test_a_never_rolls_back_past_where_it_was_parked() -> None:
     tube = Tube(point=1690.0, pushed_a=1700.0)
     tube.a_back = tube.pushed_a
     m = SplitterMeasure(FakeProbe(tube), FakeAdapter(), max_move=lambda h: 2000.0)
-    with pytest.raises(MeasureError, match="blocked with a:1 rolled back 1650 mm"):
+    with pytest.raises(MeasureError, match="blocked with a:1 rolled back 1650 mm") as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.a_back <= 1700.0 - SPLITTER_MARGIN_MM + 1e-6  # P - 50: the value can be checked
-    assert tube.b_out == pytest.approx(tube.meet - WAIT_BACK_MM)  # at the wait point
+    # P - 50 at most in the search, so the value can be checked; then back to where it was parked
+    assert max(a_backs(tube)[:-1]) <= 1700.0 - SPLITTER_MARGIN_MM + 1e-6
+    assert_home(tube, err.value)
+
+
+def a_backs(tube: Tube) -> list[float]:
+    """Where A's tip was after each of its moves (mm back from the head's sensor)."""
+    return tube.a_trace
+
+
+def assert_home(tube: Tube, err: MeasureError) -> None:
+    """A failed measure left A and B where they started, and its message says so."""
+    assert tube.a_back == pytest.approx(tube.pushed_a)  # A at its parking point
+    assert tube.b_out == pytest.approx(0.0)  # B at its parking point
+    assert err.home
+    assert str(err).endswith("; a:1 and a:2 are back at or behind where they started")
+
+
+def test_a_failed_search_puts_both_lanes_back_where_they_started() -> None:
+    """The search found no pass: A is rolled back what it was pushed, after B left the tube."""
+    tube = Tube(point=1652.0, pushed_a=1700.0)
+    _probe, adapter, m = setup(tube)
+    with pytest.raises(MeasureError, match="a:2 is blocked with a:1 rolled back 1650 mm") as err:
+        m.measure_pair(SLOT, "A", "B", 900.0)
+    assert_home(tube, err.value)
+    backs = [(lane, mode) for lane, mode, _mm, _s in tube.log[-2:]]
+    assert backs == [("B", "back"), ("A", "back")]  # B leaves the shared tube first
+    assert tube.log[-1] == ("A", "back", pytest.approx(1700.0 - 1650.0), 50.0)
 
 
 def test_b_reaching_the_sensor_with_a_at_it_is_an_error() -> None:
     tube = Tube(point=0.0)  # A is not in B's path
     tube.a_back = tube.pushed_a
     m = SplitterMeasure(FakeProbe(tube), FakeAdapter(), max_move=lambda h: 2000.0)
-    with pytest.raises(MeasureError, match="a:2 reached the head's sensor with a:1 just behind it"):
+    with pytest.raises(
+        MeasureError, match="a:2 reached the head's sensor with a:1 just behind it"
+    ) as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.b_out == pytest.approx(0.0)  # rolled back to its parking point
+    assert_home(tube, err.value)
 
 
-def test_an_error_in_a_try_rolls_b_back_to_the_wait_point() -> None:
+def test_an_error_in_a_try_rolls_both_lanes_back_to_where_they_started() -> None:
     tube = Tube()
     tube.a_back = tube.pushed_a
     probe = FakeProbe(tube)
@@ -248,12 +289,16 @@ def test_an_error_in_a_try_rolls_b_back_to_the_wait_point() -> None:
 
     probe.feed_free = failing  # type: ignore[method-assign]
     m = SplitterMeasure(probe, FakeAdapter(), max_move=lambda h: 2000.0)
-    with pytest.raises(MeasureError, match="a:1 is .* mm back from the head's sensor"):
+    with pytest.raises(MeasureError, match="a:2's push ended stuck") as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
     failed = tube.log.index(("B", "failed", 2.0 + REPUSH_MAX_MM, MEASURE_SPEED))
-    # 40 in, 2 eased, and the whole 32 mm step of the push that raised
-    assert tube.log[failed + 1 :] == [("B", "back", pytest.approx(70.0), 50.0)]
-    assert tube.b_out == pytest.approx(tube.meet - WAIT_BACK_MM - 22.0)  # behind the wait point
+    # 40 in, 2 eased, and the whole 32 mm step of the push that raised, then back to its parking
+    b_back = tube.log[failed + 1]
+    assert b_back == ("B", "back", pytest.approx(tube.meet - WAIT_BACK_MM + 70.0), 50.0)
+    assert tube.log[failed + 2][:2] == ("A", "back")
+    assert tube.a_back == pytest.approx(tube.pushed_a) and err.value.home
+    assert tube.b_out == pytest.approx(-22.0)  # 22 mm behind its parking: the safe side
+    assert str(err.value).endswith("; a:1 and a:2 are back at or behind where they started")
 
 
 def zero_distance(probe: FakeProbe, lane: str) -> None:
@@ -280,7 +325,8 @@ def test_b_set_with_no_distance_counts_the_whole_step() -> None:
     zero_distance(probe, "B")
     with pytest.raises(MeasureError, match="a:2's push of 2000 mm ended set with no distance"):
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.log[-1] == ("B", "back", 2000.0, 50.0)
+    assert tube.log[-2] == ("B", "back", 2000.0, 50.0)  # then A rolls back what it was pushed
+    assert tube.a_back == pytest.approx(tube.pushed_a)
     assert tube.b_out <= 0.0  # toward its bay, never left in the shared tube
 
 
@@ -290,7 +336,8 @@ def test_b_blocked_with_no_distance_counts_the_whole_step() -> None:
     zero_distance(probe, "B")
     with pytest.raises(MeasureError, match="ended blocked with no distance"):
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.log[-1] == ("B", "back", 2000.0, 50.0)
+    assert tube.log[-2] == ("B", "back", 2000.0, 50.0)
+    assert tube.a_back == pytest.approx(tube.pushed_a)
     assert tube.b_out <= 0.0
 
 
@@ -309,11 +356,13 @@ def test_a_not_reaching_the_sensor_is_an_error() -> None:
     adapter.head_budget_mm = 1000.0
     with pytest.raises(
         MeasureError,
-        match="a:1 did not reach the head's sensor .*a:1 pushed 1000 mm from its parking point,"
-        " a:2 is at its parking point",
+        match="a:1 did not reach the head's sensor .*; a:1 and a:2 are back at or behind where"
+        " they started",
     ):
         m.measure_pair(SLOT, "A", "B", 900.0)
     assert not [e for e in tube.log if e[0] == "B"]
+    assert tube.log[-1] == ("A", "back", 1000.0, 50.0)  # what it was pushed
+    assert tube.a_back == pytest.approx(tube.pushed_a)
 
 
 def test_b_meeting_nothing_in_the_approach_is_an_error() -> None:
@@ -348,24 +397,26 @@ def test_the_final_check_blocked_is_an_error() -> None:
     probe, _adapter, m = setup(tube)
     back = probe.back
 
-    def closes(h: str, length: float, speed: float | None = None) -> None:
-        back(h, length, speed)
+    def closes(h: str, length: float, speed: float | None = None, free_tip: bool = False) -> None:
+        back(h, length, speed, free_tip)
         if h == "A" and tube.a_back >= tube.point + SPLITTER_MARGIN_MM - 1.0:
             tube.point = 5000.0  # the final roll back: now nothing passes
 
     probe.back = closes  # type: ignore[method-assign]
-    with pytest.raises(MeasureError, match="a:2 is blocked with a:1 rolled back the new value"):
+    with pytest.raises(
+        MeasureError, match="a:2 is blocked with a:1 rolled back the new value"
+    ) as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.b_out == pytest.approx(tube.meet - WAIT_BACK_MM)  # at the wait point
+    assert_home(tube, err.value)
 
 
 def test_the_search_stops_where_the_staged_value_can_be_checked() -> None:
     tube = Tube(point=1652.0, pushed_a=1700.0)  # past P - 50: point + 50 is past where A was parked
     _probe, _adapter, m = setup(tube)
-    with pytest.raises(MeasureError, match="a:2 is blocked with a:1 rolled back 1650 mm"):
+    with pytest.raises(MeasureError, match="a:2 is blocked with a:1 rolled back 1650 mm") as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.a_back == pytest.approx(1650.0)  # never past P - 50
-    assert tube.b_out == pytest.approx(tube.meet - WAIT_BACK_MM)  # at the wait point
+    assert a_backs(tube)[-2] == pytest.approx(1650.0)  # never past P - 50 before it went back
+    assert_home(tube, err.value)
 
 
 def test_a_point_past_the_bound_is_refused_by_the_final_check(
@@ -381,23 +432,28 @@ def test_a_point_past_the_bound_is_refused_by_the_final_check(
         return 1660.0
 
     monkeypatch.setattr(ace2k_u1_splitter, "search", past_the_bound)
-    with pytest.raises(MeasureError, match="a:1 was parked too close to the splitter to check"):
+    with pytest.raises(
+        MeasureError, match="a:1 was parked too close to the splitter to check"
+    ) as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.a_back == pytest.approx(1660.0)  # the final roll back was not made
+    assert a_backs(tube)[-2] == pytest.approx(1660.0)  # the final roll back was not made
+    assert_home(tube, err.value)
 
 
 def test_the_final_check_rolls_a_back_to_the_staged_value() -> None:
     tube = Tube(point=1600.0, pushed_a=1700.0)
     point, _adapter = measure(tube)
     assert tube.point <= point < tube.point + 5.0
-    assert tube.a_back == pytest.approx(point + SPLITTER_MARGIN_MM)
+    assert tube.a_back == pytest.approx(tube.pushed_a)
     assert tube.b_out == pytest.approx(0.0)
 
 
 def test_b_meeting_a_near_its_parking_point_is_an_error() -> None:
     tube = Tube(meet=40.0)
     _probe, _adapter, m = setup(tube)
-    with pytest.raises(MeasureError, match="a:2 met a:1 within 55 mm of its parking point: unload"):
+    with pytest.raises(
+        MeasureError, match="a:2 met a:1 within 155 mm of its parking point: unload"
+    ):
         m.measure_pair(SLOT, "A", "B", 900.0)
     assert tube.b_out == pytest.approx(0.0)  # rolled back to its parking point
 
@@ -405,9 +461,9 @@ def test_b_meeting_a_near_its_parking_point_is_an_error() -> None:
 def test_a_result_at_the_sensor_is_an_error() -> None:
     tube = Tube(point=15.0)  # B passes with A just off the sensor: no splitter between them
     _probe, _adapter, m = setup(tube)
-    with pytest.raises(MeasureError, match="it does not meet a:1 at a splitter"):
+    with pytest.raises(MeasureError, match="it does not meet a:1 at a splitter") as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.b_out == pytest.approx(tube.meet - WAIT_BACK_MM)
+    assert_home(tube, err.value)
 
 
 def test_every_move_of_a_runs_at_the_probe_speed() -> None:
@@ -420,33 +476,41 @@ def test_every_move_of_a_runs_at_the_probe_speed() -> None:
 
 def test_a_failed_move_of_a_says_where_a_may_be() -> None:
     tube = Tube()
-    probe, _adapter, m = setup(tube)
+    probe, adapter, m = setup(tube)
     back = probe.back
 
-    def fails(h: str, length: float, speed: float | None = None) -> None:
+    def fails(h: str, length: float, speed: float | None = None, free_tip: bool = False) -> None:
         if h == "A":
             raise MeasureError("a:1's roll back ended stuck")
-        back(h, length, speed)
+        back(h, length, speed, free_tip)
 
     probe.back = fails  # type: ignore[method-assign]
-    with pytest.raises(MeasureError, match="a:1 is between 13 and 900 mm back from the head"):
+    with pytest.raises(
+        MeasureError, match="a:1 is between 13 and 900 mm back from the head"
+    ) as err:
         m.measure_pair(SLOT, "A", "B", 900.0)
+    assert not err.value.home  # its roll back to where it started failed too
+    assert tube.b_out == pytest.approx(0.0)
+    assert adapter.lines[-1] == (
+        "ace2k_u1: a:1 not rolled back to where it started after the error: a:1's roll back"
+        " ended stuck"
+    )
 
 
-def test_any_error_rolls_b_back_and_goes_up_unchanged() -> None:
+def test_any_error_rolls_the_lanes_back_and_goes_up_unchanged() -> None:
     tube = Tube()
     probe, _adapter, m = setup(tube)
     back = probe.back
 
-    def breaks(h: str, length: float, speed: float | None = None) -> None:
+    def breaks(h: str, length: float, speed: float | None = None, free_tip: bool = False) -> None:
         if h == "A":
             raise RuntimeError("the link fell")
-        back(h, length, speed)
+        back(h, length, speed, free_tip)
 
     probe.back = breaks  # type: ignore[method-assign]
     with pytest.raises(RuntimeError, match="the link fell"):
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert tube.b_out == pytest.approx(tube.meet - WAIT_BACK_MM)
+    assert tube.b_out == pytest.approx(0.0)
 
 
 def test_a_push_again_that_does_not_move_is_the_other_lane() -> None:
@@ -485,10 +549,12 @@ def test_an_unsure_try_counts_as_blocked() -> None:
         rested, mm = ease(h)
         return (rested if not met["done"] else False), mm
 
-    def back_mark(h: str, length: float, speed: float | None = None) -> None:
+    def back_mark(
+        h: str, length: float, speed: float | None = None, free_tip: bool = False
+    ) -> None:
         if h == "A":
             met["done"] = True
-        FakeProbe.back(probe, h, length, speed)
+        FakeProbe.back(probe, h, length, speed, free_tip)
 
     probe.ease_to_rest = no_rest  # type: ignore[method-assign]
     probe.back = back_mark  # type: ignore[method-assign]
@@ -514,7 +580,7 @@ def test_pushes_again_that_report_no_distance_keep_b_at_its_wait_point() -> None
     result = m.measure_pair(SLOT, "A", "B", 900.0)
     assert tube.point <= result.point < tube.point + 5.0
     wait = tube.meet - WAIT_BACK_MM
-    assert all(b == pytest.approx(wait) for b in tube.a_moves_with_b_at[3:])  # B never drifted
+    assert all(b == pytest.approx(wait) for b in tube.a_moves_with_b_at[3:-1])  # B never drifted
     assert tube.b_out == pytest.approx(0.0)
 
 
@@ -523,18 +589,22 @@ def test_a_sensor_that_does_not_clear_within_the_ease_is_an_error() -> None:
     _probe, _adapter, m = setup(tube)
     with pytest.raises(
         MeasureError,
-        match="a:1's tip did not leave the head's sensor within 40 mm; a:1 is between 0 and 40 mm"
-        " back from the head's sensor, a:2 is at its parking point",
+        match="a:1's tip did not leave the head's sensor within 200 mm; a:1 and a:2 are back"
+        " at or behind where they started",
     ):
         m.measure_pair(SLOT, "A", "B", 900.0)
-    assert [e[:2] for e in tube.log] == [("A", "feed"), ("A", "rollback")]  # nothing more moved
-    assert tube.log[1] == ("A", "rollback", EASE_MM, 50.0)
+    # nothing more moved but A's way back: from the sensor, as its tip may still be at it
+    assert tube.log[1:] == [
+        ("A", "rollback", OFF_SENSOR_MAX_MM, 50.0),
+        ("A", "back", 1700.0, 50.0),
+    ]
 
 
 def test_a_backs_off_the_sensor_before_b_approaches() -> None:
     tube = Tube()
     measure(tube)
-    assert tube.log[1] == ("A", "rollback", EASE_MM, 50.0)  # off the sensor: it clears 3 mm back
+    # off the sensor: it clears 3 mm back
+    assert tube.log[1] == ("A", "rollback", OFF_SENSOR_MAX_MM, 50.0)
     assert tube.log[2] == ("A", "rollback", SENSOR_CLEAR_MM, 50.0)  # and 10 mm more
     assert tube.log[3][:2] == ("B", "feed")  # B's approach, with the sensor empty
     assert tube.a_moves_with_b_at[3] == pytest.approx(tube.meet - WAIT_BACK_MM)
@@ -552,11 +622,12 @@ def test_the_roll_back_behind_the_sensor_counts_its_reported_distance() -> None:
         length: float,
         stops: frozenset[str] = frozenset(),
         speed: float | None = None,
+        free_tip: bool = False,
     ) -> tuple[str, str | None, float]:
         if not stops and length == SENSOR_CLEAR_MM:  # it slips: 7 mm of the 10
-            why, kind, _moved = move(h, mode, 7.0, stops, speed)
+            why, kind, _moved = move(h, mode, 7.0, stops, speed, free_tip=free_tip)
             return why, kind, 7.0
-        return move(h, mode, length, stops, speed)
+        return move(h, mode, length, stops, speed, free_tip=free_tip)
 
     probe.move = short  # type: ignore[method-assign]
     feed = probe.feed_free
@@ -681,13 +752,9 @@ def test_every_push_again_runs_at_the_measure_speed() -> None:
     assert again and all(speed == MEASURE_SPEED for _l, _m, _mm, speed in again)
 
 
-def test_the_real_probe_runs_the_measure(tmp_path: Path) -> None:
-    """The measure over the probe's real moves: the stop at the sensor, the ease and the rolls back
-    read their distances from the unit's final events."""
-    rig, a = probe_rig(tmp_path)
-    rig.head_sensor.detected = False
-    slot = rig.adapter.slot_of_head(0)
-    t = SimpleNamespace(a_back=1700.0, b_out=0.0, point=862.0, meet=1041.0)
+def real_tube(rig: SimpleNamespace, a: FakeAce2k, t: SimpleNamespace) -> Callable[[FakeMove], None]:
+    """The unit's moves over a shared tube (t: a_back, b_out, point, meet), with their final
+    events."""
 
     def on_start(move: FakeMove) -> None:
         length = a.feed.started[-1][2]
@@ -720,14 +787,57 @@ def test_the_real_probe_runs_the_measure(tmp_path: Path) -> None:
             t.b_out -= length
             end(move, -length)
 
-    a.feed.on_start = on_start
+    return on_start
+
+
+def test_the_real_probe_runs_the_measure(tmp_path: Path) -> None:
+    """The measure over the probe's real moves: the stop at the sensor, the ease and the rolls back
+    read their distances from the unit's final events."""
+    rig, a = probe_rig(tmp_path)
+    rig.head_sensor.detected = False
+    slot = rig.adapter.slot_of_head(0)
+    t = SimpleNamespace(a_back=1700.0, b_out=0.0, point=862.0, meet=1041.0)
+    a.feed.on_start = real_tube(rig, a, t)
     rig.reactor.on_pause.append(lambda now: setattr(a, "reports", a.reports + 1))
     m = SplitterMeasure(rig.module.probe, rig.adapter, max_move=move_max_mm)
     result = m.measure_pair(slot, slot.lanes[0], slot.lanes[1], 900.0)
     assert t.point <= result.point < t.point + 5.0
     assert result.met == pytest.approx(t.meet)
     assert t.b_out == pytest.approx(0.0)
-    assert t.a_back == pytest.approx(result.point + SPLITTER_MARGIN_MM)
+    assert t.a_back == pytest.approx(1700.0)  # A back where it started
+
+
+def test_a_lost_final_event_does_not_fail_the_measure(tmp_path: Path) -> None:
+    """A roll back of A whose final event never comes, with the unit reporting the lane idle: the
+    probe takes it as over with its encoder distance, and the measure goes on to its result."""
+    rig, a = probe_rig(tmp_path)
+    rig.head_sensor.detected = False
+    slot = rig.adapter.slot_of_head(0)
+    t = SimpleNamespace(a_back=1700.0, b_out=0.0, point=862.0, meet=1041.0)
+    unit = real_tube(rig, a, t)
+    lost: list[float] = []
+
+    def on_start(move: FakeMove) -> None:
+        length = a.feed.started[-1][2]
+        if move.lane == 0 and move.mode == "rollback" and t.a_back > 50.0 and not lost:
+            lost.append(length)  # a roll back of the search: it runs, and its event is lost
+            t.a_back += length
+            a.lanes[0]["encoder_mm"] -= length
+            return
+        unit(move)
+
+    a.feed.on_start = on_start
+    rig.reactor.on_pause.append(lambda now: setattr(a, "reports", a.reports + 1))
+    m = SplitterMeasure(rig.module.probe, rig.adapter, max_move=move_max_mm)
+    result = m.measure_pair(slot, slot.lanes[0], slot.lanes[1], 900.0)
+    assert lost
+    assert t.point <= result.point < t.point + 5.0
+    assert t.b_out == pytest.approx(0.0)
+    assert t.a_back == pytest.approx(1700.0)  # A back where it started
+    assert (
+        "ace2k_u1: head 1: a:1's probe move got no final event and the unit reports the lane idle:"
+        f" taken as over, {lost[0]:.1f} mm by its encoder"
+    ) in rig.gcode.lines
 
 
 DEFAULT = ace2k_u1_config.SPLITTER_DEFAULT_MM
@@ -913,6 +1023,28 @@ def test_a_pair_that_failed_after_it_moved_keeps_a_as_the_heads_lane(
         run(rig, "ACEK_SPLITTER_MEASURE", {"HEAD": "1"})
     assert slot.current is slot.lanes[0]  # a:1 may be in the shared tube: no load of a:2
     assert "ace2k_u1: head 1: the measure failed; a:1 stays the head's lane" in rig.gcode.lines
+    assert cf.set_calls == []
+
+
+def test_a_pair_that_failed_with_its_lanes_back_gives_the_head_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both lanes went back where they started: none is in the shared tube, so the head is given
+    back as after a measure that passed."""
+    err = ace2k_u1_splitter.MeasureError(
+        "a:2 is blocked with a:1 rolled back 1650 mm; a:1 and a:2 are back at or behind where"
+        " they started",
+        home=True,
+    )
+    rig, _a, cf, _calls = command_rig(tmp_path, err, monkeypatch)
+    slot = rig.adapter.slot_of_head(0)
+    rig.adapter.head_watch.hand_head(slot, slot.lanes[1])
+    with pytest.raises(
+        ValueError, match="failed: .*; a:1 and a:2 are back at or behind where they started"
+    ):
+        run(rig, "ACEK_SPLITTER_MEASURE", {"HEAD": "1"})
+    assert slot.current is slot.lanes[1]
+    assert not [line for line in rig.gcode.lines if "stays the head's lane" in line]
     assert cf.set_calls == []
 
 

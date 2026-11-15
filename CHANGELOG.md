@@ -1,7 +1,23 @@
 # Changelog
 
-## Unreleased
+## v0.7.1 — 2026-11-15 — beta
 
+For ace2k `v0.15.0`. No new firmware: the units stay on ace2k `v0.15.0`. This release fixes
+`ACEK_SPLITTER_MEASURE`, which failed on long tubes and on heads fed by several units.
+
+### Fixed
+
+- **A lost final event no longer fails the measure.** When the unit's final event for a move never
+  came, the move waited for its deadline and the measure failed. Once the unit reports the lane
+  idle for ace2k's `gone_after_s`, the move now counts as over, with the distance of the lane's
+  encoder.
+- **The measure puts its lanes back.** After a failure, and after a pass, each lane it moved rolls
+  back to where it started, so the next try or the next pair starts from the right place.
+- **The measure works on long tubes.** The first lane backs off the head's sensor by up to 200 mm,
+  and the second lane waits 150 mm back, so the slack of a long tube no longer leaves a tip on the
+  sensor or in the splitter.
+- **A tip that catches no longer stops the measure.** No tip is in the extruder during the
+  measure, so every roll back of it frees a catch, as `ACEK_ROLLBACK FREE=1`.
 - **The tube size is corrected in the docs**: the README and `install.md` now say PTFE tubes
   with a 3 mm inner diameter, which is the right size. The earlier 2 mm was wrong.
 

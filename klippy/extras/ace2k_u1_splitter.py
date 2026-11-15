@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 try:
     from .ace2k_u1_common import INSIST_MIN_MM, carried, move_max_mm
     from .ace2k_u1_config import LANES, SPLITTER_MAX_MM
-    from .ace2k_u1_probe import EASE_MM, STOP_SET, ProbeError, holding
+    from .ace2k_u1_probe import STOP_SET, ProbeError, holding
 except ImportError:  # the host tests put klippy/extras on the path and import by bare name
     from ace2k_u1_common import (  # type: ignore[import-not-found, no-redef]
         INSIST_MIN_MM,
@@ -35,7 +35,6 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
     )
     from ace2k_u1_config import LANES, SPLITTER_MAX_MM  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_probe import (  # type: ignore[import-not-found, no-redef]
-        EASE_MM,
         STOP_SET,
         ProbeError,
         holding,
@@ -48,16 +47,25 @@ MEASURE_SPEED = 20.0
 # The motor fills the plunger and stops, with no travel left to press on.
 REPUSH_MAX_MM = 30.0
 REPUSH_TRIES = 3  # pushes again against a snag at the entrance or the exit of the splitter
-WAIT_BACK_MM = 50.0  # how far B waits behind the point where it met A
+# How far B waits behind the point where it met A. On a long tube the first part of a roll back
+# only takes up the filament's slack: 50 mm left B's tip against A in the splitter, which pinned A's
+# roll backs (stuck) and blocked its feeds (bench 2026-11-15, head 4, b:4 met a:4 after 997 mm).
+WAIT_BACK_MM = 150.0
 # After the sensor clears, A rolls back this much more, so A's own tip does not set the sensor
 # again during B's approach.
 SENSOR_CLEAR_MM = 10.0
+# The longest roll back that takes A's tip off the head's sensor. On a long tube the first part of
+# the roll back only takes up the filament's slack in the tube, so the tip barely moves: 40 mm
+# did not clear the sensor on a 2.6 m path (bench 2026-11-15). The sensor still stops it first.
+OFF_SENSOR_MAX_MM = 200.0
+# Every roll back of the measure is a free-tip one: no tip is ever in the extruder here (A stops at
+# the head's sensor), and a roll back that catches twice ends stuck (ace2k's limitations).
 # A's feeds shorter than this are not checked for carried: a few mm may report one encoder count.
 # They count what they report, which leaves the tip no further back than believed (the safe side).
 CARRY_CHECK_MIN_MM = 10.0
 # A try pushes B this far: the wait plus 50 mm past the point where it met A. The whole of it is a
 # pass, because A's tip has left the shared tube.
-TRY_MM = 100.0
+TRY_MM = WAIT_BACK_MM + 50.0  # it must reach past where B met A, from its wait point
 SEARCH_STEP_MM = 5.0  # the search stops when the interval is under this
 SPLITTER_MARGIN_MM = 50.0  # added to the measured point
 STAGED_STEP_MM = 10.0  # the staged value is rounded up to this, so the roll back only grows
@@ -156,7 +164,14 @@ class MeasureAdapter(Protocol):
 
 
 class MeasureError(Exception):
-    """A pair could not be measured. The message says why and where each lane is."""
+    """A pair could not be measured. The message says why and where each lane is.
+
+    ``home`` is True when every lane that the measure moved is back at or behind where it started.
+    """
+
+    def __init__(self, message: str, home: bool = False) -> None:
+        super().__init__(message)
+        self.home = home
 
 
 @dataclass
@@ -196,10 +211,16 @@ class SplitterMeasure:
         self.b_out, self.b_wait = 0.0, None
         try:
             result = self._measure(slot, a, b, first)
-        except Exception as err:  # B never stays in the shared tube, whatever went wrong
-            self._b_out_of_the_way(b)
+        except Exception as err:  # the lanes go back where they started, whatever went wrong
+            home = self._put_back(a, b)
             if isinstance(err, (ProbeError, MeasureError, SearchError)):
-                raise MeasureError(f"{err}; {self._where(a, b)}") from err
+                ta, tb = self.adapter.lane_text(a), self.adapter.lane_text(b)
+                where = (
+                    f"{ta} and {tb} are back at or behind where they started"
+                    if home
+                    else self._where(a, b)
+                )
+                raise MeasureError(f"{err}; {where}", home) from err
             raise
         self.adapter.say(
             f"ace2k_u1: head {slot.head + 1}: {self.adapter.lane_text(a)} leaves the splitter at"
@@ -270,24 +291,35 @@ class SplitterMeasure:
         if not self._passes(slot, b):
             raise MeasureError(f"{tb} is blocked with {ta} rolled back the new value")
         self._b_to(b, 0.0)
+        # A goes back where it started too, so the next pair or the next measure starts from there
+        # (left at the new value, it was too near the splitter for a measure that came after).
+        if not self._a_back(a):
+            raise MeasureError(f"{ta} could not be rolled back to where it started")
         return PairResult(a, b, point, met)
 
     def _off_sensor(self, a: Hooked) -> float:
-        """Roll A back off the head's sensor, at probe_speed, at most EASE_MM, stopped when the
-        sensor goes empty, then SENSOR_CLEAR_MM more. Return how far back A's tip is (a_back).
+        """Roll A back off the head's sensor, at probe_speed, at most OFF_SENSOR_MAX_MM, stopped
+        when the sensor goes empty, then SENSOR_CLEAR_MM more. Return how far back A's tip is
+        (a_back).
 
         Only B can set the sensor after that. A roll back that ends otherwise (the sensor still
-        set after EASE_MM, another end, or no distance) is a MeasureError, and nothing more moves.
+        set after OFF_SENSOR_MAX_MM, another end, or no distance) is a MeasureError, and nothing
+        more moves.
         """
         ta = self.adapter.lane_text(a)
-        self.a_back, self.a_between = None, (0.0, EASE_MM)
+        self.a_back, self.a_between = None, (0.0, OFF_SENSOR_MAX_MM)
         why, kind, moved = self.probe.move(
-            a, "rollback", EASE_MM, frozenset({"empty"}), speed=self.probe.cfg.probe_speed
+            a,
+            "rollback",
+            OFF_SENSOR_MAX_MM,
+            frozenset({"empty"}),
+            speed=self.probe.cfg.probe_speed,
+            free_tip=True,
         )
         if why != "empty":
             if kind == "done":
                 raise MeasureError(
-                    f"{ta}'s tip did not leave the head's sensor within {EASE_MM:.0f} mm"
+                    f"{ta}'s tip did not leave the head's sensor within {OFF_SENSOR_MAX_MM:.0f} mm"
                 )
             raise MeasureError(f"{ta}'s roll back off the head's sensor ended {kind}")
         if moved <= 0.0:
@@ -297,7 +329,7 @@ class SplitterMeasure:
             )
         self.a_back, self.a_between = moved, (moved, moved + SENSOR_CLEAR_MM)
         why, kind, more = self.probe.move(
-            a, "rollback", SENSOR_CLEAR_MM, speed=self.probe.cfg.probe_speed
+            a, "rollback", SENSOR_CLEAR_MM, speed=self.probe.cfg.probe_speed, free_tip=True
         )
         if kind != "done":
             raise MeasureError(f"{ta}'s roll back behind the head's sensor ended {kind or why}")
@@ -442,7 +474,7 @@ class SplitterMeasure:
         """
         back = self.b_out - target
         if back >= 1.0:
-            self.probe.back(b, back, speed=self.probe.cfg.probe_speed)
+            self.probe.back(b, back, speed=self.probe.cfg.probe_speed, free_tip=True)
             self.b_out = target
         elif back > -1.0:
             self.b_out = target
@@ -464,7 +496,7 @@ class SplitterMeasure:
             return
         self.a_back, self.a_between = None, (min(before, x), max(before, x))
         if diff > 0:
-            self.probe.back(a, diff, speed=speed)
+            self.probe.back(a, diff, speed=speed, free_tip=True)
             self.a_back = x
         else:
             left, fed = -diff, 0.0
@@ -486,16 +518,51 @@ class SplitterMeasure:
             self.a_back = before - fed  # what the feeds carried, within INSIST_MIN_MM of x
         self.a_between = None
 
-    def _b_out_of_the_way(self, b: Hooked) -> None:
-        """After an error, roll B back past the wait point (or to its parking point before it met
-        A). Best effort: a failure here is said, never raised over the error."""
-        target = 0.0 if self.b_wait is None else min(self.b_wait, self.b_out)
+    def _put_back(self, a: Hooked, b: Hooked) -> bool:
+        """After an error, roll B and then A back by what the measure moved them, at probe_speed.
+
+        B goes first, so it leaves the shared tube before A moves. Return True when both are back
+        at or behind where they started: a lane whose place was known only within a range, or
+        whose failed push was counted as its whole step, rolls back too far, toward its bay, never
+        short of it. Best effort: a failure here is said, never raised over the error, and
+        the lane stays where the measure last knew it (see _where).
+        """
+        b_home = self._b_back(b)
+        return self._a_back(a) and b_home
+
+    def _b_back(self, b: Hooked) -> bool:
+        """Roll B back to its parking point. Return True when it is there or behind it."""
         try:
-            self._b_to(b, target)
+            self._b_to(b, 0.0)
         except Exception as err:  # the error of the measure is what goes up
             self.adapter.say(
                 f"ace2k_u1: {self.adapter.lane_text(b)} not rolled back after the error: {err}"
             )
+            return False
+        return abs(self.b_out) < 1.0
+
+    def _a_back(self, a: Hooked) -> bool:
+        """Roll A back to its parking point. Return True when it is there or behind it.
+
+        A's tip is a_pushed mm ahead of its parking point, less a_back once that is known. After a
+        move that failed, A is within a_between, and it rolls back from the end nearer the head's
+        sensor: a roll back too far only takes the tip toward its bay.
+        """
+        if self.a_between is not None:
+            ahead = self.a_pushed - self.a_between[0]
+        else:
+            ahead = self.a_pushed - (self.a_back or 0.0)
+        try:
+            if ahead >= 1.0:
+                self.probe.back(a, ahead, speed=self.probe.cfg.probe_speed, free_tip=True)
+        except Exception as err:  # the error of the measure is what goes up
+            self.adapter.say(
+                f"ace2k_u1: {self.adapter.lane_text(a)} not rolled back to where it started after"
+                f" the error: {err}"
+            )
+            return False
+        self.a_pushed, self.a_back, self.a_between = 0.0, None, None
+        return True
 
     def _where(self, a: Hooked, b: Hooked) -> str:
         ta, tb = self.adapter.lane_text(a), self.adapter.lane_text(b)
@@ -614,10 +681,11 @@ class SplitterCommand:
     ) -> list[PairResult]:
         """Measure every pair with the head's lanes stopped and held.
 
-        The head is given back after (see _give_back) when every pair passed, or when the pair
-        that failed never moved (its hand-over was refused). Otherwise its A may still be in the
-        shared tube: A stays the head's lane, so no load pushes another lane into its tip, and the
-        console says so.
+        The head is given back after (see _give_back) when every pair passed, when the pair that
+        failed never moved (its hand-over was refused), or when it failed with both its lanes put
+        back at or behind where they started. Otherwise its A may still be in the shared tube: A
+        stays the head's lane, so no load pushes another lane into its tip, and the console says
+        so.
         """
         slot, adapter, probe = head
         before = slot.current
@@ -636,6 +704,10 @@ class SplitterCommand:
                     results.append(measure.measure_pair(slot, a, b, first))
                     moving = None
             except failed as err:
+                if isinstance(err, MeasureError) and err.home:
+                    moving = (
+                        None  # its lanes are back at or behind their start: none is in the tube
+                    )
                 raise gcmd.error(
                     f"ace2k_u1: head {slot.head + 1}: splitter measure failed: {err}"
                 ) from None
