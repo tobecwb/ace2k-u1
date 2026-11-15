@@ -376,3 +376,41 @@ def test_a_parsed_plan_built_by_hand_needs_no_offsets() -> None:
     # The default is immutable, so no two plans built by hand can share one list.
     assert plan.ParsedPlan(tools=[], order=[], raw=[]).order_at is p.order_at
     assert isinstance(p.order_at, tuple)
+
+
+def write_config(tmp_path: Path, extra: str) -> Path:
+    """A minimal file with eight tools and the given config lines."""
+    f = tmp_path / "x.gcode"
+    colours = ";".join(["#ff0000"] * 8)
+    f.write_text(
+        f"; CONFIG_BLOCK_START\n; filament_colour = {colours}\n{extra}; CONFIG_BLOCK_END\n"
+    )
+    return f
+
+
+def test_the_plan_reads_the_first_block_of_the_flush_matrix() -> None:
+    p = plan.read_file(FIXTURES / "8_colours_no_tower.gcode")
+    assert p.flush is not None and len(p.flush) == 8
+    assert p.flush[0][2] == 211.0 and p.flush[2][0] == 84.0
+    assert tuple(p.diameters) == (1.75,) * 8
+
+
+@pytest.mark.parametrize(
+    "matrix",
+    ["", "1,2,3", "0," * 511 + "x", "0," * 511 + "-1", "0," * 511 + "nan", "0," * 63 + "0"],
+    ids=["empty", "three", "text", "negative", "nan", "n-squared"],
+)
+def test_a_matrix_that_is_not_n_cubed_finite_numbers_is_none(tmp_path: Path, matrix: str) -> None:
+    # 512 values = N^3 for 8 tools; 64 values = N^2, one block only: refused
+    p = plan.read_file(write_config(tmp_path, f"; flush_volumes_matrix = {matrix}\n"))
+    assert p.flush is None and len(p.tools) == 8
+
+
+def test_a_file_without_a_matrix_key_has_no_flush(tmp_path: Path) -> None:
+    p = plan.read_file(write_config(tmp_path, ""))
+    assert p.flush is None and len(p.tools) == 8
+
+
+def test_a_diameter_that_is_zero_empty_or_not_a_number_reads_as_none(tmp_path: Path) -> None:
+    p = plan.read_file(write_config(tmp_path, "; filament_diameter = 0,,x,1.75,-1,inf\n"))
+    assert tuple(p.diameters) == (None, None, None, 1.75, None, None, None, None)

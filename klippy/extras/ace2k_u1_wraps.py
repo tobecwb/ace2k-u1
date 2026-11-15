@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .ace2k_u1_adapter import Adapter
     from .ace2k_u1_background import Background
     from .ace2k_u1_common import Hooked, Slot
+    from .ace2k_u1_light import Departure
     from .ace2k_u1_material import MaterialGate
     from .ace2k_u1_printer import U1Printer
     from .ace2k_u1_printer_types import Coordinator, GCode, GCodeCommand, Handler, Reactor
@@ -114,6 +115,8 @@ class WrapsHost(Protocol):
     def temps(self) -> TempCheck: ...
     @property
     def background(self) -> Background: ...
+    @property
+    def departure(self) -> Departure: ...
     @property
     def swap_times(self) -> SwapTimes: ...
     def units(self) -> Coordinator | None: ...
@@ -899,6 +902,8 @@ class Wraps:
             self.host.tracker.clear_wait_skip()
         self.host.tracker.count_tool(gcmd, n)
         owed = self.host.tracker.take_owed_heat(gcmd, n)
+        departed = self.host.departure.before_tool(gcmd, n)  # a light head this T docks departs
+        owed = [entry for entry in owed if entry[0] != departed]  # it has unloaded: no pre-heat
         with self.host.background.picking(gcmd, n):  # an A0 T picks head n
             if self._tool_swap(gcmd, n):
                 before = self._dock_watch(gcmd)
@@ -924,6 +929,8 @@ class Wraps:
     def _left_dock(self, watch: DockWatch | None) -> None:
         """Wipes a head of background_heads that the U1's T just took from its dock (no swap).
 
+        A head of light_background_heads gets none: it parks on the stock wiper.
+
         watch is what _dock_watch read. A T with a swap picked its head in the return already
         (T<head> A0), so the U1's T finds it active and picks nothing: it was cleaned there. A T
         to the active head and a head not listed get nothing. When the head after the T is
@@ -938,8 +945,9 @@ class Wraps:
             if head is None:
                 logging.debug("ace2k_u1: no dock wipe: the active head is unread after the U1's T")
                 return
-            if head not in self.host.background.heads or head == watch.before:
-                return
+            bg = self.host.background
+            if head not in bg.heads or head in bg.light or head == watch.before:
+                return  # a light head parks on the stock wiper, its nozzle empty
             if watch.before is None:
                 logging.info(
                     "ace2k_u1: head %d: no dock wipe: the active head was unread before the U1's T",
@@ -1076,6 +1084,12 @@ class Wraps:
                         "ace2k_u1: the wait after the swap is skipped: %s", gcmd.get_commandline()
                     )
                     m104(gcmd)  # the same S and T, set without the wait
+                    return
+                if name == "M109" and m104 is not None and self.host.tracker.defer_wait(gcmd):
+                    logging.info(
+                        "ace2k_u1: the wait runs after the departure: %s", gcmd.get_commandline()
+                    )
+                    m104(gcmd)  # it heats during the departure; Departure.before_tool waits
                     return
                 old(gcmd)
 

@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.7.0 — 2026-11-14 — beta
+
+For ace2k `v0.15.0`. No new firmware: the units stay on ace2k `v0.15.0`.
+
+**This release is a beta.** A print with a shared head (several lanes on one head, through a
+splitter) needs a prime tower. The lane swap in a shared head is experimental: stay near the
+printer during such a print.
+
+### Added
+
+- **The light background swap, `light_background_heads`** (off by default). A head in this list
+  swaps its lane while it is parked, and its dock needs no modification. When a `T` docks the
+  head and its next tool needs another lane, the head forms its tip and takes its filament out of
+  the sensor at the cleaning area before it leaves. While it is parked, its unit rolls the old
+  lane back and pushes the new one up to the head. Nothing is extruded in the dock. At the head's
+  `T` the load, the purge, the cut and the clean run, as at the end of an inline swap. A
+  departure that fails never pauses the print: the swap then runs at the head's `T`. A head may
+  not be in both `light_background_heads` and `background_heads`
+  ([`configuration.md`](docs/configuration.md)).
+- **The swap's purge follows the colour pair.** A lane swap purges `purge_fill_mm` (30 mm by
+  default) to fill the nozzle, plus `purge_wash_factor` (0.2) times the volume the slicer's
+  `flush_volumes_matrix` gives for the two colours, up to `purge_max_mm` (80 mm). For example,
+  black to white purges more than white to black. When the colour that leaves the head is not
+  known, the swap purges 40 mm. `ACEK_SWAP_LOAD` receives the length as `PURGE`; a custom macro
+  that does not read it purges as before ([`configuration.md`](docs/configuration.md)).
+
+### Changed
+
+- **The swap's purge with no colour pair is 40 mm again, not 10 mm.** After a light background
+  swap, 10 mm left the new filament short of the nozzle, and the first lines of the part came out
+  in the old color.
+
+### Fixed
+
+- **Two tools on one lane keep their head hot.** The slicer cooled one of them after it had
+  heated the other, so the print waited over the prime tower for the head to heat again. That
+  cool-down is now dropped ([`commands.md`](docs/commands.md)).
+
 ## v0.6.0 — 2026-11-13 — beta
 
 For ace2k `v0.15.0`.

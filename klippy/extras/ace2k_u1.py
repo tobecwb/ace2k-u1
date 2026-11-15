@@ -246,6 +246,7 @@ try:
     from .ace2k_u1_config import LANES, SPLITTER_DEFAULT_MM
     from .ace2k_u1_eject import EJECT_PROBE_MIN_MM, EJECT_PROBE_MM, EjectRefused
     from .ace2k_u1_history import DEFAULT_PATH as HISTORY_PATH
+    from .ace2k_u1_light import Departure
     from .ace2k_u1_material import MaterialGate
     from .ace2k_u1_page import PageCommands
     from .ace2k_u1_pause import PauseObjects
@@ -290,6 +291,7 @@ except ImportError:  # same as above, for the host tests
     from ace2k_u1_history import (  # type: ignore[import-not-found, no-redef]
         DEFAULT_PATH as HISTORY_PATH,
     )
+    from ace2k_u1_light import Departure  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_material import MaterialGate  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_page import PageCommands  # type: ignore[import-not-found, no-redef]
     from ace2k_u1_pause import PauseObjects  # type: ignore[import-not-found, no-redef]
@@ -433,6 +435,8 @@ class ACE2kU1:
         self.swap_times: SwapTimes = SwapTimes()
         # The background swap of the heads in background_heads, and its commands.
         self.background: Background = Background(self)
+        # The departure of a light head (light_background_heads) at a T that docks it.
+        self.departure: Departure = Departure(self)
         self.splitter: SplitterCommand = SplitterCommand(self, self.bench, config.get_name())
         # The commands ACEK_SPOOL, ACEK_TAG_FORGET, ACEK_PLAN and ACEK_PLAN_SET.
         self.page: PageCommands = PageCommands(self)
@@ -762,7 +766,7 @@ class ACE2kU1:
                 self.adapter, self.reactor, self.u1.script, self.swap_cfg
             )
         self.adapter.probe = self.probe
-        self.adapter.on_u1_load = self.background.u1_loads  # a kept run's tip no longer counts
+        self.adapter.on_u1_load = self.departure.u1_loads  # a kept run's tip no longer counts
         self._feed_dryer_materials(self.adapter)
         # The load into a head that one lane feeds pushes again with the same rules.
         self.adapter.insister = self.probe or ace2k_u1_probe.HeadProbe(

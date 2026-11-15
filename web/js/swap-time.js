@@ -6,15 +6,18 @@ import { isNum } from './format.js';
 
 /** @typedef {import('./timeline.js').Frame} Frame */
 /** @typedef {import('./timeline.js').HeadOf} HeadOf */
-/** @typedef {{ inline: number, ready: number, dock: number, resume: number }} SwapTimes */
+/** @typedef {{ inline: number, ready: number, dock: number, resume: number, depart: number, light: number,
+ *   unit: number, lightHeads: number[] }} SwapTimes  unit is the unit's lane work (its three step averages);
+ *   lightHeads the heads that swap light (the adapter's background mode). */
 /** @typedef {{ tool: number, s: number | null }} Change */
-/** @typedef {{ kind: 'inline' | 'ready' | 'late', s: number }} SwapStop */
+/** @typedef {{ kind: 'inline' | 'ready' | 'late', s: number } | { kind: 'light', s: number, depart: number }} SwapStop */
 /** @typedef {{ s: number, n: number, since: number | null }} PrintStops */
 /** @typedef {import('./clock.js').Stops} Stops */
 
 // The values measured on the printer on 2026-11-10, in seconds. web/tests/fixtures/swap-time-seeds.json pins them
-// for both the adapter and the page.
-export const SEEDS = Object.freeze({ inline: 94, ready: 15, dock: 65, resume: 15 });
+// for both the adapter and the page. depart and light are the light background swap brief's section 5
+// estimates, not yet measured.
+export const SEEDS = Object.freeze({ inline: 94, ready: 15, dock: 65, resume: 15, depart: 29, light: 41 });
 export const STEP_SEEDS = Object.freeze({
   heat: 0,
   unload: 27,
@@ -25,21 +28,46 @@ export const STEP_SEEDS = Object.freeze({
   grip: 14,
   loaded: 0,
 });
+// The unit's lane work of a light swap, while the head is parked: the steps the unit runs between the head leaving
+// and the T (roll back, hand over, push).
+const UNIT_STEPS = /** @type {const} */ (['roll back', 'hand over', 'push']);
 // An average over this is not a swap's (the adapter drops such a sample): the seed is used.
 export const AVG_MAX_S = 600;
 
-// The four averages from the adapter's status, each checked; a missing or bad one is its seed.
+// An average from the adapter, or its seed when it is missing or not a swap's.
+/** @param {{ s?: number | null } | undefined} avg @param {number} seed @returns {number} */
+const avgOr = (avg, seed) => {
+  const s = avg?.s;
+  return typeof s === 'number' && Number.isFinite(s) && s >= 0 && s <= AVG_MAX_S ? s : seed;
+};
+
+// The six averages from the adapter's status, each checked (a missing or bad one is its seed), the unit's lane work
+// (the sum of its three step averages), and the heads that swap light (the adapter's background mode).
 /** @param {import('./types.js').Status | null | undefined} status @returns {SwapTimes} */
 export function timesOf(status) {
   const st = status?.ace2k_u1?.swap_times;
-  /** @type {SwapTimes} */
+  /** @type {Record<keyof typeof SEEDS, number>} */
   const out = { ...SEEDS };
-  for (const k of /** @type {(keyof SwapTimes)[]} */ (Object.keys(SEEDS))) {
-    const s = st?.[k]?.s;
-    if (typeof s === 'number' && Number.isFinite(s) && s >= 0 && s <= AVG_MAX_S) out[k] = s;
-  }
-  return out;
+  for (const k of /** @type {(keyof typeof SEEDS)[]} */ (Object.keys(SEEDS))) out[k] = avgOr(st?.[k], SEEDS[k]);
+  const unit = UNIT_STEPS.reduce((sum, k) => sum + avgOr(st?.steps?.[k], STEP_SEEDS[k]), 0);
+  return { ...out, unit, lightHeads: headsOfMode(status, (mode) => mode === 'light') };
 }
+
+// The heads (0-based) the adapter's background status lists whose mode passes test (a head not listed is null there;
+// a missing mode, from an older adapter, is full). None while the adapter publishes no background status. The one
+// reading of a head's mode: timesOf here (its lightHeads) and state.js bgHeads.
+/**
+ * @param {import('./types.js').Status | null | undefined} status @param {(mode: string) => boolean} test
+ * @returns {number[]}
+ */
+export function headsOfMode(status, test) {
+  const list = status?.ace2k_u1?.background;
+  return Array.isArray(list) ? list.flatMap((entry, h) => (entry && test(entry.mode ?? 'full') ? [h] : [])) : [];
+}
+
+// The seeds as a complete SwapTimes: what the page uses before any measurement and in tests.
+/** @type {SwapTimes} */
+export const SEED_TIMES = Object.freeze(timesOf(null));
 
 // Whether the slicer's time is a time the page can use: a finite number over 0. The one test for the estimates and
 // for the panel's note that the file has no time.
@@ -69,9 +97,18 @@ export function bgStop(times, w) {
   return left > 0 ? { kind: 'late', s: times.ready + left + times.resume } : { kind: 'ready', s: times.ready };
 }
 
+// The stop of a light swap whose head stayed parked w seconds (null: not known): the head leaves (depart), the unit
+// swaps the lane while it is parked, and at the T it loads (light). The unit work the window did not cover is added.
+// depart is how much of the stop is the head leaving.
+/** @param {SwapTimes} times @param {number | null} w @returns {{ kind: 'light', s: number, depart: number }} */
+export function lightStop(times, w) {
+  const left = w === null ? 0 : Math.max(0, times.unit - w);
+  return { kind: 'light', s: times.depart + times.light + left, depart: times.depart };
+}
+
 // The stop of one change, or null when it swaps no lane. A swap happens at a change whose lane is not the last lane of
 // its head (print-plan.js swapKinds). On a head in bg whose change before was another head's, it is a background swap
-// (bgStop), its window the time since the head's previous change ended; every other swap is inline.
+// (bgStop; lightStop on a light head), its window the time since the head's previous change ended; every other swap is inline.
 /**
  * @param {{ key: string | null, head: number | null, last: Map<number, string>, bg: number[], prevHead: number | null,
  *   w: () => number | null }} at
@@ -81,6 +118,7 @@ export function bgStop(times, w) {
 function stopOf(at, times) {
   const { head, key, last } = at;
   if (head === null || !last.has(head) || last.get(head) === key) return null;
+  if (times.lightHeads.includes(head) && at.prevHead !== head) return lightStop(times, at.w());
   if (at.bg.includes(head) && at.prevHead !== head) return bgStop(times, at.w());
   return { kind: 'inline', s: times.inline };
 }

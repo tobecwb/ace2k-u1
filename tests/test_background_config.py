@@ -97,3 +97,69 @@ def test_the_arrival_wipe_is_a_boolean(value: str, kept: bool) -> None:
 def test_an_arrival_wipe_that_is_no_boolean_stops_klipper() -> None:
     with pytest.raises(Exception, match="arrival_wipe"):
         keys({"arrival_wipe": "twice"})
+
+
+def test_no_head_swaps_in_the_light_way_by_default() -> None:
+    assert keys({}).light_background_heads == frozenset()
+
+
+def test_a_group_head_may_swap_in_the_light_way() -> None:
+    assert keys({"light_background_heads": "1"}).light_background_heads == frozenset({0})
+
+
+def test_two_light_group_heads_are_stored_0_based() -> None:
+    refs: list[LaneRef] = [(0, "a", 0), (0, "a", 1), (3, "b", 0), (3, "b", 1)]
+    cfg = keys({"light_background_heads": " 4, 1 "}, refs)
+    assert cfg.light_background_heads == frozenset({0, 3})
+
+
+def test_a_light_head_that_one_lane_feeds_stops_klipper() -> None:
+    with pytest.raises(Exception, match="light_background_heads: head 2 is fed by one lane"):
+        keys({"light_background_heads": "2"})
+
+
+@pytest.mark.parametrize("value", ["5", "x"])
+def test_a_light_head_out_of_range_stops_klipper(value: str) -> None:
+    with pytest.raises(Exception, match="light_background_heads: .* is not a head 1-4"):
+        keys({"light_background_heads": value})
+
+
+def test_a_light_head_listed_twice_stops_klipper() -> None:
+    with pytest.raises(Exception, match="light_background_heads: head 1 is listed twice"):
+        keys({"light_background_heads": "1, 1"})
+
+
+def test_a_head_in_both_lists_stops_klipper() -> None:
+    with pytest.raises(
+        Exception, match="ace2k_u1: light_background_heads: head 1 is also in background_heads"
+    ):
+        keys({"background_heads": "1", "light_background_heads": "1"})
+
+
+# --- purge_fill_mm, purge_wash_factor, purge_max_mm: the swap's purge by the matrix ----------
+
+
+def test_the_purge_keys_default_to_30_0_2_and_80() -> None:
+    cfg = keys({})
+    assert (cfg.purge_fill_mm, cfg.purge_wash_factor, cfg.purge_max_mm) == (30.0, 0.2, 80.0)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("purge_fill_mm", 201), ("purge_wash_factor", -0.1), ("purge_max_mm", 201)],
+)
+def test_a_purge_key_out_of_range_stops_klipper(key: str, value: float) -> None:
+    with pytest.raises(Exception, match=key):
+        keys({key: value})
+
+
+def test_a_ceiling_below_the_fill_stops_klipper() -> None:
+    with pytest.raises(
+        Exception, match=r"ace2k_u1: purge_max_mm \(40\) is below purge_fill_mm \(50\)"
+    ):
+        keys({"purge_fill_mm": 50, "purge_max_mm": 40})
+
+
+def test_a_ceiling_equal_to_the_fill_passes() -> None:
+    cfg = keys({"purge_fill_mm": 50, "purge_max_mm": 50})
+    assert cfg.purge_max_mm == 50.0

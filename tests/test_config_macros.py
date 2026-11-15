@@ -79,7 +79,9 @@ def test_the_swaps_load_ends_with_the_u1s_clean() -> None:
 
 def test_the_swaps_load_runs_at_one_temperature() -> None:
     load = section("ACEK_SWAP_LOAD")
-    assert "G1 E40 F360" in load and "G1 E10 F360" in load
+    assert load.count("G1 E40 F360") == 1  # 40 mm through the gear
+    # the purge: the colour pair's length when the swap passes PURGE, else 40 mm
+    assert load.count("G1 E{params.PURGE|default(40)} F360") == 1
     # The swap passes PRINT_TEMP = LOAD_TEMP, so there is no fan step to cool the head.
     assert "M106" not in load
     # The only branch is the grip, which a background swap skips (GRIP=0).
@@ -91,4 +93,4 @@ def test_the_swaps_load_skips_only_the_grip_with_grip_0() -> None:
     lines = [ln.split(";")[0].strip() for ln in load.splitlines()]
     branch = lines.index("{% if params.GRIP|default(1)|int %}")
     assert lines[branch + 1 : branch + 3] == ["G1 E40 F360", "{% endif %}"]
-    assert lines[branch + 3] == "G1 E10 F360"
+    assert lines[branch + 3] == "G1 E{params.PURGE|default(40)} F360"  # the purge

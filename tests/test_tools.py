@@ -2008,7 +2008,7 @@ def test_the_swap_runs_its_two_macros_and_no_u1_flow(tmp_path: Path) -> None:
         "M400",  # its moves run before the free check stops the old lane's follow
         rig.sent[4],  # SET_PRINT_FILAMENT_CONFIG … (the spool)
         "T0 A0",  # the load's head selected again, whatever the steps between left active
-        "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA",
+        f"{fakes.SWAP_LOAD} PURGE=47.5",
         *SUCCESS_EXIT,
     ]
     assert rig.sent[4].startswith("SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER=0 ")
@@ -2280,7 +2280,7 @@ def test_a_head_empty_after_the_load_macro_fails_the_swap(tmp_path: Path) -> Non
     assert tool(rig, 2) == []
     line = "ace2k_u1: head 1: a:1 → a:2 (T2) failed at loaded: the head's sensor sees no filament"
     assert any(ln.startswith(line) for ln in rig.gcode.lines)
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
     assert rig.module.swapper.swap_pending.step == "loaded"
 
 
@@ -2361,7 +2361,7 @@ def test_no_printing_temperature_known_loads_and_ends_at_the_load_temperature(
     rig.module.tracker.plan.tools[2]["temp"] = None
     rig.module.tracker.plan.tools[2]["first_temp"] = None
     tool(rig, 2)
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=230 PRINT_TEMP=230 MATERIAL=PLA" in rig.sent
+    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=230 PRINT_TEMP=230 MATERIAL=PLA PURGE=47.5" in rig.sent
     line = (
         "ace2k_u1: head 1: no printing temperature known for T2: the load temperature, 230 °C,"
         " is kept"
@@ -2380,7 +2380,7 @@ def test_a_kept_temperature_is_dropped_only_after_the_load_macro_succeeded(tmp_p
     rig.gcode.run_script_from_command = run_script
     probe_finds(rig, 1)
     assert resume(rig) == [True]
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=200 PRINT_TEMP=200 MATERIAL=PLA" in rig.sent
+    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=200 PRINT_TEMP=200 MATERIAL=PLA PURGE=47.5" in rig.sent
     assert 2 not in rig.module.tracker.plan.kept
 
 
@@ -3125,7 +3125,7 @@ def test_resume_with_the_new_lane_in_the_head_goes_on_from_its_spool(tmp_path: P
     assert rig.sent[0].startswith("SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER=0 ")
     assert rig.sent[1:3] == [
         "T0 A0",
-        "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA",
+        f"{fakes.SWAP_LOAD} PURGE=47.5",
     ]
     assert not [line for line in rig.sent if "UNLOAD" in line]
 
@@ -3151,7 +3151,7 @@ def test_a_push_short_of_the_sensor_whose_tip_arrives_later_goes_on_unprobed(
     rig.sent.clear()
     assert resume(rig) == [True]
     assert asked == [] and NO_PROBE_LINE in rig.gcode.lines
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
     slot = rig.adapter.slot_of_head(0)
     assert slot.current is slot.lanes[1] and rig.module.swapper.swap_pending is None
 
@@ -3176,7 +3176,8 @@ def test_a_swap_failed_at_its_load_after_its_push_goes_on_unprobed(tmp_path: Pat
     assert resume(rig) == [True]
     assert asked == [] and NO_PROBE_LINE in rig.gcode.lines
     assert not [line for line in rig.sent if "UNLOAD" in line]
-    assert rig.sent.count("ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA") == 1
+    load = f"{fakes.SWAP_LOAD} PURGE=47.5"
+    assert rig.sent.count(load) == 1
     slot = rig.adapter.slot_of_head(0)
     assert slot.current is slot.lanes[1] and rig.module.swapper.swap_pending is None
 
@@ -3469,7 +3470,7 @@ def test_a_swap_roll_back_that_runs_out_of_the_bay_counts_as_rolled_back(tmp_pat
     new = rig.adapter.slot_of_head(0).lanes[1]
     assert rig.adapter.slot_of_head(0).current is new
     assert rig.module.swapper.swap_pending is None
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
 
 
 def test_the_u1_unload_leaving_its_tip_on_the_heads_sensor_does_not_fail_the_unload(
@@ -3827,7 +3828,7 @@ def test_a_swap_failed_at_its_loaded_check_with_the_head_empty_is_probed_as_befo
     assert resume(rig) == [True]
     assert asked == []  # the sensor empty: on from the hand over, the push finds it
     assert [mode for _l, mode, *_ in a.feed.started[started:]][0] == "feed"
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
 
 
 def test_a_swap_failed_at_its_loaded_check_with_the_sensor_unreadable_stays_paused(
@@ -4035,7 +4036,7 @@ def test_a_spool_setting_the_u1_refuses_never_fails_the_swap(tmp_path: Path) -> 
     assert line in rig.gcode.lines
     slot = rig.adapter.slot_of_head(0)
     assert slot.setting_for is None and slot.current is slot.lanes[1]
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
     assert rig.module.swapper.swap_pending is None
 
 
@@ -4221,17 +4222,26 @@ def test_temperature_passes_through_without_a_started_plan_or_a_group(tmp_path: 
     assert temp(rig, "M109", {"S": "170", "T": "2"}) == [{"S": "170", "T": "2"}]
 
 
+def test_an_m109_with_a_tool_passes_through_without_a_plan(tmp_path: Path) -> None:
+    """Bench 2026-11-14: a print of the U1 with no plan of the adapter (plate_wiper.gcode) and a
+    + group: its M109 with T raised in the wait check and shut Klipper down."""
+    rig, _ = tools_rig(tmp_path)
+    assert rig.module.tracker.plan is None
+    assert temp(rig, "M109", {"S": "280", "T": "0"}) == [{"S": "280", "T": "0"}]
+    assert temp(rig, "M104", {"S": "0", "T": "0"}) == [{"S": "0", "T": "0"}]
+
+
 def test_a_kept_temperature_is_used_once_by_the_swap(tmp_path: Path) -> None:
     rig, a = swap_rig(tmp_path)
     a.feed.on_push = lambda: setattr(rig.head_sensor, "detected", True)
     temp(rig, "M104", {"S": "200", "T": "2"})
     tool(rig, 2)
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=200 PRINT_TEMP=200 MATERIAL=PLA" in rig.sent
+    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=200 PRINT_TEMP=200 MATERIAL=PLA PURGE=47.5" in rig.sent
     assert 2 not in rig.module.tracker.plan.kept
     tool(rig, 0)  # swap away, back to a:1
     del rig.sent[:]
     tool(rig, 2)  # and back, with no new M104: the plan's temperature
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
 
 
 def test_a_zero_is_not_kept_and_the_swap_takes_the_plans_temperature(tmp_path: Path) -> None:
@@ -4240,7 +4250,7 @@ def test_a_zero_is_not_kept_and_the_swap_takes_the_plans_temperature(tmp_path: P
     assert temp(rig, "M104", {"S": "0", "T": "2"}) == []
     assert 2 not in rig.module.tracker.plan.kept
     tool(rig, 2)
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
 
 
 @pytest.mark.parametrize("end", ["complete", "cancelled", "error"])
@@ -4318,7 +4328,7 @@ def test_a_standby_temperature_swaps_at_the_plans_temperature(tmp_path: Path) ->
     a.feed.on_push = lambda: setattr(rig.head_sensor, "detected", True)
     assert temp(rig, "M104", {"S": "70", "T": "2"}) == []
     tool(rig, 2)
-    assert "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent
     assert not [line for line in rig.sent if "TEMP=70" in line or line.startswith("M10")]
 
 
@@ -4608,9 +4618,7 @@ def test_a_failed_restore_of_the_gcode_state_pauses_and_resume_goes_on_from_the_
     probe_finds(rig, 1)
     rig.sent.clear()
     assert resume(rig) == [True]
-    assert (
-        "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA" in rig.sent
-    )  # from its spool: what the probe read
+    assert f"{fakes.SWAP_LOAD} PURGE=47.5" in rig.sent  # from its spool: what the probe read
     assert rig.sent[-1] == "RESTORE_GCODE_STATE NAME=ACEK_SWAP MOVE=0"
     assert rig.module.swapper.swap_pending is None
 
@@ -4773,6 +4781,65 @@ def test_the_cool_down_before_a_t_on_another_head_is_applied_though_the_head_ret
     order_is(rig, [0, 1, 2], 0)  # head 1 a:1 -> head 2 -> head 1 a:2: head 1 cools
     assert temp(rig, "M104", {"S": "70", "T": "0"}) == [{"S": "70", "T": "0"}]
     assert not [ln for ln in rig.gcode.lines if "cool-down kept" in ln]
+
+
+def same_lane(rig: SimpleNamespace) -> None:
+    """T2 set on T0's lane (a:1): two tools of the file, one nozzle on the printer."""
+    plan = rig.module.tracker.plan
+    plan.choice[2] = plan.choice[0]
+    order_is(rig, [0, 1, 2], 0)  # head 1 a:1 -> head 2 -> head 1 a:1 again
+
+
+SAME_LANE = "ace2k_u1: T0's cool-down kept: T2 prints the same lane on head 1"
+
+
+@pytest.mark.parametrize("s", ["70", "0"])
+def test_a_cool_down_does_not_undo_the_heat_of_a_tool_on_the_same_lane(
+    tmp_path: Path, s: str
+) -> None:
+    rig, _ = planned(tmp_path)
+    same_lane(rig)
+    assert temp(rig, "M104", {"S": "215", "T": "2"}) == [{"S": "215", "T": "2"}]
+    assert temp(rig, "M104", {"S": s, "T": "0"}) == []  # the head stays hot for T2
+    assert SAME_LANE in rig.gcode.lines
+
+
+def test_an_m109_cool_down_on_the_same_lane_does_not_wait(tmp_path: Path) -> None:
+    rig, _ = planned(tmp_path)
+    same_lane(rig)
+    temp(rig, "M104", {"S": "215", "T": "2"})
+    assert temp(rig, "M109", {"S": "70", "T": "0"}) == []
+
+
+def test_the_bench_order_keeps_the_cool_down_of_a_light_head_on_one_lane(
+    tmp_path: Path,
+) -> None:
+    """Bench 2026-11-14: head 1 is light and its next T is head 2's, so the light check runs
+    first; it does not depart (its next tool is on the same lane) and the same-lane rule holds."""
+    rig, _ = planned(tmp_path)
+    same_lane(rig)
+    asked = []
+    rig.module.tracker.departs_at = lambda m, head: asked.append((m, head)) or False
+    temp(rig, "M104", {"S": "215", "T": "2"})
+    assert temp(rig, "M104", {"S": "70", "T": "0"}) == []
+    assert asked == [(1, 0)]
+    assert SAME_LANE in rig.gcode.lines
+    assert rig.module.tracker.light_cool == {}
+
+
+def test_a_cool_down_on_the_same_lane_without_its_heat_is_applied(tmp_path: Path) -> None:
+    rig, _ = planned(tmp_path)
+    same_lane(rig)
+    assert temp(rig, "M104", {"S": "70", "T": "0"}) == [{"S": "70", "T": "0"}]
+    assert SAME_LANE not in rig.gcode.lines
+
+
+def test_a_heat_before_the_last_t_does_not_keep_a_cool_down(tmp_path: Path) -> None:
+    rig, _ = planned(tmp_path)
+    same_lane(rig)
+    temp(rig, "M104", {"S": "215", "T": "2"})
+    rig.module.tracker.t_raw = 1  # a T of the file ran since: that heat is stale
+    assert temp(rig, "M104", {"S": "70", "T": "0"}) == [{"S": "70", "T": "0"}]
 
 
 def test_a_zero_before_any_t_is_kept_when_the_first_t_swaps_its_head(tmp_path: Path) -> None:
@@ -5509,7 +5576,7 @@ def test_the_macros_get_each_lanes_material(tmp_path: Path) -> None:
     unload = [ln for ln in rig.sent if ln.startswith("ACEK_SWAP_UNLOAD")]
     load = [ln for ln in rig.sent if ln.startswith("ACEK_SWAP_LOAD")]
     assert unload[0].endswith(" MATERIAL=PLA")  # the old lane's (the head's setting)
-    assert load[0].endswith(" MATERIAL=PETG")  # the new lane's spool
+    assert load[0].endswith(" MATERIAL=PETG PURGE=47.5")  # the new lane's spool, then its purge
 
 
 def test_a_material_is_kept_to_one_word_for_the_macro_line(tmp_path: Path) -> None:

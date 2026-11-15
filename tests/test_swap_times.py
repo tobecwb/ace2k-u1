@@ -27,8 +27,25 @@ def test_status_holds_the_seeds() -> None:
     s = st.SwapTimes().status()
     assert s["inline"] == {"s": 94.0, "n": 0}
     assert s["steps"]["roll back"] == {"s": 11.0, "n": 0}
-    assert set(s) == {"inline", "ready", "dock", "resume", "steps"}
+    assert set(s) == {"inline", "ready", "dock", "resume", "depart", "light", "steps"}
     assert list(s["steps"]) == list(st.STEPS)
+
+
+def test_the_light_seeds_are_29_and_41() -> None:
+    s = st.SwapTimes().status()
+    assert s["depart"] == {"s": 29.0, "n": 0}
+    assert s["light"] == {"s": 41.0, "n": 0}
+
+
+def test_an_old_file_gets_the_light_seeds(tmp_path: Path) -> None:
+    old = {"v": 1, "dock": {"s": 50, "n": 3}, "steps": {"push": {"s": 10.5, "n": 4}}}
+    (tmp_path / st.FILE_NAME).write_text(json.dumps(old))
+    t = st.SwapTimes()
+    t.open(str(tmp_path))
+    s = t.status()
+    assert s["dock"] == {"s": 50.0, "n": 3}
+    assert s["depart"] == {"s": 29.0, "n": 0}
+    assert s["light"] == {"s": 41.0, "n": 0}
 
 
 def test_first_sample_replaces_the_seed_then_the_average_moves_a_fifth() -> None:

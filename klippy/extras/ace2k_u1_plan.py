@@ -56,6 +56,11 @@ class ParsedPlan(NamedTuple):
     of the file those offsets refer to. The page draws the print's timeline from them. read_file
     gives a list; a plan built by hand without offsets has an empty tuple, never one list shared
     by every such plan.
+
+    flush holds the first N x N block of the slicer's flush_volumes_matrix (N is the number of
+    tools): flush[old][new] is the volume in mm3 that the slicer purges when the tool old gives
+    way to the tool new. It is None when the file has no usable matrix. diameters holds the
+    filament diameter of each tool in mm, None where it is unknown.
     """
 
     tools: list[Tool]
@@ -63,10 +68,20 @@ class ParsedPlan(NamedTuple):
     raw: list[int]
     order_at: Sequence[int] = ()
     size: int = 0
+    flush: tuple[tuple[float, ...], ...] | None = None
+    diameters: Sequence[float | None] = ()
 
 
-# The plan of a file as the cache keeps it: (tools, order, raw, order_at, size).
-Parsed = tuple[tuple[Tool, ...], tuple[int, ...], tuple[int, ...], tuple[int, ...], int]
+# The plan of a file as the cache keeps it: (tools, order, raw, order_at, size, flush, diameters).
+Parsed = tuple[
+    tuple[Tool, ...],
+    tuple[int, ...],
+    tuple[int, ...],
+    tuple[int, ...],
+    int,
+    tuple[tuple[float, ...], ...] | None,
+    tuple[float | None, ...],
+]
 # A mapped file. An empty one is read as b"".
 Data = Union[bytes, mmap.mmap]
 Key = TypeVar("Key")
@@ -77,7 +92,9 @@ CONFIG_END = b"; CONFIG_BLOCK_END"
 EXEC_START = b"; EXECUTABLE_BLOCK_START"
 EXEC_END = b"; EXECUTABLE_BLOCK_END"
 CACHE_SIZE = 4
-# Maps (path, mtime_ns, size) to (tools, order, raw).
+# The diameter of a filament that the file does not give, in mm.
+DEFAULT_DIAMETER = 1.75
+# Maps (path, mtime_ns, size) to the Parsed tuple of the file.
 _CACHE: collections.OrderedDict[tuple[str, int, int], Parsed] = collections.OrderedDict()
 # The reader thread of the plan reads and writes the cache (ace2k_u1_tracker.read_plan).
 _CACHE_LOCK = threading.Lock()
@@ -122,7 +139,7 @@ def normal_colour(value: object) -> str | None:
 
 
 def read_file(path: str | os.PathLike[str]) -> ParsedPlan:
-    """Reads a slicer file and returns ParsedPlan(tools, order, raw, order_at, size).
+    """Reads a slicer file and returns ParsedPlan(tools, order, raw, order_at, size, ...).
 
     It reads the executable and config blocks of OrcaSlicer. The file is mapped, not read line by
     line. The config block is found from the end of the file and parsed alone. One regular
@@ -142,9 +159,15 @@ def read_file(path: str | os.PathLike[str]) -> ParsedPlan:
                 _CACHE.popitem(last=False)
         else:
             _CACHE.move_to_end(key)
-    tools, order, raw, order_at, size = cached
+    tools, order, raw, order_at, size, flush, diameters = cached
     return ParsedPlan(
-        tools=list(tools), order=list(order), raw=list(raw), order_at=list(order_at), size=size
+        tools=list(tools),
+        order=list(order),
+        raw=list(raw),
+        order_at=list(order_at),
+        size=size,
+        flush=flush,
+        diameters=list(diameters),
     )
 
 
@@ -191,7 +214,9 @@ def _blocks(data: Data) -> tuple[str | None, tuple[int, int] | None]:
 
 
 def _parse(path: str | os.PathLike[str]) -> Parsed:
-    """Returns (tools, order, raw, order_at, size) of a file; all but size are tuples.
+    """Returns (tools, order, raw, order_at, size, flush, diameters) of a file.
+
+    Everything but size, and flush when it is None, is a tuple.
 
     They are kept in the cache and never change.
     """
@@ -208,8 +233,18 @@ def _parse(path: str | os.PathLike[str]) -> Parsed:
         finally:
             if isinstance(data, mmap.mmap):
                 data.close()
-    tools = _tools(_config_keys(config_text))
-    return tools, tuple(order), tuple(raw), tuple(order_at), size
+    config = _config_keys(config_text)
+    tools = _tools(config)
+    n = len(tools)
+    return (
+        tools,
+        tuple(order),
+        tuple(raw),
+        tuple(order_at),
+        size,
+        _flush(config, n),
+        _diameters(config, n),
+    )
 
 
 def _t_lines(
@@ -273,6 +308,37 @@ def _tools(config: dict[str, str]) -> tuple[Tool, ...]:
             )
         )
     return tuple(tools)
+
+
+def _flush(config: dict[str, str], n: int) -> tuple[tuple[float, ...], ...] | None:
+    """Returns the first n x n values of flush_volumes_matrix as rows, or None.
+
+    The key holds n blocks of n x n values (n * n * n in all), and only the first block is
+    used. Each must be a finite number that is not negative.
+    """
+    text = config.get("flush_volumes_matrix", "")
+    try:
+        values = [float(v) for v in text.split(",")]
+    except ValueError:
+        return None
+    if len(values) != n**3 or not all(math.isfinite(v) and v >= 0 for v in values):
+        return None
+    return tuple(tuple(values[row * n : (row + 1) * n]) for row in range(n))
+
+
+def _diameters(config: dict[str, str], n: int) -> tuple[float | None, ...]:
+    """Returns the filament diameter of each of n tools in mm, from filament_diameter.
+
+    A tool is None where its entry is missing, not a number, not finite or not above zero.
+    """
+    found: list[float | None] = []
+    for text in config.get("filament_diameter", "").split(","):
+        try:
+            value = float(text)
+        except ValueError:
+            value = 0.0
+        found.append(value if math.isfinite(value) and value > 0 else None)
+    return tuple(found[i] if i < len(found) else None for i in range(n))
 
 
 def _int(text: str) -> int | None:

@@ -365,6 +365,8 @@ class PageCommands:
             size=parsed.size,
             heads=heads,
             lanes=self._plan_lanes(hooked, lanes),
+            flush=parsed.flush,
+            diameters=list(parsed.diameters),
         )
         gcmd.respond_info(f"ace2k_u1: plan of {name}: {len(parsed.tools)} tools")
 

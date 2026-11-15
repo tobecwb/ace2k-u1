@@ -708,7 +708,8 @@ def test_a_stop_for_the_arrival_leaves_the_heater(tmp_path: Path) -> None:
 # --- the arrival -----------------------------------------------------------------------------
 
 
-LOAD_GRIPPED = "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA GRIP=0"
+# T0 left head 1 and T2 arrives: the pair's purge follows the grip
+LOAD_GRIPPED = f"{fakes.SWAP_LOAD} GRIP=0 PURGE=47.5"
 
 
 def test_the_t_of_a_finished_one_runs_the_spool_the_loaded_check_and_the_return(
@@ -1005,10 +1006,15 @@ def command(rig: SimpleNamespace, name: str, params: dict[str, str]) -> list[str
 
 def test_the_status_per_listed_head(tmp_path: Path) -> None:
     rig, _ = bg_rig(tmp_path)
-    assert rig.module.get_status()["background"][0] == {"state": "idle", "step": None, "lane": None}
+    assert rig.module.get_status()["background"][0] == {
+        "state": "idle",
+        "step": None,
+        "lane": None,
+        "mode": "full",
+    }
     run = started(rig)
     assert rig.module.get_status()["background"] == [
-        {"state": "running", "step": "heat", "lane": "a:2"},
+        {"state": "running", "step": "heat", "lane": "a:2", "mode": "full"},
         None,
         None,
         None,

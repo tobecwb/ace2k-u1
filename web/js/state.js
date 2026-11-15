@@ -4,7 +4,7 @@
 import { LANES, unitName, unitsOf, several, sliceFor, laneOf, laneErrs } from './model.js';
 import { planFor, liveLanes, chosen, choiceFor, headOfIn, userBays } from './print-plan.js';
 import { placement, userPick } from './planner.js';
-import { changesOf, printStopsOf, runStops, swapStops, timeKnown, timesOf } from './swap-time.js';
+import { changesOf, headsOfMode, printStopsOf, runStops, swapStops, timeKnown, timesOf } from './swap-time.js';
 import { segmentsOf } from './timeline.js';
 import { dryerView } from './dryer-form.js';
 import { cycleProgress } from './history.js';
@@ -144,26 +144,23 @@ export const livePlan = (app) => app.status.ace2k_u1?.plan ?? null;
 /** @param {AppState} app */
 export const shownPlan = (app) => planFor(livePlan(app), app.print.file);
 
-// The heads (0-based) that swap in the background: the heads the adapter's background status lists (a head not in
-// background_heads is null there). None while the adapter publishes no background status.
+// The heads (0-based) that swap in the background in full: the dock swaps their lane while they are parked. A light
+// head is not one (swap-time.js timesOf's lightHeads).
 /** @param {import('./types.js').Status} status @returns {number[]} */
-export function bgHeads(status) {
-  const list = status.ace2k_u1?.background;
-  return Array.isArray(list) ? list.flatMap((entry, h) => (entry ? [h] : [])) : [];
-}
+export const bgHeads = (status) => headsOfMode(status, (mode) => mode !== 'light');
 
 // What the running print's Now and Next cards read of the swaps. free: the heads of bgHeads whose swap did not stop
-// (a stopped one goes on at its T, and that stops the print). waiting: the heads whose background swap still runs (a T
+// (a stopped one goes on at its T, and that stops the print; a light head's swap always stops it at its T). waiting: the heads whose background swap still runs (a T
 // of that head waits for it). swapping: the heads whose lane changes now (the adapter's swapping: a swap at a T, its
 // end after a background swap, or a background swap that runs or waits for its T).
 /** @param {import('./types.js').Status} status @returns {{ free: number[], waiting: number[], swapping: number[] }} */
 export function liveBg(status) {
   const list = status.ace2k_u1?.background;
   const entries = Array.isArray(list) ? list : [];
-  /** @param {(state: string) => boolean} test */
-  const where = (test) => entries.flatMap((entry, h) => (entry && test(entry.state) ? [h] : []));
+  /** @param {(state: string, mode: string) => boolean} test */
+  const where = (test) => entries.flatMap((entry, h) => (entry && test(entry.state, entry.mode ?? 'full') ? [h] : []));
   return {
-    free: where((state) => state !== 'stopped'),
+    free: where((state, mode) => state !== 'stopped' && mode !== 'light'),
     waiting: where((state) => state === 'running'),
     swapping: Array.isArray(status.ace2k_u1?.swapping) ? status.ace2k_u1.swapping : [],
   };

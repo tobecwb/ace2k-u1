@@ -708,7 +708,7 @@ def test_the_default_swap_macros_are_the_documented_ones() -> None:
         "{% if params.GRIP|default(1)|int %}",  # GRIP=0: a background swap gripped in the dock
         "G1 E40 F360",
         "{% endif %}",
-        "G1 E10 F360",
+        "G1 E{params.PURGE|default(40)} F360",  # the colour pair's purge, else 40 mm
         "ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD",  # the first clean; the pre-extrusion cleans again
     ]
     at = [load.index(line) for line in order]

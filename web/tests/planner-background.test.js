@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pickCosts, placement, search } from '../js/planner.js';
-import { SEEDS, bgStop } from '../js/swap-time.js';
+import { SEED_TIMES, bgStop, lightStop, SEEDS } from '../js/swap-time.js';
 import { chosen, headOfIn, sentKinds, swapKinds } from '../js/print-plan.js';
 
 // The colour planner with heads that swap in the background (background_heads): a swap at a T of such a head is
@@ -147,7 +147,7 @@ function headSeconds(order, mask, bg) {
   let s = 0;
   order.forEach((g, i) => {
     if (!((mask >> g) & 1)) return;
-    if (last !== -1 && last !== g) s += bg && at !== i - 1 ? bgStop(SEEDS, null).s : SEEDS.inline;
+    if (last !== -1 && last !== g) s += bg && at !== i - 1 ? bgStop(SEED_TIMES, null).s : SEEDS.inline;
     last = g;
     at = i;
   });
@@ -244,4 +244,21 @@ test('pickCosts counts stops: a bay that only adds free swaps costs nothing', ()
   assert.ok((d ?? 0) > 0);
   // Colour 3 on another bay of head 2: still free, no new stop.
   assert.equal(pickCosts(plan, pick, lanes, {}, 3, 'b:3', [0, 1, 2], [0, 1]).d, 0);
+});
+
+test('a light head: the search prices its swaps with lightStop (window 60 s, no unit work left) and counts them as stops', () => {
+  const order = [0, 1, 2, 0, 1, 2];
+  const pre = Float64Array.from([0, 60, 120, 180, 240, 300, 360]);
+  // Heads of 2 and 1 lanes. Head 0 holding groups 0 and 2 swaps three times: once right after itself (inline),
+  // twice with the other head's group between (a light stop of 70 s each); the other splits cost 258 s.
+  const light = search(order, 3, [2, 1], [-1, -1, -1], 0, [], { pre, times: { ...SEED_TIMES, lightHeads: [0] } });
+  assert.equal(light.seconds, 94 + 70 + 70);
+  assert.equal(light.swaps, 3);
+  const plain = search(order, 3, [2, 1], [-1, -1, -1], 0, [], { pre, times: SEED_TIMES });
+  assert.equal(plain.seconds, 3 * 94);
+  // The unit work left past the window is added: a head parked 10 s only.
+  assert.equal(lightStop(SEED_TIMES, 10).s, 83);
+  // A head in both lists is light.
+  const both = search(order, 3, [2, 1], [-1, -1, -1], 0, [0], { pre, times: { ...SEED_TIMES, lightHeads: [0] } });
+  assert.equal(both.seconds, light.seconds);
 });

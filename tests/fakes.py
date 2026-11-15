@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     # a lane as ace2k's coordinator keys it: (unit name, lane index)
     UnitLane = tuple[str | None, int]
 
+SWAP_LOAD = "ACEK_SWAP_LOAD HEAD=0 LOAD_TEMP=220 PRINT_TEMP=220 MATERIAL=PLA"
+
 CONSTANTS = dict(
     FEED_CHANNEL_NUMS=2,
     FEED_CHANNEL_1=0,
@@ -958,7 +960,7 @@ class U1Moves:
             self._add(ext, self.UNLOAD_E)
         else:  # GRIP=0: a background swap took the filament through the gear already
             grip = self.SWAP_GRIP_E if params.get("GRIP", "1") != "0" else 0.0
-            self._add(ext, grip + self.PURGE_E)
+            self._add(ext, grip + float(params.get("PURGE", self.PURGE_E)))
             if "PRINT_TEMP" in params:  # the macro heats the head and waits (its M109)
                 ext.heater.temp = ext.heater.target = float(params["PRINT_TEMP"])
 

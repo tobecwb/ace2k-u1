@@ -96,6 +96,9 @@ DOCK_STEPS = ("heat", "unload", "free", "roll back", "hand over", "push", "grip"
 # The swap steps a background swap can finish, in order. The swap goes on from the first one that
 # is not done, else from its spool.
 DOCK_SWAP_STEPS = SWAP_STEPS[: SWAP_STEPS.index("push") + 1]
+# The steps of a light run (light_background_heads): the unit's only. Its departure unloaded the
+# head at the cleaning area; its arrival loads it there.
+LIGHT_STEPS = ("roll back", "hand over", "push")
 HEAT_TIMEOUT_S = 240.0  # the longest wait for the head's heater, at the heat and at the grip
 HEAT_WITHIN_C = 4.0  # a heater this close to its target has reached it
 HEAT_POLL_S = 0.25  # how often a heat wait reads the heater, and a stop request
@@ -188,7 +191,7 @@ class BgRun:
     heater_left: bool = False  # the hand-back was left to that T, which gives it if it takes none
     step_end: float | None = None  # when the unit move of the step should end (reactor time)
     done: set[str] = field(default_factory=set)  # the swap steps finished in the dock
-    tipped: bool = False  # a parked move of the tip was queued
+    tipped: bool = False  # a parked move of the tip was queued, or a failed departure's unload
     purged_mm: float = 0.0  # what the grip's move pushed past GRIP_MM in the dock
     grip_temp: float | None = None  # the temperature the grip's move ran at
     step_at: float | None = None  # when the current dock step started (reactor time)
@@ -197,6 +200,7 @@ class BgRun:
     # The current step returned at once with nothing to do (an empty head's unload and free
     # check): it gives no swap time sample, which would pull its average toward 0 s.
     skipped: bool = False
+    mode: str = "full"  # "light": LIGHT_STEPS only, no heater, no parked move (its departure's)
 
     def hand_over_steps(self) -> None:
         """Gives the swap's state the steps the dock finished and the step to go on from."""
@@ -212,7 +216,9 @@ class Background:
 
     def __init__(self, host: BackgroundHost) -> None:
         self.host = host
-        self.heads: frozenset[int] = host.swap_cfg.background_heads
+        self.full: frozenset[int] = host.swap_cfg.background_heads
+        self.light: frozenset[int] = host.swap_cfg.light_background_heads
+        self.heads: frozenset[int] = self.full | self.light
         self.runs: dict[int, BgRun] = {}  # head -> its background swap, until its T takes it
         # every parked move, with the head's tangle check held off (its mover: self.mover)
         self.moves = DockMoves(host.reactor, host.u1, parked_module.ParkedMover(host.printer))
@@ -305,13 +311,16 @@ class Background:
     ) -> BgRun | tuple[Slot, Hooked, int] | None:
         """The run of slot's head that goes on, or the new one to start for lane, or None."""
         run = self.runs.get(slot.head)
+        if run is None and slot.head in self.light:
+            return None  # only its departure starts a light run
         if run is not None:
             if not run.resume_ok or run.busy or lane is not run.state.new:
                 return None
         elif slot.current is None or lane is slot.current or slot.head in self._adapter().swapping:
             return None
         pushed = run is not None and "push" in run.done  # the lane is out of its bay
-        if (not pushed and not self._bay_full(lane)) or not self._has_ff(slot):
+        light = run is not None and run.mode == "light"  # it queues no parked move
+        if (not pushed and not self._bay_full(lane)) or not (light or self._has_ff(slot)):
             return None  # a run that goes on is checked as a new one
         return run if run is not None else (slot, lane, tool)
 
@@ -411,6 +420,8 @@ class Background:
         once gripped.
         """
         skip = set(run.done)
+        if run.mode == "light":
+            return [step for step in LIGHT_STEPS if step not in skip]
         if "unload" in skip:
             skip.add("heat")
         if run.state.gripped:
@@ -440,7 +451,7 @@ class Background:
         whole = todo[:1] == ["heat"] and run.in_print  # the whole dock, in a print: timed
         began = self.host.reactor.monotonic()
         try:
-            if "heat" not in todo:
+            if "heat" not in todo and run.mode != "light":
                 self._own(run)  # a run that goes on: the heater is its own again
             for step in todo:
                 if run.stop_asked:
@@ -1174,9 +1185,13 @@ class Background:
             return swapper.swap(gcmd, slot, lane, n, params=params)
         if printing and run.in_print and swapper.printing_on():  # not paused meanwhile: timed
             took_s = self.host.reactor.monotonic() - called
-            if ready:
+            if ready:  # never a light run: it has no load in the dock
                 self.host.swap_times.note("ready", took_s)
-            elif not finished and not run.failed:  # a failure's stop holds its recovery
+            # a finished light run: its arrival is the "light" sample
+            elif finished and run.mode == "light":
+                self.host.swap_times.note("light", took_s)
+            # a failure's stop holds its recovery
+            elif not finished and not run.failed and run.mode == "full":
                 self.host.swap_times.note_resume(took_s, step, in_step, done)
         return True
 
@@ -1191,8 +1206,8 @@ class Background:
         """The swap of today takes the run's state for T<n>, and its lane. None: nothing ran.
 
         With a swap pending, the state is kept for after it. A T that keeps the old lane before
-        anything was done drops it. Either way the heater is given back. owed tells that T<n> is
-        owed already (a RESUME runs it), so a failure owes it no second time.
+        anything was done (no step, no tip) drops it. Either way the heater is given back. owed
+        tells that T<n> is owed already (a RESUME runs it), so a failure owes it no second time.
         """
         swapper = self.host.swapper
         head = run.state.slot.head
@@ -1205,7 +1220,7 @@ class Background:
         if lane is not None and lane is not state.new:
             if "hand over" in state.done_in_dock:
                 finish_first = True  # its own lane first, then the T swaps as today
-            elif lane is state.old and not state.done_in_dock:
+            elif lane is state.old and not state.done_in_dock and not run.tipped:
                 self._heater_back(run)
                 self._say(f"head {head + 1}: T{n} keeps its lane: the background swap is dropped")
                 return None
@@ -1305,16 +1320,17 @@ class Background:
     # --- the status and the commands (§4) ----------------------------------------------------
 
     def status(self) -> list[dict[str, object] | None]:
-        """Per head, None for a head not listed, else {state, step, lane} (get_status)."""
+        """Per head, None for a head not listed, else {state, step, lane, mode} (get_status)."""
         out: list[dict[str, object] | None] = [None] * LANES
         for head in self.heads:
             run = self.runs.get(head)
+            mode = "light" if head in self.light else "full"
             if run is None:
-                out[head] = {"state": "idle", "step": None, "lane": None}
+                out[head] = {"state": "idle", "step": None, "lane": None, "mode": mode}
                 continue
             step = run.step if run.busy else run.state.step
             lane = self._adapter().lane_text(run.state.new)
-            out[head] = {"state": run.status, "step": step, "lane": lane}
+            out[head] = {"state": run.status, "step": step, "lane": lane, "mode": mode}
         return out
 
     def status_lines(self) -> list[str]:
@@ -1341,7 +1357,8 @@ class Background:
                 what = f"finished, to {entry['lane']}, not gripped: it grips at its T"
             else:
                 what = f"stopped, to {entry['lane']}: its T goes on from {entry['step']}"
-            lines.append(f"ace2k_u1: head {head + 1}: background swap {what}")
+            light = " (light)" if entry["mode"] == "light" else ""
+            lines.append(f"ace2k_u1: head {head + 1}: background swap{light} {what}")
         return lines
 
     def cmd_ACEK_BG_STATUS(self, gcmd: GCodeCommand) -> None:
@@ -1351,8 +1368,10 @@ class Background:
     def _bench_head(self, gcmd: GCodeCommand, what: str) -> int:
         """Reads HEAD= (1-4) of a bench command.
 
-        It is refused in a print, on the active head, on a head not in background_heads, and on
-        a head with a background swap kept or running (another head's may run).
+        It is refused in a print, on the active head, on a head not in background_heads, on a
+        light head (nothing is ever extruded in its dock, nor swapped there by hand: its departure
+        needs it active at the cleaning area), and on a head with a background swap kept or
+        running (another head's may run).
         """
         head = gcmd.get_int("HEAD", minval=1, maxval=LANES) - 1
         if self.host.adapter is None:
@@ -1365,6 +1384,9 @@ class Background:
             raise gcmd.error(
                 f"ace2k_u1: {what} refused: head {head + 1} is not in background_heads"
             )
+        if head in self.light:
+            why = f"head {head + 1} swaps in the light way (light_background_heads)"
+            raise gcmd.error(f"ace2k_u1: {what} refused: {why}")
         if head in self.runs:
             raise gcmd.error(f"ace2k_u1: {what} refused: a background swap is kept or running")
         return head

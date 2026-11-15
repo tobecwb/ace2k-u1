@@ -1169,20 +1169,39 @@ class Swapper:
         # every time. The T<head> of the unload runs only when there is filament to unload. A swap
         # or refill that goes on at its RESUME finds whatever head the pause left active.
         timer = state.timer
-        # A background swap gripped already: the macro skips its move through the gear.
-        grip = " GRIP=0" if state.gripped else ""
+        # A background swap gripped already: the macro skips its move through the gear. The
+        # colour pair's purge comes last (_purge_param).
+        tail = (" GRIP=0" if state.gripped else "") + self._purge_param(state)
         self.host.u1.script(f"T{head} A0", timer)
         self._macro(
             state,
             SWAP_LOAD_MACRO,
             f"HEAD={head} LOAD_TEMP={temp:g} PRINT_TEMP={temp:g} "
-            f"MATERIAL={material_param(self.host.spool_lanes.material(new))}{grip}",
+            f"MATERIAL={material_param(self.host.spool_lanes.material(new))}{tail}",
         )
         # The kept temperature is used up. A later swap takes a newer one, else the one of the plan.
         # A refill with no tool has none.
         plan = self.host.tracker.plan
         if plan is not None and state.tool is not None:
             plan.kept.pop(state.tool, None)
+
+    def _purge_param(self, state: SwapState) -> str:
+        """Returns the load macro's PURGE parameter, " PURGE=<mm>", or "" for its default.
+
+        The purge is the slicer's flush for the colour pair: the tool that left the head and the
+        tool of the swap (the tracker's pair_purge). A refill with no tool, a tool that left not
+        known for sure, or a plan with no flush matrix has no pair, and the macro purges its own
+        default. The console says which.
+        """
+        head = state.slot.head
+        say = self._adapter().say
+        pair = self.host.tracker.pair_purge(head, state.old, state.tool, self.host.swap_cfg)
+        if pair is None:
+            say(f"ace2k_u1: head {head + 1}: purge: the macro's default (no colour pair known)")
+            return ""
+        old, mm, cell = pair
+        say(f"ace2k_u1: head {head + 1}: purge {mm:g} mm (T{old} → T{state.tool}: {cell:g} mm³)")
+        return f" PURGE={mm:g}"
 
     def load_print_temp(self, state: SwapState) -> float:
         """Returns the temperature the new filament loads and prints at.

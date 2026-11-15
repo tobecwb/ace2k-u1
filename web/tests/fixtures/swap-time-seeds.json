@@ -3,6 +3,8 @@
   "ready": 15,
   "dock": 65,
   "resume": 15,
+  "depart": 29,
+  "light": 41,
   "steps": {
     "heat": 0,
     "unload": 27,

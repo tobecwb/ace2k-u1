@@ -356,6 +356,22 @@ if its bay still holds filament
 takes it. An inline swap, a pending swap or a refill of another head does not stop it; one of its
 own head does. The end of the print drops it (a head that the dock moved then has its lane unknown, and its next swap probes it).
 
+**The light way.** A head listed in `light_background_heads` ([configuration](configuration.md))
+needs no dock modification. When a T docks it and its next tool in the file needs another lane
+whose bay holds filament, the head leaves first: it forms the tip and checks that the filament is
+free, at the cleaning area, with the print stopped (`ace2k_u1: head 1: leaves with its tip formed:
+the unit swaps it to a:2 while parked`; a head with no filament in its sensor forms no tip:
+`ace2k_u1: head 1: leaves empty: the unit swaps it to a:2 while parked`). Then the T goes on. While the head is parked, its unit
+rolls the old lane back, hands over and pushes the new lane up to the head's sensor. Nothing is
+extruded or purged in the dock, the extruder of the head never moves in the dock, and no heater is used, so it
+never waits for another swap's heat. At the head's T, the load, the purge, the cut and the clean
+run, as at the end of an inline swap. The slicer's cool-down of the head just before the `T` is
+kept until the head has left, so the nozzle is still hot for the tip, and the head then gets it.
+The head does not leave at layer 0, while the print is paused, or for a T typed at the console. A departure that fails never pauses the print:
+`ace2k_u1: head 1: its departure failed at free: <why>: its swap runs at its T`. A pause keeps the
+run, and the end of the print drops it, as for a full head. `ACEK_BG_STOP` works as for a full
+head.
+
     ACEK_BG_STATUS
 
 One line per listed head:
@@ -366,21 +382,30 @@ One line per listed head:
     ace2k_u1: head 1: background swap finished, a:2 gripped and purged 10 mm: it is ready at its T
     ace2k_u1: head 1: background swap finished, a:2 gripped: it purges at its T
     ace2k_u1: head 1: background swap finished, to a:2, not gripped: it grips at its T
+    ace2k_u1: head 3: background swap (light) running at roll back, to a:2
+
+A light head says `background swap (light)` in the same places.
 
 The same is in the printer object's status as `background`: per head, `null` for a head that is
-not listed, else `{state, step, lane}`. `state` is `idle`, `running`, `stopped` or `finished`.
+not listed, else `{state, step, lane, mode}`. `mode` is `full` for a head in `background_heads` and
+`light` for a head in `light_background_heads`. `state` is `idle`, `running`, `stopped` or `finished`.
 `step` is the dock's step while it runs, else the swap's step the T goes on from.
 `swapping` lists the heads (0-3) whose lane changes now: a swap at its T (the end of a background
 swap included), a refill's clearing, or a background swap that runs or waits for its T.
 
 `swap_times` holds the long-term average of each swap time, measured on this printer: `inline`
 (the stop of a swap at its T), `ready` (the stop of a head that arrives ready from its dock),
-`dock` (a whole swap in the dock), `resume` (the extra stop of a swap that goes on at its T from
-the middle of its dock work) and `steps` (each step in the dock). Each is `{s, n}`: the average
-in seconds and the number of swaps it was measured on. With `n` 0 it is the value measured on the
-bench. A new swap moves an average a fifth of the way to it. The averages are kept in
+`dock` (a whole swap in the dock), `depart` (the departure of a light head, seeded at 29 s),
+`light` (the stop at a light head's T once its unit work in the dock is done: the load, the purge, the cut and the clean, seeded at 41 s), `resume` (the extra stop of a swap that
+goes on at its T from the middle of its dock work) and `steps` (each step in the dock). Each is
+`{s, n}`: the average in seconds and the number of swaps it was measured on. With `n` 0 it is the
+value measured on the bench, or, for `depart` and `light`, the seed they start from until the
+first sample. A new swap moves an average a fifth of the way to it. The averages are kept in
 `swap-times.json`, in the folder of the page's history; delete it with Klipper stopped to start
-again from the bench's values. The Print panel prices each swap with them.
+again from the bench's values and the seeds. The Print panel prices each swap with them. It prices
+a light swap as `depart` + `light` + the unit work left (the roll back, hand over and push time not
+yet done at the head's T), and marks it ▼ with "about m:ss stopped, m:ss of it when the head
+left".
 
 `print_stops` holds the swap stops of the print that runs, measured: `s` (their seconds), `n`
 (the swaps in them) and `since` (the print's `print_duration` when the stop that runs now began,
@@ -425,6 +450,7 @@ same for `ACEK_BG_MOVE`. The reasons:
 
 - `a print is printing or paused`, or `head n is the active head`;
 - `head n is not in background_heads`, or `head n's lane is not known`;
+- `head n swaps in the light way (light_background_heads)`;
 - `'<lane>' is not a lane of head n`, `<lane> is already in head n`, or `<lane>'s bay is empty`;
 - `a background swap is kept or running`, or `the ace2k host has no note_move`;
 - for `ACEK_BG_MOVE`, the parked move's own reason.
@@ -909,6 +935,20 @@ temperature of the color being printed.
 - The slicer's cool-down of the tool in the head (`M104 S70 T0`) is not applied when the very next
   `T` of the file swaps that head: the head is about to swap, not to rest. The console says
   `ace2k_u1: T0's cool-down kept: head 1 is about to swap`.
+- The same cool-down is not applied either when the very next `T` makes a light head leave
+  (`light_background_heads`): the head forms its tip as it leaves, with its nozzle still hot, and
+  gets the cool-down at the end of its departure. The console says
+  `ace2k_u1: T0's cool-down kept: head 1 forms its tip as it leaves`. If the head does not leave at
+  that `T` after all, the `T` applies the cool-down.
+- The slicer's wait for the next head before its `T` (`M109 S220 T1`, as at the first use of a
+  head) does not hold the light head over the purge tower: when the light head leaves at that `T`,
+  the next head heats while it forms its tip, and the wait runs once it has left, before the
+  printer's `T`.
+- Two tools of the file on one lane are one nozzle on the printer, which the slicer does not know.
+  When the slicer cools one of them (`M104 S120 T1`) after it already heated the other one, whose
+  `T` is the head's next (`M104 S220 T3`), the cool-down is not applied: the head stays hot for
+  it, and the print never waits for it to heat again over the purge tower. The console says
+  `ace2k_u1: T1's cool-down kept: T3 prints the same lane on head 2`.
 
 Without a kept value, a swap ends at the tool's printing temperature from the file: its first-layer
 temperature on the first layer.
