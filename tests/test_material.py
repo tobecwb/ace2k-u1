@@ -240,7 +240,8 @@ def test_prepare_after_a_push_with_the_status_unreadable_refuses_and_rolls_back(
 
 def test_a_back_out_move_past_its_time_is_stopped(tmp_path: Path) -> None:
     rig, a = lone(tmp_path)
-    a.feed.on_start = lambda move: None  # the roll back never ends
+    # the roll back never ends: the unit reports the lane rolling back past the move's time
+    a.feed.on_start = lambda move: a.lanes[LONE_LANE].update(mode="rolling_back")
     rig.stop_ends = False
     h = rig.adapter.hooked_lane(rig.units["a"], LONE_LANE)
     rig.module.material.back_out(h)

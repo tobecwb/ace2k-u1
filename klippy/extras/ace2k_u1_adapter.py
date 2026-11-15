@@ -65,6 +65,7 @@ try:
         Route,
         Slot,
         api_at_least,
+        finite,
         parked_slot,
         unit_key,
         unit_speed,
@@ -93,6 +94,7 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
         Route,
         Slot,
         api_at_least,
+        finite,
         parked_slot,
         unit_key,
         unit_speed,
@@ -109,6 +111,9 @@ except ImportError:  # the host tests put klippy/extras on the path and import b
 
 # The rate (Hz) of the feed state report of ace2k when its object does not say.
 REPORT_HZ_DEFAULT = 1.0
+# The span of a motion reported idle without its final event is ace2k's gone_after_s (host
+# interface 8). Without it, it is this many reports at the unit's report rate (see gone_after_s).
+GONE_REPORTS = 2
 # States of the U1 in which its channel holds the head with the filament of this lane, besides the
 # loaded states. A preload brought the filament to the sensor of the head.
 PRELOAD_STATES = (
@@ -340,14 +345,23 @@ class Adapter:
         # report rules.
         rates = [getattr(api, "report_hz", None) or REPORT_HZ_DEFAULT for api in apis]
         report_hz = min(rates) if rates else REPORT_HZ_DEFAULT
-        # ace2k's own span for a motion that is reported idle without its final event
-        # (gone_after_s, host interface 8), plus a watch period. This is one rule for "gone
-        # without its event".
-        gone = [getattr(api, "gone_after_s", 2.0 / hz) for api, hz in zip(apis, rates)]
-        settle_s = (max(gone) if gone else 2.0 / report_hz) + poll_s
+        # ace2k's own span for a motion that is reported idle without its final event, plus a
+        # watch period. This is one rule for "gone without its event" (see gone_after_s).
+        gone = [Adapter.gone_after_s(api) for api in apis]
+        settle_s = (max(gone) if gone else GONE_REPORTS / report_hz) + poll_s
         # A busy refusal is retried once per report, not once per local poll. Each try is a round
         # trip on the half-duplex link of the unit.
         return settle_s, 1.0 / report_hz
+
+    @staticmethod
+    def gone_after_s(api: UnitFeed) -> float:
+        """Return the span (s) after which a motion of the unit of ``api`` that is reported idle
+        without its final event is over: ace2k's gone_after_s (host interface 8), else
+        GONE_REPORTS reports at its report rate. The adapter and the probe both apply it."""
+        span = getattr(api, "gone_after_s", None)
+        if finite(span) and span > 0.0:
+            return float(span)
+        return GONE_REPORTS / (getattr(api, "report_hz", None) or REPORT_HZ_DEFAULT)
 
     def lane_view(
         self, h: Hooked, eventtime: float | None = None

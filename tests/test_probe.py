@@ -605,6 +605,119 @@ def test_a_move_that_never_ends_times_out_stopped(tmp_path: Path) -> None:
     assert rig.reactor.now - start >= 100.0 / 50.0 * 2.0
 
 
+def lost_event(
+    a: FakeAce2k, lane: int, mm: float, mode: str = "idle"
+) -> Callable[[FakeMove], None]:
+    """An on_start in which every move of lane runs mm on the encoder (signed as the move goes),
+    and its final event never comes. The lane then reports ``mode``."""
+
+    def on_start(move: FakeMove) -> None:
+        if move.lane == lane:
+            sign = -1.0 if move.mode == "rollback" else 1.0
+            a.lanes[lane]["encoder_mm"] += sign * mm
+            a.lanes[lane]["mode"] = mode
+
+    return on_start
+
+
+def test_a_move_whose_final_event_is_lost_ends_with_its_encoder_distance(tmp_path: Path) -> None:
+    """ace2k counts a start over once the unit reports the lane idle without its final event. The
+    probe applies the same span and takes the distance from the lane's encoder: a move that
+    carried its length (within INSIST_MIN_MM) ends done."""
+    rig, a = probe_rig(tmp_path)
+    reports_tick(rig, a)
+    h = rig.adapter.slot_of_head(0).lanes[0]
+    a.lanes[0]["encoder_mm"] = 500.0
+    a.feed.on_start = lost_event(a, 0, 98.5)
+    start = rig.reactor.now
+    why, kind, moved = rig.module.probe.move(h, "rollback", 100.0)
+    assert (why, kind) == ("end", "done")
+    assert moved == pytest.approx(98.5)
+    assert a.feed.gone_after_s <= rig.reactor.now - start < 3.0  # not the move's whole wait
+    assert ("stop", 0) not in a.feed.log
+    assert rig.gcode.lines[-1] == (
+        "ace2k_u1: head 1: a:1's probe move got no final event and the unit reports the lane"
+        " idle: taken as over, 98.5 mm by its encoder"
+    )
+
+
+def test_a_lost_move_short_of_its_length_ends_blocked(tmp_path: Path) -> None:
+    """The unit ended it early (blocked, held or at rest), and which is not known: it is not a
+    whole move, so it ends blocked with the encoder's distance."""
+    rig, a = probe_rig(tmp_path)
+    reports_tick(rig, a)
+    h = rig.adapter.slot_of_head(0).lanes[0]
+    a.feed.on_start = lost_event(a, 0, 60.0)
+    why, kind, moved = rig.module.probe.move(h, "feed", 100.0)
+    assert (why, kind, moved) == ("end", "blocked", pytest.approx(60.0))
+    assert rig.gcode.lines[-1].endswith("taken as over, 60.0 mm by its encoder")
+
+
+def test_a_lost_move_with_the_lane_in_error_fails(tmp_path: Path) -> None:
+    rig, a = probe_rig(tmp_path)
+    reports_tick(rig, a)
+    h = rig.adapter.slot_of_head(0).lanes[0]
+    a.feed.on_start = lost_event(a, 0, 100.0, "error")
+    with pytest.raises(
+        ace2k_u1_probe.ProbeError,
+        match="a:1's probe move: the unit reports the lane in error, and its final event was lost",
+    ):
+        rig.module.probe.move(h, "rollback", 100.0)
+    assert a.feed.log[-1] == ("stop", 0)
+
+
+@pytest.mark.parametrize("unread", ["before", "after"])
+def test_a_lost_move_with_no_encoder_reading_is_left_to_its_deadline(
+    tmp_path: Path, unread: str
+) -> None:
+    """No distance can be told: the move is not taken as over, and its deadline times it out."""
+    rig, a = probe_rig(tmp_path)
+    reports_tick(rig, a)
+    h = rig.adapter.slot_of_head(0).lanes[0]
+    a.lanes[0]["encoder_mm"] = None if unread == "before" else 500.0
+
+    def on_start(move: FakeMove) -> None:
+        a.lanes[0]["encoder_mm"] = 400.0 if unread == "before" else float("nan")
+
+    a.feed.on_start = on_start
+    with pytest.raises(ace2k_u1_probe.ProbeError, match="a:1's probe move timed out"):
+        rig.module.probe.move(h, "rollback", 100.0)
+
+
+def test_a_lost_final_event_falls_back_to_two_reports_without_ace2ks_span(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rig, a = probe_rig(tmp_path)
+    reports_tick(rig, a)
+    monkeypatch.delattr(fakes.FakeFeedApi, "gone_after_s")  # an older ace2k: 2 reports instead
+    a.feed.report_hz = 4.0
+    h = rig.adapter.slot_of_head(0).lanes[0]
+    a.feed.on_start = lost_event(a, 0, 50.0)
+    start = rig.reactor.now
+    why, kind, moved = rig.module.probe.move(h, "feed", 50.0)
+    assert (why, kind, moved) == ("end", "done", pytest.approx(50.0))
+    assert 0.5 <= rig.reactor.now - start < 1.0
+
+
+def test_a_lane_still_reported_moving_past_the_deadline_times_out(tmp_path: Path) -> None:
+    rig, a = probe_rig(tmp_path)
+    reports_tick(rig, a)
+    h = rig.adapter.slot_of_head(0).lanes[0]
+    a.feed.on_start = lost_event(a, 0, 40.0, "rolling_back")
+    with pytest.raises(ace2k_u1_probe.ProbeError, match="a:1's probe move timed out"):
+        rig.module.probe.move(h, "rollback", 100.0)
+    assert a.feed.log[-1] == ("stop", 0)
+
+
+def test_an_idle_lane_with_no_new_report_is_not_taken_as_over(tmp_path: Path) -> None:
+    """No report arrives after the start: the idle mode read is the one from before it."""
+    rig, a = probe_rig(tmp_path)
+    h = rig.adapter.slot_of_head(0).lanes[0]
+    a.feed.on_start = lost_event(a, 0, 40.0)
+    with pytest.raises(ace2k_u1_probe.ProbeError, match="timed out"):
+        rig.module.probe.move(h, "rollback", 100.0)
+
+
 def test_the_free_check_of_a_held_lane_fails_and_feeds_nothing_back(tmp_path: Path) -> None:
     rig, a = probe_rig(tmp_path)
     slot = rig.adapter.slot_of_head(0)

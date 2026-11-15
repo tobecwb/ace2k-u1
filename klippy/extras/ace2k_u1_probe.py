@@ -12,13 +12,14 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn, Protocol
 
 if TYPE_CHECKING:
     from .ace2k_klipper_types import FeedEvent, Reactor
     from .ace2k_u1_common import Hooked, Slot
     from .ace2k_u1_config import SwapConfig
-    from .ace2k_u1_printer_types import Fan, FeedMove, LaneView
+    from .ace2k_u1_printer_types import Fan, FeedMove, LaneView, UnitFeed
 
 try:
     from .ace2k_u1_common import (
@@ -117,6 +118,22 @@ OnceMove = Callable[[float, float, int], tuple[str, float]]
 
 # The tail a roll back may run past its length, when ace2k does not give its own (tail_mm).
 TAIL_MM = 100.0
+# A move that the unit accepted may never get its final event (it was lost on the way). ace2k
+# counts it over once the unit reports the lane idle or in error, gone_after_s after the start
+# (host interface 8). The probe applies the same span (Adapter.gone_after_s; see _gone).
+GONE_IDLE, GONE_ERROR = "idle", "error"
+
+
+@dataclass(frozen=True)
+class Started:
+    """A move the probe started: the move, its commanded length (mm), and what was read of its lane
+    just before the start: the lane's encoder_mm and the sensors_reports count, each None when it
+    could not be read (see _gone)."""
+
+    move: FeedMove
+    length: float
+    encoder_mm: float | None
+    reports: int | None
 
 
 class PushToHead(Protocol):
@@ -132,6 +149,7 @@ class ProbeAdapter(Protocol):
 
     @property
     def command_error(self) -> type[Exception]: ...
+    def gone_after_s(self, api: UnitFeed) -> float: ...
     @property
     def head_budget_mm(self) -> float: ...
     @property
@@ -351,8 +369,8 @@ class HeadProbe:
             # A roll back, but the tip may still be in the head here: the wait counts no tail.
             wait_s = unit_move_wait_s(h, length, speed, PROBE_MARGIN_S)
             armed, polled = self._split_stops(h, STOP_WATCH)
-            move = self._start_armed(h, "rollback", length, speed, armed)
-            why, kind, moved = self._watch(h, move, wait_s, polled)
+            started = self._start_armed(h, "rollback", length, speed, armed)
+            why, kind, moved = self._watch(h, started, wait_s, polled)
             snag = why == "taut" and self._empties(h)
         if snag:
             a.say(
@@ -679,10 +697,10 @@ class HeadProbe:
         while left >= 1.0:
             step = min(left, move_max_mm(h))
             wait_s = unit_move_wait_s(h, step, speed, PROBE_MARGIN_S, reverse=True)
-            move = self._start(h, "rollback", step, speed)
-            why, kind, _moved = self._watch(h, move, wait_s, frozenset({"empty"}))
+            started = self._start(h, "rollback", step, speed)
+            why, kind, _moved = self._watch(h, started, wait_s, frozenset({"empty"}))
             if why == "empty":
-                if move.result() is None:
+                if started.move.result() is None:
                     raise ProbeError(f"{n}: its roll back was not seen to stop")
                 return True
             if kind == RUNOUT_KIND:
@@ -843,8 +861,8 @@ class HeadProbe:
             try:
                 # The tip goes to the head, and nothing holds it.
                 wait_s = unit_move_wait_s(x, left, speed, PROBE_MARGIN_S)
-                move = self._start(x, "feed", left, speed, free_tip=True)
-                why, kind, moved = self._watch(x, move, wait_s, STOP_SET)
+                started = self._start(x, "feed", left, speed, free_tip=True)
+                why, kind, moved = self._watch(x, started, wait_s, STOP_SET)
             except ProbeError as err:
                 if tries == 0 and err.reason == "no_filament":
                     return "abort", 0.0  # an empty bay: nothing in the way, and nothing moved
@@ -985,17 +1003,19 @@ class HeadProbe:
 
         return wait_fresh_lane(self.reactor, read, start, EASE_FRESH)
 
-    def back(self, h: Hooked, length: float, speed: float | None = None) -> None:
+    def back(
+        self, h: Hooked, length: float, speed: float | None = None, free_tip: bool = False
+    ) -> None:
         """Roll h back ``length`` mm in moves of at most the unit's longest move.
 
         The speed is ``speed`` (default probe_speed). A run out of the bay counts as done. A roll
-        back shorter than 1 mm is not sent.
+        back shorter than 1 mm is not sent. ``free_tip`` as in move.
         """
         cap = move_max_mm(h)
         several = length > cap
         while length >= 1.0:
             step = min(length, cap)
-            _why, kind, moved = self.move(h, "rollback", step, speed=speed)
+            _why, kind, moved = self.move(h, "rollback", step, speed=speed, free_tip=free_tip)
             if kind == RUNOUT_KIND:
                 return
             if kind not in FREE_KINDS:
@@ -1041,13 +1061,15 @@ class HeadProbe:
             )
         return lane, reports
 
-    def move(
+    def move(  # noqa: PLR0913 — free_tip is keyword-only, the rest is the move's own
         self,
         h: Hooked,
         mode: str,
         length: float,
         stops: frozenset[str] = frozenset(),
         speed: float | None = None,
+        *,
+        free_tip: bool = False,
     ) -> MoveEnd:
         """Run one move at ``speed`` (default probe_speed), polling until it ends.
 
@@ -1058,22 +1080,28 @@ class HeadProbe:
         has its name too, with the kind of the final event ("held" or "at_rest"). Otherwise ``why``
         is "end", with the kind of the final event. A link lost while watching, a sensor that
         cannot be read, or a move past its time stops the lane and is a ProbeError. A refused start
-        is raised as it came.
+        is raised as it came. ``free_tip`` says that nothing holds the front tip (it is out of the
+        extruder): the unit then frees every catch of a roll back instead of ending it stuck at the
+        second (ace2k host interface 12). It applies only to a move with no stop the unit makes.
         """
         speed = speed or self.cfg.probe_speed
         # A roll back may take the filament out of the motor, so its wait counts the unit's tail.
         reverse = mode == "rollback"
         wait_s = unit_move_wait_s(h, length, speed, PROBE_MARGIN_S, reverse=reverse)
         armed, polled = self._split_stops(h, stops)
-        move = self._start_armed(h, mode, length, speed, armed)
-        return self._watch(h, move, wait_s, polled)
+        if free_tip and not armed:
+            started = self._start(h, mode, length, speed, free_tip=True)
+        else:
+            started = self._start_armed(h, mode, length, speed, armed)
+        return self._watch(h, started, wait_s, polled)
 
     @staticmethod
     def _split_stops(h: Hooked, stops: frozenset[str]) -> tuple[frozenset[str], frozenset[str]]:
         """Return (the stops the unit makes, the stops the host polls) for a move of h.
 
         A unit that can stop on its plunger (see unit_stops) makes "taut" and "rest" itself, as
-        "held" and "at_rest". The host then reads no status while the move runs. The head sensor
+        "held" and "at_rest". The host then reads no status while the move runs, until its final
+        event is gone_after_s late (see _gone). The head sensor
         ("empty", "set") is the U1's, and the unit cannot see it, so the host polls it on every
         unit. A unit without the stop makes none, and the host polls every stop.
         """
@@ -1091,41 +1119,56 @@ class HeadProbe:
         """
         speed = speed or self.cfg.probe_speed
         wait_s = unit_move_wait_s(h, length, speed, PROBE_MARGIN_S)
-        move = self._start(h, "feed", length, speed, free_tip=True)
-        return self._watch(h, move, wait_s, stops)
+        started = self._start(h, "feed", length, speed, free_tip=True)
+        return self._watch(h, started, wait_s, stops)
 
     def _start(
         self, h: Hooked, mode: str, length: float, speed: float, free_tip: bool = False
-    ) -> FeedMove:
+    ) -> Started:
         """Start the move, retrying busy refusals (see _begin)."""
         return self._begin(
-            h, mode, lambda: h.api.start_move(h.lane, mode, length, speed, free_tip=free_tip)
+            h,
+            mode,
+            length,
+            lambda: h.api.start_move(h.lane, mode, length, speed, free_tip=free_tip),
         )
 
     def _start_armed(
         self, h: Hooked, mode: str, length: float, speed: float, stop_when: frozenset[str]
-    ) -> FeedMove:
+    ) -> Started:
         """Start the move with the stops that the unit makes itself (see _split_stops).
 
         Empty ``stop_when`` sends the start as _start does. Busy refusals are retried (see _begin).
         """
-        return self._begin(h, mode, lambda: start_armed(h, mode, length, speed, stop_when))
+        return self._begin(h, mode, length, lambda: start_armed(h, mode, length, speed, stop_when))
 
-    def _begin(self, h: Hooked, mode: str, start: Callable[[], FeedMove]) -> FeedMove:
-        """Run ``start``, retrying busy refusals.
+    def _begin(self, h: Hooked, mode: str, length: float, start: Callable[[], FeedMove]) -> Started:
+        """Run ``start`` of a move of ``length`` mm, retrying busy refusals.
 
-        Any other refusal of the unit, or busy past the wait, is a ProbeError that names the lane
-        and the refusal and keeps its reason. A failure of the probe is a G-code error, never an
-        internal one.
+        Return the Started move. The lane's encoder and report count are read just before, for a
+        move whose final event is lost (see _gone). Any other refusal of the unit, or busy past the
+        wait, is a ProbeError that names the lane and the refusal and keeps its reason. A failure
+        of the probe is a G-code error, never an internal one.
         """
+        encoder_mm, reports = self._read_origin(h)
         try:
-            return self.a.retry_busy_start(h, start)
+            move = self.a.retry_busy_start(h, start)
+            return Started(move, length, encoder_mm, reports)
         except (RuntimeError, ValueError, self.a.command_error) as err:
             raise self._refused(h, mode, err) from err
         except Exception as err:
             if not hasattr(err, "reason"):  # not a refusal of the unit, so an internal error
                 raise
             raise self._refused(h, mode, err) from err
+
+    def _read_origin(self, h: Hooked) -> tuple[float | None, int | None]:
+        """Return (encoder_mm, sensors_reports) of h's lane now, each None when not read."""
+        try:
+            lane, _proven, reports = self.a.lane_view(h)
+        except Exception:  # the move's own checks say what is wrong with the link
+            return None, None
+        encoder = lane.get("encoder_mm")
+        return (float(encoder) if finite(encoder) else None), reports
 
     def _refused(self, h: Hooked, mode: str, err: Exception) -> ProbeError:
         what = "push" if mode == "feed" else "roll back"
@@ -1137,7 +1180,7 @@ class HeadProbe:
     def _watch(
         self,
         h: Hooked,
-        move: FeedMove,
+        started: Started,
         wait_s: float,
         stops: frozenset[str] = frozenset(),
     ) -> MoveEnd:
@@ -1148,7 +1191,7 @@ class HeadProbe:
         lane first, because the move must not run on behind a failure.
         """
         try:
-            return self._poll(h, move, wait_s, stops)
+            return self._poll(h, started, wait_s, stops)
         except Exception:
             self.a.stop(h, "the probe's failure")
             raise
@@ -1171,16 +1214,19 @@ class HeadProbe:
         self.a.stop(h, "the probe")
         return why, None, moved_mm(self._final(move))
 
-    def _poll(self, h: Hooked, move: FeedMove, wait_s: float, stops: frozenset[str]) -> MoveEnd:
+    def _poll(self, h: Hooked, started: Started, wait_s: float, stops: frozenset[str]) -> MoveEnd:
         """Poll the move until it ends.
 
         ``stops`` can hold any of: "empty" (the head sensor went empty), "set" (it is set), "rest"
         (a fresh report reads the plunger at rest) and "taut" (fresh reports read it pushed, see
         TautWatch). A move that the unit ended on its plunger ends with the name of that stop (see
-        UNIT_ENDS) and the kind of its final event.
+        UNIT_ENDS) and the kind of its final event. A move whose final event is lost ends as _gone
+        says.
         """
+        move = started.move
         start = self.reactor.monotonic()
         deadline = start + wait_s
+        gone_at = start + self.a.gone_after_s(h.api)
         reports_wanted = bool(stops & STOP_REST)
         # A report counts only when it is newer than the start of the move and not read before.
         watch_taut = TautWatch(start + PROBE_FRESH_S, None)
@@ -1201,6 +1247,47 @@ class HeadProbe:
             if result is not None:
                 kind = result.get("kind")
                 return UNIT_ENDS.get(str(kind), "end"), kind, moved_mm(result)
+            if now >= gone_at:
+                over = self._gone(h, started)
+                if over is not None:
+                    return over
             if now >= deadline:
                 raise ProbeError(f"head {h.head + 1}: {self.a.lane_text(h)}'s probe move timed out")
             self.reactor.pause(now + PROBE_POLL_S)
+
+    def _gone(self, h: Hooked, started: Started) -> MoveEnd | None:
+        """Return the end of a move whose final event is lost, or None while it is not over.
+
+        The caller asks once the move has run gone_after_s. The move is over when a report newer
+        than its start shows the lane idle, with the link proven, as ace2k counts a start over. Its
+        distance is the lane's encoder since the start. It ends "done" when that is its whole
+        length (within INSIST_MIN_MM; a roll back may run on past it), else "blocked": the unit
+        ended it early, and how is not known. The console says so. A lane reported in error is a
+        ProbeError. A lane still reported moving, no report since the start, or no encoder reading
+        before or now is not over: the move's deadline then times it out.
+        """
+        try:
+            lane, proven, reports = self.a.lane_view(h)
+        except Exception:  # not known: the deadline decides
+            return None
+        before = started.reports
+        fresh = reports is not None and before is not None and reports > before
+        mode = lane.get("mode")
+        if not (proven and fresh and mode in (GONE_IDLE, GONE_ERROR)):
+            return None
+        n = f"head {h.head + 1}: {self.a.lane_text(h)}"
+        if mode == GONE_ERROR:
+            raise ProbeError(
+                f"{n}'s probe move: the unit reports the lane in error, and its final event was"
+                " lost"
+            )
+        after_mm, before_mm = lane.get("encoder_mm"), started.encoder_mm
+        if before_mm is None or not finite(after_mm):
+            return None  # no distance: the deadline decides
+        moved = abs(after_mm - before_mm)
+        kind = "done" if moved >= started.length - INSIST_MIN_MM else "blocked"
+        self.a.say(
+            f"ace2k_u1: {n}'s probe move got no final event and the unit reports the lane idle:"
+            f" taken as over, {moved:.1f} mm by its encoder"
+        )
+        return "end", kind, moved

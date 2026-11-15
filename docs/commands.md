@@ -293,11 +293,14 @@ Before you run it:
 What it does, for each unit on the head:
 
 1. It pushes the first lane (A) to the head's sensor, at the probe speed. Then A backs off until
-   the sensor is clear, at most 40 mm, and 10 mm more. If the sensor stays set, the command stops with an error.
+   the sensor is clear, at most 200 mm, and 10 mm more: on a long tube the first part of a roll
+   back only takes up the filament's slack. If the sensor stays set, the command stops with an
+   error.
 2. It pushes the second lane (B) slowly until it meets A's filament at the splitter.
 3. It rolls A back a little at a time, and B tries to pass each time. The smallest roll back that
    lets B pass is where A's tip leaves the splitter.
-4. A rolls back that far plus 50 mm, and B goes back to where it was.
+4. A rolls back that far plus 50 mm, and B passes once more. Then B goes back to where it was,
+   and A to where it started, so the next unit, or a measure run again, starts from there.
 
 It takes about 4 minutes for each unit on the head. Then it prints the value and stages it:
 
@@ -320,10 +323,26 @@ you run `SAVE_CONFIG`.
 The command is refused, and nothing moves, when a print is running, when the head's sensor sees
 filament, when a lane of the head is moving, when a unit on the head has no lane with filament, or
 when the head has only one lane with filament.
-If a move fails, the command stops, stages nothing, and says where each lane is. The first lane
+If a move fails, the command stops and stages nothing. It rolls each lane it moved back by the
+distance it moved it, the second lane first, so both lanes end at their parking points and the
+next try starts from there. Where a lane's place is known only roughly (after a move that failed),
+it rolls back the longer way, so it may end a little behind its parking point, never in front. The
+error says so:
+
+    ace2k_u1: head 1: splitter measure failed: a:2 is blocked with a:1 rolled back 136 mm: check the tube after the splitter; a:1 and a:2 are back at or behind where they started
+
+If a lane cannot be rolled back, the error says where each lane is instead. The first lane then
 stays the head's lane, because its filament may still be in the shared tube:
 
     ace2k_u1: head 1: the measure failed; a:1 stays the head's lane
+
+A move whose final event from the unit is lost is not a failure. Once the unit reports the lane idle
+for ace2k's `gone_after_s` with no final event, the move counts as over, with the distance of the
+lane's encoder: a move that ran its whole length ended as asked, and a shorter one counts as
+blocked. The console says so. A lane the unit reports in error, or with no encoder reading, still
+fails the move:
+
+    ace2k_u1: head 1: a:1's probe move got no final event and the unit reports the lane idle: taken as over, 100.0 mm by its encoder
 
 ### `ACEK_BG_STATUS`, `ACEK_BG_SWAP`, `ACEK_BG_STOP`, `ACEK_BG_MOVE`: the background swap
 
