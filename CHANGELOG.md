@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **The tube size is corrected in the docs**: the README and `install.md` now say PTFE tubes
+  with a 3 mm inner diameter, which is the right size. The earlier 2 mm was wrong.
+
 ## v0.7.0 — 2026-11-14 — beta
 
 For ace2k `v0.15.0`. No new firmware: the units stay on ace2k `v0.15.0`.

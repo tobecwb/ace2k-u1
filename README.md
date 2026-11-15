@@ -106,9 +106,9 @@ may void your warranty. This project is not affiliated with or endorsed by Anycu
 
 Two things about the hardware matter before you install anything.
 
-1. **Use PTFE tubes with a 2 mm inner diameter** between each unit and its head. When the U1
+1. **Use PTFE tubes with a 3 mm inner diameter** between each unit and its head. When the U1
    unloads a head, it forms a thick tip at the end of the filament. A narrower tube can catch that
-   tip, and then the filament cannot go back to the unit or come in again. 2 mm works on the
+   tip, and then the filament cannot go back to the unit or come in again. 3 mm works on the
    author's printer.
 2. **Turn the units on before the U1, or at the same time.** Each unit is a Klipper MCU. If the
    U1 finishes its start before the units are online, Klipper stops with an error. Then turn the
