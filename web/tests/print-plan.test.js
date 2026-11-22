@@ -483,6 +483,7 @@ test("liveLanes reads one unit's bays from the live status, keyed as the plan", 
     colour_name: null,
     spool: { id: '1:04AB', colour: '#ff0000', material: 'PLA', tag: true, uid: '04AB' },
     unknown: false,
+    tagWait: false,
   });
   assert.deepEqual(
     [lanes[1].material, lanes[1].colour, lanes[1].spool?.id, lanes[1].spool?.tag],

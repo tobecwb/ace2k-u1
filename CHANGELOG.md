@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7.2 — 2026-11-22 — beta
+
+For ace2k `v0.15.0`. No new firmware: the units stay on ace2k `v0.15.0`.
+This release fixes the guided steps of the Print tab.
+
+### Fixed
+
+- **A put step waits for its spool's tag, then uses that bay.** While the unit read the tag of a
+  spool just put in, the page saw a spool with no material in that bay. It sent the step's colour
+  to another empty bay and moved on without noting the bay. The next steps then asked for spools in
+  other bays. Now the step waits while the tag is read, and its card says so. Once the tag is read,
+  the colour prints from that bay and the guide moves to the next step. A spool with no tag: press
+  Done to use it.
+
 ## v0.7.1 — 2026-11-15 — beta
 
 For ace2k `v0.15.0`. No new firmware: the units stay on ace2k `v0.15.0`. This release fixes

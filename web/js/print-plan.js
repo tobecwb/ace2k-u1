@@ -947,8 +947,13 @@ function liveLane(slice, i, plan) {
   const colour = spool?.colour ?? null;
   const materialSet = adapterLane(slice, i)?.material_set;
   const name = before?.colour && before.colour === colour ? (before.colour_name ?? null) : null;
-  return { key, colour, material, empty, head, materialSet, colour_name: name, spool, unknown: !empty && !material };
+  const unknown = !empty && !material;
+  const tagWait = unknown && TAG_WAIT.includes(String(laneOf(slice, i)?.tag?.state));
+  return { key, colour, material, empty, head, materialSet, colour_name: name, spool, unknown, tagWait };
 }
+
+// The tag states in which the unit may still read the tag of a spool just put in.
+const TAG_WAIT = ['pending', 'searching', 'reading'];
 
 // The lanes of the plan, read from the live status instead of the plan's snapshot, so that a bay
 // emptied or filled since ACEK_PLAN counts. Keys are the plan's keys ("2" with one unit, "a:2" with

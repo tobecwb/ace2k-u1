@@ -562,6 +562,7 @@
   "step.sub.out": "The file does not use this spool, and the bay is needed.",
   "step.sub.out_unknown": "The planner does not use a spool with no material. If it fits, click the bay and define it first.",
   "step.sub.put": "A new spool for color {n}. The page moves on by itself when it reads the tag.",
+  "step.sub.tag_wait": "The unit is reading the tag of the spool in bay {key}: the page moves on by itself once it is read. A spool with no tag: press Done to print color {n} with it.",
   "step.sub.put_back": "It was ejected already: only putting it in is left.",
   "step.sub.move_empty": "The bay it goes to is empty: just move the spool.",
   "step.sub.check": "The page cannot tell this spool's color: press Done when it is right.",

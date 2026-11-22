@@ -10,7 +10,7 @@ U1's own filament flows:
 
 Each of the U1's four heads is fed directly by one lane of the unit.
 
-**Status: beta `v0.7.1`.** Read the beta notice in "Read this first" below. The long-run print
+**Status: beta `v0.7.2`.** Read the beta notice in "Read this first" below. The long-run print
 tests have run many prints since the release candidate, the longest over 40 hours, with all four
 lanes of one unit in use.
 

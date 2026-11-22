@@ -194,13 +194,17 @@ function keep(app, g, at) {
   // The kind the step was first shown as stays while it is the current step.
   const was = app.print.shown;
   // Past the last step there is no id, and shown is null: nothing was shown then.
-  const kind = was && was.id === id ? was.kind : g.steps.find((s) => stepId(s) === id)?.kind;
-  const shown = id && kind ? { id, kind } : null;
+  const step = g.steps.find((s) => stepId(s) === id);
+  const kind = was && was.id === id ? was.kind : step?.kind;
+  // Its tools too, while it lists them: a put that left the live list is still tested against them (lostPut).
+  const tools = step && 'tools' in step ? step.tools : was && was.id === id ? was.tools : undefined;
+  const shown = id && kind ? { id, kind, ...(tools ? { tools } : {}) } : null;
   const same =
     app.print.step === at &&
     (app.print.trail ?? []).length === g.trail.length &&
     app.print.shown?.id === shown?.id &&
-    app.print.shown?.kind === shown?.kind;
+    app.print.shown?.kind === shown?.kind &&
+    String(app.print.shown?.tools) === String(shown?.tools);
   if (!same) app.print = { ...app.print, trail: g.trail, step: at, shown };
 }
 
@@ -305,6 +309,16 @@ export function autoAdvance(app) {
   if (!g) return;
   /** @param {number[]} tools */
   const look = (tools) => toolLook(g.now, tools);
+  const lost = lostPut(app, g, look);
+  if (lost) {
+    settle(app, g, lost);
+    // The guide again from the new pick: the bay the planner sent the colour to without it never joins the trail.
+    const after = guideOf(app);
+    if (after) keep(app, after, after.at);
+    // The step now shown is live, so this runs once more at most: it tests that step as any status does.
+    if (after?.cur) autoAdvance(app);
+    return;
+  }
   const done = g.cur ? doneStep(app, g, g.cur, look) : null;
   if (!done) {
     keep(app, g, g.at);
@@ -312,6 +326,28 @@ export function autoAdvance(app) {
   }
   keep(app, g, g.at + 1);
   settle(app, g, done);
+}
+
+// The put shown, when it left the live list because its spool went in: the bay now holds a tagged spool of its
+// colours. The planner places a colour on a bay it holds only once the colour picks it, so with no pick it sends the
+// colour to an empty bay and drops the put; done here, the put picks its bay as a done step does. Null otherwise.
+/**
+ * @param {AppState} app @param {Guide} g
+ * @param {(tools: number[]) => { colour: string | null, material: string | null }} look
+ * @returns {Step | null}
+ */
+function lostPut(app, g, look) {
+  const was = app.print.shown;
+  if (was?.kind !== 'put' || !was.tools?.length || g.live.has(was.id)) return null;
+  const s = { kind: /** @type {'put'} */ ('put'), key: was.id.slice(2), tools: was.tools };
+  const { plan, merges, user } = g.now;
+  // A tool merged since into another colour is no longer the put's: its colour is not the one shown.
+  if (!s.tools.every((n) => plan.tools[n] && mergeRoot(plan, merges, n) === n)) return null;
+  // Only a colour with no pick nor pin yet: the user's own, or one the page settled (settleMatches), stays as it is.
+  const pinned = app.print.pinned ?? {};
+  const roots = s.tools.map((n) => mergeRoot(plan, merges, n));
+  if (roots.some((n) => user[n] != null || pinned[n] != null)) return null;
+  return stepDone(s, g.now.lanes, look) ? s : null;
 }
 
 // The step that is certainly done now, or null: the current one, or, while the current one takes a spool out of a
@@ -454,6 +490,7 @@ function putSub(t, s, now) {
   const look = toolLook(now, s.tools);
   const n = look.n + 1;
   if (held) return t('step.sub.in_hand', { key: s.key, n });
+  if (lane?.tagWait) return t('step.sub.tag_wait', { key: s.key, n });
   const why = wrongSpoolIn(now, s);
   if (lane && why)
     return putOverWords(t, why, lane, s.key, n, { colour: look.colour, tools: groupTools(now, s.tools) });
