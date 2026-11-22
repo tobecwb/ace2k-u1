@@ -66,10 +66,11 @@
  * A lane of the plan. materialSet comes from the adapter's live status (ace2k_u1.lanes), not from the plan:
  * false blocks Print; null (status unreadable) or undefined (an older adapter) does not.
  * spool and unknown come from liveLanes: spool is null for an empty bay, and unknown is true for a
- * spool with no material, which the planner never uses.
+ * spool with no material, which the planner never uses. tagWait is true for such a spool while the unit may still
+ * read its tag (pending, searching or reading).
  * @typedef {{ key: string, colour: string | null, material: string | null, empty: boolean,
  *   head: number | null, materialSet?: boolean | null, colour_name?: string | null,
- *   spool?: PlanSpool | null, unknown?: boolean }} PlanLane
+ *   spool?: PlanSpool | null, unknown?: boolean, tagWait?: boolean }} PlanLane
  */
 /**
  * A spool in a bay, as liveLanes reads it. id names the spool: "<key>:<tag uid>", else
@@ -225,7 +226,8 @@
  * The Print panel's state. merges maps a tool to the tool it joins (same material only). held lists the
  * spools that "eject all" took out and that go to another bay. step is the index of the guided step shown, in
  * trail: the guide's steps (steps.js stepId) in the order they were first shown, and shown the current one's
- * name and kind when it was last kept (a put can turn into a check once its spool is in). eject is the "eject all" run:
+ * name, kind and tools when it was last kept (a put can turn into a check once its spool is in). eject is the
+ * "eject all" run:
  * its confirmation open, the bay being ejected, or the bay where it stopped and the host's message. allSteps shows
  * the list of every step under the guide.
  * dismissed lists the files whose similar-colour hint the user kept apart. pinned maps a picked tool to the pin of
@@ -241,7 +243,7 @@
  *   reading?: Reading | null, file: string | null, choice: Record<number, string | null>,
  *   choiceId: string | null, choiceTools?: Tool[] | null,
  *   thumb?: { file: string, url: string } | null, merges?: Record<number, number>,
- *   held?: PlanSpool[], step?: number, trail?: string[], shown?: { id: string, kind: string } | null,
+ *   held?: PlanSpool[], step?: number, trail?: string[], shown?: { id: string, kind: string, tools?: number[] } | null,
  *   eject?: EjectRun | null, allSteps?: boolean,
  *   dismissed?: string[], pinned?: Record<number, Pin>, auto?: number[], overrides?: number[], q?: string, sort?: 'new' | 'name',
  *   cards?: Record<string, CardEntry>, scrolled?: string | null }} PrintState

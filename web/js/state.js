@@ -344,7 +344,7 @@ const nowOf = new WeakMap();
 /** @param {AppState} app @returns {PlanNow | null} */
 export function planNow(app) {
   const p = app.print;
-  const from = [p.file, p.choice, p.choiceId, p.choiceTools, p.merges, p.pinned, p.held, p.overrides, p.cards];
+  const from = [p.file, p.choice, p.choiceId, p.choiceTools, p.merges, p.pinned, p.held, p.overrides, p.cards, p.shown];
   const hit = nowOf.get(app.status);
   if (hit?.from.every((v, i) => v === from[i])) return hit.now;
   const now = workPlanNow(app);
@@ -363,7 +363,7 @@ function workPlanNow(app) {
   const pick = userPick(plan, raw, fixed);
   const merges = mergesOf(app.print);
   // planLanes: the lanes as the planner read them (spools held in hand by eject all count in their bays).
-  const planLanes = withHeld(lanes, app.print.held);
+  const planLanes = withHeld(awaited(lanes, app.print.shown), app.print.held);
   const bg = bgHeads(app.status);
   const card = app.print.cards?.[plan.file]?.card ?? null;
   const frame = fileFrame(app, plan.file);
@@ -385,6 +385,17 @@ function workPlanNow(app) {
     frame,
     place: placement(plan, raw, planLanes, merges, fixed, bg, { frame, timeS, times }),
   };
+}
+
+// The lanes as the planner reads them while the spool just put in the bay of the step shown ("i:<bay>") waits for
+// its tag (tagWait): that bay still counts as empty, so the placement keeps the step until the tag is read and the
+// step is done (autoAdvance), or the user presses Done. Read as a spool of no material, it would send the step's
+// colour to another bay and skip the step with no pick.
+/** @param {import('./types.js').PlanLane[]} lanes @param {{ id: string } | null | undefined} shown */
+function awaited(lanes, shown) {
+  const key = shown?.id.startsWith('i:') ? shown.id.slice(2) : null;
+  if (!key) return lanes;
+  return lanes.map((l) => (l.key === key && l.tagWait ? { ...l, empty: true, unknown: false, spool: null } : l));
 }
 
 // The lanes as the planner reads them: an empty bay whose spool "eject all" took out (it is held, in hand) still

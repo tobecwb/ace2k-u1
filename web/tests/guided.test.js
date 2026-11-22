@@ -234,6 +234,65 @@ test('autoAdvance: the bay emptied moves on to step 2; the tagged white PLA put 
   assert.equal(none.print.step, undefined);
 });
 
+// demo-four with every bay empty, printing three PLA colours that no bay holds: each goes to bay 1 of a unit.
+const emptyFour = () => {
+  const plan = {
+    ...fourPlan,
+    file: 'e.gcode',
+    tools: [tool('#ffdab9', 'PLA'), tool('#000000', 'PLA'), tool('#ffffff', 'PLA')],
+    order: [0, 1, 2, 0, 1, 2],
+  };
+  const app = appOf('four', plan);
+  for (const u of ['a', 'b', 'c', 'd'])
+    app.status[`ace2k ${u}`] = {
+      ...app.status[`ace2k ${u}`],
+      lanes: app.status[`ace2k ${u}`].lanes.map((l) => ({ ...l, insert: false, tag: null })),
+    };
+  app.status = { ...app.status };
+  return app;
+};
+// A spool put in bay key of a unit: its tag still being read (state reading), then read with material and colour.
+const reading = (app, key) => {
+  const [u, n] = key.split(':');
+  const lanes = [...app.status[`ace2k ${u}`].lanes];
+  lanes[Number(n) - 1] = { ...lanes[Number(n) - 1], mode: 'idle', insert: true, rest: true, tag: { state: 'reading' } };
+  app.status = { ...app.status, [`ace2k ${u}`]: { ...app.status[`ace2k ${u}`], lanes } };
+};
+const tagRead = (app, key, material, rgb) => {
+  const [u, n] = key.split(':');
+  const lanes = [...app.status[`ace2k ${u}`].lanes];
+  const record = { material, color_rgba: `${rgb}FF` };
+  lanes[Number(n) - 1] = { ...lanes[Number(n) - 1], tag: { state: 'read', uid: `U${key}`, record } };
+  app.status = { ...app.status, [`ace2k ${u}`]: { ...app.status[`ace2k ${u}`], lanes } };
+};
+
+test('autoAdvance: a spool whose tag is being read holds its step; once read, its colour prints from that bay', () => {
+  const app = emptyFour();
+  autoAdvance(app);
+  const g = guideOf(app);
+  const first = g.cur;
+  assert.equal(first.kind, 'put');
+  const key = first.key;
+  const next = g.steps[1];
+  // While the tag is read the bay holds a spool of no material: the step waits, and no colour moves to another bay.
+  reading(app, key);
+  autoAdvance(app);
+  assert.equal(guideOf(app).cur.key, key);
+  assert.equal(app.print.step, 0);
+  // The card says the tag is being read, and that Done uses a spool with no tag.
+  assert.ok(textOf(view(app)).includes(t('step.sub.tag_wait', { key, n: first.tools[0] + 1 })));
+  // The tag is read: the step is done, and the colour prints from that bay.
+  tagRead(app, key, 'PLA', 'ECC3B2');
+  autoAdvance(app);
+  assert.equal(app.print.step, 1);
+  assert.equal(app.print.choice[first.tools[0]], key);
+  // The next step is the one that was shown second, in the same bay.
+  assert.equal(guideOf(app).cur.key, next.key);
+  assert.deepEqual(guideOf(app).cur.tools, next.tools);
+  // No bay the planner sent the colour to on the way joins the trail: still "step 2 of 3".
+  assert.deepEqual(app.print.trail, g.trail);
+});
+
 test('planNow is worked out once per status and Print state: every reader of one render shares it', () => {
   const app = appOf('unknown', fivePlan);
   const now = planNow(app);
